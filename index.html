@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Time Tracker</title>
+    
+    <!-- iOS Web App Meta Tags -->
+    <link rel="manifest" href="manifest.webapp">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Time Tracker">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-app: #f3f4f6;
+            --bg-card: #ffffff;
+            --bg-input: #ffffff;
+            --bg-secondary: #f9fafb;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --text-light: #9ca3af;
+            --border-color: #e5e7eb;
+            --border-light: #f3f4f6;
+            --emerald: #10b981;
+            --emerald-hover: #059669;
+            --rose: #f43f5e;
+            --rose-hover: #e11d48;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-app);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text-main);
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 448px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-card);
+            box-shadow: var(--shadow-lg);
+        }
+
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+
+        .btn-export {
+            background-color: var(--primary-hover);
+            color: white;
+            border: none;
+            font-size: 0.875rem;
+            font-weight: 600;
+            padding: 0.375rem 0.75rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+        }
+        .btn-export:hover {
+            background-color: #1e3a8a;
+        }
+        .btn-export:active {
+            transform: scale(0.95);
+        }
+
+        main {
+            flex: 1;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .timer-card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.25rem;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .label-title {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .input-field {
+            width: 100%;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.15s ease-in-out;
+        }
+        .input-field:focus {
+            border-color: transparent;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+
+        .timer-display-container {
+            text-align: center;
+            padding: 0.5rem 0;
+        }
+
+        .live-timer {
+            font-size: 2.25rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            color: var(--text-light);
+            transition: color 0.15s ease-in-out;
+        }
+        .live-timer.running {
+            color: var(--rose);
+        }
+
+        .active-client-label {
+            font-size: 0.75rem;
+            color: var(--primary);
+            font-weight: 500;
+            margin-top: 0.25rem;
+            height: 1rem;
+        }
+
+        .action-buttons-container {
+            display: flex;
+            gap: 0.75rem;
+            width: 100%;
+        }
+
+        .btn-action {
+            flex: 1;
+            width: 100%;
+            border: none;
+            color: white;
+            font-weight: 700;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            font-size: 1.125rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.15s ease-in-out;
+        }
+        .btn-action.start {
+            background-color: var(--emerald);
+        }
+        .btn-action.start:hover {
+            background-color: var(--emerald-hover);
+        }
+        .btn-action.stop {
+            background-color: var(--rose);
+        }
+        .btn-action.stop:hover {
+            background-color: var(--rose-hover);
+        }
+        .btn-action:active {
+            transform: scale(0.98);
+        }
+
+        .btn-action-sec {
+            flex: 1;
+            border: 2px solid var(--primary);
+            background-color: transparent;
+            color: var(--primary);
+            font-weight: 700;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            font-size: 1.125rem;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+        }
+        .btn-action-sec:hover {
+            background-color: rgba(37, 99, 235, 0.05);
+        }
+        .btn-action-sec:active {
+            transform: scale(0.98);
+        }
+        .btn-action-sec.hidden {
+            display: none !important;
+        }
+
+        .arrival-badge {
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            margin-top: 0.5rem;
+            display: inline-block;
+        }
+        .arrival-badge.hidden {
+            display: none !important;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 50;
+            transition: opacity 0.15s ease-in-out;
+        }
+        .modal-overlay.hidden {
+            display: none !important;
+        }
+
+        .modal-dialog {
+            background-color: var(--bg-card);
+            width: 100%;
+            max-width: 384px;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            box-shadow: var(--shadow-xl);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .modal-title {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .textarea-field {
+            width: 100%;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+            font-size: 1rem;
+            resize: none;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.15s ease-in-out;
+        }
+        .textarea-field:focus {
+            border-color: transparent;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+
+        .btn-save-log {
+            width: 100%;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            font-weight: 700;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.15s ease-in-out;
+        }
+        .btn-save-log:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .flex-row-gap {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .btn-cancel {
+            flex: 1;
+            background-color: var(--border-light);
+            color: #374151;
+            border: none;
+            font-weight: 600;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+        }
+        .btn-cancel:hover {
+            background-color: var(--border-color);
+        }
+        .btn-cancel:active {
+            transform: scale(0.95);
+        }
+
+        .btn-confirm-delete {
+            flex: 1;
+            background-color: var(--rose);
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+        }
+        .btn-confirm-delete:hover {
+            background-color: var(--rose-hover);
+        }
+        .btn-confirm-delete:active {
+            transform: scale(0.95);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .btn-clear-all {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--rose);
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+        }
+        .btn-clear-all:hover {
+            color: var(--rose-hover);
+        }
+        .btn-clear-all:active {
+            transform: scale(0.95);
+        }
+        .btn-clear-all.hidden {
+            display: none !important;
+        }
+
+        .log-history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            font-size: 0.875rem;
+            color: var(--text-light);
+            padding: 1rem 0;
+        }
+
+        .log-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .log-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .log-client-name {
+            font-weight: 700;
+            color: var(--text-main);
+            font-size: 1rem;
+        }
+
+        .log-timestamp {
+            font-size: 0.75rem;
+            color: var(--text-light);
+            margin-top: 0.125rem;
+        }
+
+        .duration-pill {
+            background-color: #eff6ff;
+            color: var(--primary-hover);
+            font-size: 0.875rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            padding: 0.25rem 0.625rem;
+            border-radius: 0.5rem;
+            white-space: nowrap;
+        }
+
+        .log-travel-details {
+            display: flex;
+            gap: 0.75rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background-color: var(--border-light);
+            padding: 0.375rem 0.625rem;
+            border-radius: 0.5rem;
+            margin-top: 0.25rem;
+            border: 1px solid var(--border-color);
+            width: max-content;
+        }
+
+        .log-notes {
+            font-size: 0.875rem;
+            color: #4b5563;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            font-style: italic;
+            word-break: break-word;
+        }
+
+        /* Invoice Report styling */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+            text-align: left;
+            margin-top: 0.5rem;
+        }
+
+        .report-table th, .report-table td {
+            padding: 0.625rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .report-table th {
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            background-color: var(--bg-secondary);
+        }
+
+        .report-total-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            font-weight: 700;
+            font-size: 1rem;
+            margin-top: 1rem;
+            padding-top: 0.5rem;
+            border-top: 2px solid var(--border-color);
+        }
+
+        /* Print-specific overrides */
+        @media print {
+            body {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                font-family: Georgia, serif;
+            }
+            .app-container {
+                box-shadow: none !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                min-height: auto !important;
+            }
+            header,
+            .timer-card,
+            .section-header,
+            #logHistory,
+            #notesModal,
+            #clearConfirmModal,
+            .modal-overlay:not(#reportModal),
+            #btnCloseReport,
+            #btnCopyReportText,
+            #btnPrintReportAction,
+            .flex-row-gap {
+                display: none !important;
+            }
+            #reportModal {
+                position: static !important;
+                background-color: transparent !important;
+                padding: 0 !important;
+                display: block !important;
+                z-index: auto !important;
+            }
+            .modal-dialog {
+                box-shadow: none !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                padding: 0 !important;
+            }
+            .report-table th {
+                background-color: #f3f4f6 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Billing Tracker</h1>
+            <div class="flex-row-gap">
+                <button id="btnExport" class="btn-export">CSV</button>
+                <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
+            </div>
+        </header>
+
+        <main>
+            <div class="timer-card">
+                <div class="form-group">
+                    <label class="label-title">Client Name</label>
+                    <input type="text" id="clientInput" placeholder="Enter client or job name..." class="input-field">
+                </div>
+                <div class="timer-display-container">
+                    <div id="liveTimer" class="live-timer">00:00:00</div>
+                    <div id="activeClientLabel" class="active-client-label"></div>
+                    <div id="arrivalBadge" class="arrival-badge hidden"></div>
+                </div>
+                <div class="action-buttons-container">
+                    <button id="btnAction" class="btn-action start">Start Timer</button>
+                    <button id="btnMarkArrival" class="btn-action-sec hidden">Mark Arrival</button>
+                </div>
+            </div>
+
+            <div id="notesModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Job Complete</h3>
+                    <div class="form-group">
+                        <label class="label-title">Work Notes</label>
+                        <textarea id="notesInput" rows="3" placeholder="What tasks did you complete?" class="textarea-field"></textarea>
+                    </div>
+                    <button id="btnSaveLog" class="btn-save-log">Save Time Log</button>
+                </div>
+            </div>
+
+            <div id="clearConfirmModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Clear Saved Data?</h3>
+                    <p style="font-size: 0.875rem; color: var(--text-muted);">This will permanently delete all logged hours. This action cannot be undone.</p>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelClear" class="btn-cancel">Cancel</button>
+                        <button id="btnConfirmClear" class="btn-confirm-delete">Clear All</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="reportModal" class="modal-overlay hidden">
+                <div class="modal-dialog" style="max-width: 600px; width: 95%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+                        <h3 class="modal-title">Billing Summary</h3>
+                        <button id="btnCloseReport" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
+                    </div>
+                    <div id="reportContent" style="max-height: 400px; overflow-y: auto; padding: 0.5rem 0;">
+                        <!-- Formatted report table will be inserted here dynamically -->
+                    </div>
+                    <div class="flex-row-gap" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                        <button id="btnCopyReportText" class="btn-cancel" style="background-color: var(--primary); color: white;">Copy Invoice Text</button>
+                        <button id="btnPrintReportAction" class="btn-action start" style="padding: 0.75rem;">Print Page</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="section-header">
+                    <h2 class="section-title">Recent Logs</h2>
+                    <button id="btnClear" class="btn-clear-all hidden">Clear All</button>
+                </div>
+                <div id="logHistory" class="log-history-list">
+                    <div class="empty-state">No logged hours found.</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let db;
+        const dbRequest = indexedDB.open("TimeTrackerDB", 1);
+
+        dbRequest.onupgradeneeded = (e) => {
+            db = e.target.result;
+            if (!db.objectStoreNames.contains("logs")) {
+                db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+            }
+        };
+
+        dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); };
+        dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
+
+        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null;
+
+        const clientInput = document.getElementById('clientInput');
+        const liveTimer = document.getElementById('liveTimer');
+        const activeClientLabel = document.getElementById('activeClientLabel');
+        const btnAction = document.getElementById('btnAction');
+        const notesModal = document.getElementById('notesModal');
+        const notesInput = document.getElementById('notesInput');
+        const btnSaveLog = document.getElementById('btnSaveLog');
+        const logHistory = document.getElementById('logHistory');
+        const btnExport = document.getElementById('btnExport');
+        const btnClear = document.getElementById('btnClear');
+        const clearConfirmModal = document.getElementById('clearConfirmModal');
+        const btnCancelClear = document.getElementById('btnCancelClear');
+        const btnConfirmClear = document.getElementById('btnConfirmClear');
+        const btnMarkArrival = document.getElementById('btnMarkArrival');
+        const arrivalBadge = document.getElementById('arrivalBadge');
+
+        const btnOpenReport = document.getElementById('btnOpenReport');
+        const reportModal = document.getElementById('reportModal');
+        const btnCloseReport = document.getElementById('btnCloseReport');
+        const reportContent = document.getElementById('reportContent');
+        const btnCopyReportText = document.getElementById('btnCopyReportText');
+        const btnPrintReportAction = document.getElementById('btnPrintReportAction');
+
+        let clipboardText = "";
+
+        btnAction.addEventListener('click', () => {
+            if (!isRunning) {
+                const clientName = clientInput.value.trim();
+                if (!clientName) { alert("Please input a Client Name first."); return; }
+                
+                isRunning = true;
+                startTime = Date.now();
+                arrivalTime = null;
+                clientInput.disabled = true;
+                activeClientLabel.textContent = "Tracking: " + clientName;
+                
+                btnAction.textContent = "End Timer";
+                btnAction.classList.remove('start');
+                btnAction.classList.add('stop');
+                liveTimer.classList.add('running');
+                
+                btnMarkArrival.classList.remove('hidden');
+                arrivalBadge.classList.add('hidden');
+
+                timerInterval = setInterval(updateLiveDisplay, 1000);
+            } else {
+                clearInterval(timerInterval);
+                notesModal.classList.remove('hidden');
+                notesInput.focus();
+            }
+        });
+
+        btnMarkArrival.addEventListener('click', () => {
+            if (!isRunning || arrivalTime) return;
+            arrivalTime = Date.now();
+            btnMarkArrival.classList.add('hidden');
+            
+            const travelMs = arrivalTime - startTime;
+            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+            arrivalBadge.classList.remove('hidden');
+        });
+
+        function updateLiveDisplay() {
+            const elapsedMs = Date.now() - startTime;
+            liveTimer.textContent = formatDuration(elapsedMs);
+        }
+
+        function formatDuration(ms) {
+            const totalSecs = Math.floor(ms / 1000);
+            const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+            const secs = String(totalSecs % 60).padStart(2, '0');
+            return hrs + ":" + mins + ":" + secs;
+        }
+
+        btnSaveLog.addEventListener('click', () => {
+            const endTime = Date.now();
+            const durationMs = endTime - startTime;
+            
+            let travelDuration = null;
+            let onSiteDuration = null;
+            let formattedArrivalTime = null;
+
+            if (arrivalTime) {
+                travelDuration = formatDuration(arrivalTime - startTime);
+                onSiteDuration = formatDuration(endTime - arrivalTime);
+                formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            const newLog = {
+                client: clientInput.value.trim(),
+                start: new Date(startTime).toLocaleString(),
+                end: new Date(endTime).toLocaleString(),
+                duration: formatDuration(durationMs),
+                decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                notes: notesInput.value.trim() || "No notes provided.",
+                arrivalTime: formattedArrivalTime,
+                travelDuration: travelDuration,
+                onSiteDuration: onSiteDuration
+            };
+
+            const transaction = db.transaction(["logs"], "readwrite");
+            transaction.objectStore(["logs"]).add(newLog);
+
+            transaction.oncomplete = () => {
+                isRunning = false;
+                clearInterval(timerInterval);
+                liveTimer.textContent = "00:00:00";
+                activeClientLabel.textContent = "";
+                clientInput.value = "";
+                clientInput.disabled = false;
+                notesInput.value = "";
+                
+                btnAction.textContent = "Start Timer";
+                btnAction.classList.remove('stop');
+                btnAction.classList.add('start');
+                liveTimer.classList.remove('running');
+                
+                btnMarkArrival.classList.add('hidden');
+                arrivalBadge.classList.add('hidden');
+                arrivalTime = null;
+                
+                notesModal.classList.add('hidden');
+                renderLogs();
+            };
+        });
+
+        btnClear.addEventListener('click', () => {
+            clearConfirmModal.classList.remove('hidden');
+        });
+
+        btnCancelClear.addEventListener('click', () => {
+            clearConfirmModal.classList.add('hidden');
+        });
+
+        btnConfirmClear.addEventListener('click', () => {
+            if (!db) return;
+            const transaction = db.transaction(["logs"], "readwrite");
+            const store = transaction.objectStore("logs");
+            const request = store.clear();
+
+            request.onsuccess = () => {
+                clearConfirmModal.classList.add('hidden');
+                renderLogs();
+            };
+            request.onerror = () => {
+                alert("Failed to clear database logs.");
+            };
+        });
+
+        function renderLogs() {
+            if (!db) return;
+            const store = db.transaction(["logs"], "readonly").objectStore("logs");
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const logs = request.result.reverse();
+                if (logs.length === 0) {
+                    logHistory.innerHTML = '<div class="empty-state">No logged hours found.</div>';
+                    btnClear.classList.add('hidden');
+                    return;
+                }
+
+                btnClear.classList.remove('hidden');
+                let html = "";
+                logs.forEach(log => {
+                    html += '<div class="log-card">';
+                    html += '<div class="log-card-header">';
+                    html += '<div><h4 class="log-client-name">' + escapeHtml(log.client) + '</h4>';
+                    html += '<p class="log-timestamp">' + log.start + '</p></div>';
+                    html += '<span class="duration-pill">' + log.duration + ' (' + log.decimalHours + 'h)</span>';
+                    html += '</div>';
+
+                    if (log.travelDuration && log.onSiteDuration) {
+                        html += '<div class="log-travel-details">';
+                        html += '<span>🚗 Travel: ' + escapeHtml(log.travelDuration) + '</span>';
+                        html += '<span>💼 Client: ' + escapeHtml(log.onSiteDuration) + '</span>';
+                        html += '</div>';
+                    }
+
+                    html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
+                    html += '</div>';
+                });
+                logHistory.innerHTML = html;
+            };
+        }
+
+        btnExport.addEventListener('click', () => {
+            const store = db.transaction(["logs"], "readonly").objectStore("logs");
+            store.getAll().onsuccess = (e) => {
+                const logs = e.target.result;
+                if(logs.length === 0) { alert("There is no data recorded to export."); return; }
+
+                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Notes"];
+                const csvRows = [headers.join(",")];
+
+                logs.forEach(log => {
+                    const row = [
+                        log.id,
+                        '"' + log.client.replace(/"/g, '""') + '"',
+                        '"' + log.start + '"',
+                        '"' + (log.arrivalTime || "") + '"',
+                        '"' + log.end + '"',
+                        '"' + log.duration + '"',
+                        '"' + (log.travelDuration || "") + '"',
+                        '"' + (log.onSiteDuration || "") + '"',
+                        log.decimalHours,
+                        '"' + log.notes.replace(/"/g, '""') + '"'
+                    ];
+                    csvRows.push(row.join(","));
+                });
+
+                const csvString = csvRows.join("\r\n");
+                const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+        });
+
+        btnOpenReport.addEventListener('click', () => {
+            if (!db) return;
+            const store = db.transaction(["logs"], "readonly").objectStore("logs");
+            store.getAll().onsuccess = (e) => {
+                const logs = e.target.result;
+                if(logs.length === 0) { alert("There is no data to generate a report."); return; }
+
+                let tableHtml = '<table class="report-table">';
+                tableHtml += '<thead><tr><th>Client</th><th>Date</th><th>Timeline</th><th>Breakdown</th></tr></thead>';
+                tableHtml += '<tbody>';
+
+                let rawText = "BILLING SUMMARY\n";
+                rawText += "Generated: " + new Date().toLocaleString() + "\n";
+                rawText += "========================================\n\n";
+
+                logs.forEach(log => {
+                    const dateOnly = log.start.split(',')[0];
+                    const startTimeStr = new Date(log.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const endTimeStr = new Date(log.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                    let timelineHtml = "";
+                    let timelineText = "";
+                    let breakdownHtml = "";
+                    let breakdownText = "";
+
+                    if (log.travelDuration && log.onSiteDuration && log.arrivalTime) {
+                        timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
+                        timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
+                        breakdownHtml = `🚗 Travel: ${log.travelDuration}<br>💼 Client: ${log.onSiteDuration}`;
+                        breakdownText = `  - Travel Time: ${log.travelDuration}\n  - On-Site Time: ${log.onSiteDuration}`;
+                    } else {
+                        timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
+                        timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
+                        breakdownHtml = `💼 Client: ${log.duration}`;
+                        breakdownText = `  - On-Site Time: ${log.duration}`;
+                    }
+                    
+                    tableHtml += '<tr>';
+                    tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
+                    tableHtml += `<td>${dateOnly}</td>`;
+                    tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
+                    tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
+                    tableHtml += '</tr>';
+
+                    rawText += `Client: ${log.client}\n`;
+                    rawText += `Date: ${dateOnly}\n`;
+                    rawText += `Times: ${timelineText}\n`;
+                    rawText += `${breakdownText}\n`;
+                    rawText += `----------------------------------------\n`;
+                });
+
+                tableHtml += '</tbody></table>';
+
+                reportContent.innerHTML = tableHtml;
+                clipboardText = rawText;
+
+                reportModal.classList.remove('hidden');
+            };
+        });
+
+        btnCloseReport.addEventListener('click', () => {
+            reportModal.classList.add('hidden');
+        });
+
+        btnCopyReportText.addEventListener('click', () => {
+            if (!clipboardText) return;
+            navigator.clipboard.writeText(clipboardText).then(() => {
+                const originalText = btnCopyReportText.textContent;
+                btnCopyReportText.textContent = "✓ Copied!";
+                btnCopyReportText.style.backgroundColor = "var(--emerald)";
+                setTimeout(() => {
+                    btnCopyReportText.textContent = originalText;
+                    btnCopyReportText.style.backgroundColor = "var(--primary)";
+                }, 2000);
+            }).catch(err => {
+                alert("Could not copy report text: " + err);
+            });
+        });
+
+        btnPrintReportAction.addEventListener('click', () => {
+            window.print();
+        });
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
