@@ -888,8 +888,9 @@
                                         }
 
                                         if (log.billableTime && log.billableTime !== '1') {
-                                            html += '<p class="log-notes"><strong>Billable:</strong> ' + escapeHtml(log.billableTime) + 'h | "' + escapeHtml(log.notes) + '"</p>';
-                                        } else {
+                                                                                    const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
+                                                                                    html += '<p class="log-notes"><strong>Billable:</strong> ' + billableDisplay + ' | "' + escapeHtml(log.notes) + '"</p>';
+                                                                                } else {
                                             html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
                                         }
                                         html += '</div>';
