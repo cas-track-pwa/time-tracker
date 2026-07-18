@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Time Tracker</title>
-    
+
+    <!-- Primary icon for all modern desktop browsers -->
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+
     <!-- iOS Web App Meta Tags -->
     <link rel="manifest" href="manifest.webapp">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -663,18 +666,18 @@
             if (!isRunning) {
                 const clientName = clientInput.value.trim();
                 if (!clientName) { alert("Please input a Client Name first."); return; }
-                
+
                 isRunning = true;
                 startTime = Date.now();
                 arrivalTime = null;
                 clientInput.disabled = true;
                 activeClientLabel.textContent = "Tracking: " + clientName;
-                
+
                 btnAction.textContent = "End Timer";
                 btnAction.classList.remove('start');
                 btnAction.classList.add('stop');
                 liveTimer.classList.add('running');
-                
+
                 btnMarkArrival.classList.remove('hidden');
                 arrivalBadge.classList.add('hidden');
 
@@ -690,7 +693,7 @@
             if (!isRunning || arrivalTime) return;
             arrivalTime = Date.now();
             btnMarkArrival.classList.add('hidden');
-            
+
             const travelMs = arrivalTime - startTime;
             const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
@@ -719,7 +722,7 @@
         btnSaveLog.addEventListener('click', () => {
             const endTime = Date.now();
             const durationMs = endTime - startTime;
-            
+
             let travelDuration = null;
             let onSiteDuration = null;
             let formattedArrivalTime = null;
@@ -731,16 +734,17 @@
             }
 
             const newLog = {
-                client: clientInput.value.trim(),
-                start: new Date(startTime).toLocaleString(),
-                end: new Date(endTime).toLocaleString(),
-                duration: formatDuration(durationMs),
-                decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-                notes: notesInput.value.trim() || "No notes provided.",
-                arrivalTime: formattedArrivalTime,
-                travelDuration: travelDuration,
-                onSiteDuration: onSiteDuration
-            };
+                            client: clientInput.value.trim(),
+                            start: new Date(startTime).toLocaleString(),
+                            end: new Date(endTime).toLocaleString(),
+                            duration: formatDuration(durationMs),
+                            durationMs: durationMs,
+                            decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                            notes: notesInput.value.trim() || "No notes provided.",
+                            arrivalTime: formattedArrivalTime,
+                            travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
+                            onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null
+                        };
 
             const transaction = db.transaction(["logs"], "readwrite");
             transaction.objectStore(["logs"]).add(newLog);
@@ -753,16 +757,16 @@
                 clientInput.value = "";
                 clientInput.disabled = false;
                 notesInput.value = "";
-                
+
                 btnAction.textContent = "Start Timer";
                 btnAction.classList.remove('stop');
                 btnAction.classList.add('start');
                 liveTimer.classList.remove('running');
-                
+
                 btnMarkArrival.classList.add('hidden');
                 arrivalBadge.classList.add('hidden');
                 arrivalTime = null;
-                
+
                 notesModal.classList.add('hidden');
                 renderLogs();
             };
@@ -905,7 +909,7 @@
                                             breakdownHtml = `💼 Client: ${durationDecimal} hrs`;
                                             breakdownText = `  - On-Site Time: ${durationDecimal} hrs`;
                                         }
-                    
+
                     tableHtml += '<tr>';
                                         tableHtml += `<td>${dateOnly}</td>`;
                                         tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
