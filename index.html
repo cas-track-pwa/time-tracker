@@ -714,10 +714,24 @@
                 }
 
                 function formatDecimalQuarter(ms) {
-                    const totalMinutes = ms / 1000 / 60;
-                    const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
-                    return quarterHours.toFixed(2).replace(/\.00$/, '');
-                }
+                                    const totalMinutes = ms / 1000 / 60;
+                                    const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
+                                    return quarterHours.toFixed(2).replace(/\.00$/, '');
+                                }
+
+                                function formatBillableTime(travelMs, onSiteMs, durationMs) {
+                                    let totalMs;
+                                    if (travelMs && onSiteMs) {
+                                        totalMs = travelMs + onSiteMs;
+                                    } else if (durationMs) {
+                                        totalMs = durationMs;
+                                    } else {
+                                        return '1';
+                                    }
+                                    const totalMinutes = totalMs / 1000 / 60;
+                                    const quarterHours = Math.max(1, Math.ceil(totalMinutes / 15) * 15 / 60);
+                                    return quarterHours.toFixed(2).replace(/\.00$/, '');
+                                }
 
         btnSaveLog.addEventListener('click', () => {
             const endTime = Date.now();
@@ -878,7 +892,7 @@
                 if(logs.length === 0) { alert("There is no data to generate a report."); return; }
 
                 let tableHtml = '<table class="report-table">';
-                                tableHtml += '<thead><tr><th>Date</th><th>Client</th><th>Invoice #</th><th>Timeline</th><th>Breakdown</th></tr></thead>';
+                                                tableHtml += '<thead><tr><th>Date</th><th>Client</th><th>Invoice #</th><th>Timeline</th><th>Billable Time</th></tr></thead>';
                 tableHtml += '<tbody>';
 
                 let rawText = "BILLING SUMMARY\n";
@@ -895,20 +909,20 @@
                     let breakdownHtml = "";
                     let breakdownText = "";
 
-                    if (log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
-                                                                const travelDecimal = formatDecimalQuarter(log.travelDurationMs);
-                                                                const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
-                                                                timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
-                                                                timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
-                                                                breakdownHtml = `🚗 Travel: ${travelDecimal} hrs<br>💼 Client: ${onSiteDecimal} hrs`;
-                                                                breakdownText = `  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
-                                                            } else {
-                                                                const durationDecimal = formatDecimalQuarter(log.durationMs);
-                                                                timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
-                                                                timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
-                                                                breakdownHtml = `💼 Client: ${durationDecimal} hrs`;
-                                                                breakdownText = `  - On-Site Time: ${durationDecimal} hrs`;
-                                                            }
+                    const billableDecimal = formatBillableTime(log.travelDurationMs, log.onSiteDurationMs, log.durationMs);
+                                                                if (log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
+                                                                    const travelDecimal = formatDecimalQuarter(log.travelDurationMs);
+                                                                    const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
+                                                                    timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
+                                                                    timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
+                                                                    breakdownHtml = `${billableDecimal} hrs`;
+                                                                    breakdownText = `  - Billable Time: ${billableDecimal} hrs\n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
+                                                                } else {
+                                                                    timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
+                                                                    timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
+                                                                    breakdownHtml = `${billableDecimal} hrs`;
+                                                                    breakdownText = `  - Billable Time: ${billableDecimal} hrs`;
+                                                                }
 
                     tableHtml += '<tr>';
                                         tableHtml += `<td>${dateOnly}</td>`;
