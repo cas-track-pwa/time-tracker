@@ -706,32 +706,32 @@
         }
 
         function formatDuration(ms) {
-                        const totalSecs = Math.floor(ms / 1000);
-                        const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
-                        const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
-                        const secs = String(totalSecs % 60).padStart(2, '0');
-                        return hrs + ":" + mins + ":" + secs;
-                    }
+        				const totalSecs = Math.floor(ms / 1000);
+        				const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+        				const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+        				const secs = String(totalSecs % 60).padStart(2, '0');
+        				return hrs + ":" + mins + ":" + secs;
+        			}
 
-                    function formatDecimalQuarter(ms) {
-                        const totalMinutes = ms / 1000 / 60;
-                        const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
-                        return quarterHours.toFixed(2).replace(/\.00$/, '');
-                    }
+        			function formatDecimalQuarter(ms) {
+        				const totalMinutes = ms / 1000 / 60;
+        				const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
+        				return quarterHours.toFixed(2).replace(/\.00$/, '');
+        			}
 
-                    function formatBillableTime(travelMs, onSiteMs, durationMs) {
-                        let totalMs;
-                        if (travelMs && onSiteMs) {
-                            totalMs = travelMs + onSiteMs;
-                        } else if (durationMs) {
-                            totalMs = durationMs;
-                        } else {
-                            return '1';
-                        }
-                        const totalMinutes = totalMs / 1000 / 60;
-                        const quarterHours = Math.max(1, Math.ceil(totalMinutes / 15) * 15 / 60);
-                        return quarterHours.toFixed(2).replace(/\.00$/, '');
-                    }
+        			function formatBillableTime(travelMs, onSiteMs, durationMs) {
+        				let totalMs;
+        				if (travelMs && onSiteMs) {
+        					totalMs = travelMs + onSiteMs;
+        				} else if (durationMs) {
+        					totalMs = durationMs;
+        				} else {
+        					return '1';
+        				}
+        				const totalMinutes = totalMs / 1000 / 60;
+        				const quarterHours = Math.max(1, Math.ceil(totalMinutes / 15) * 15 / 60);
+        				return quarterHours.toFixed(2).replace(/\.00$/, '');
+        			}
 
         btnSaveLog.addEventListener('click', () => {
             const endTime = Date.now();
