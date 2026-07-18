@@ -224,11 +224,15 @@
                         <input type="datetime-local" id="addStartTime" class="input-field">
                     </div>
                     <div class="form-group">
-                        <label class="label-title">End Time</label>
-                        <input type="datetime-local" id="addEndTime" class="input-field">
-                    </div>
-                    <div class="form-group">
-                        <label class="label-title">Work Notes</label>
+                                                    <label class="label-title">End Time</label>
+                                                    <input type="datetime-local" id="addEndTime" class="input-field">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label class="label-title">Arrival Time</label>
+                                                    <input type="datetime-local" id="addArrivalTime" class="input-field">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label class="label-title">Work Notes</label>
                         <textarea id="addNotes" rows="3" class="textarea-field"></textarea>
                     </div>
                     <div class="form-group">
@@ -380,9 +384,10 @@
                 const btnSaveEdit = document.getElementById('btnSaveEdit');
 
         const addEntryModal = document.getElementById('addEntryModal');
-        const addClient = document.getElementById('addClient');
-        const addStartTime = document.getElementById('addStartTime');
-        const addEndTime = document.getElementById('addEndTime');
+                const addClient = document.getElementById('addClient');
+                const addStartTime = document.getElementById('addStartTime');
+                const addEndTime = document.getElementById('addEndTime');
+                const addArrivalTime = document.getElementById('addArrivalTime');
                 const addNotes = document.getElementById('addNotes');
                 const addBillableTime = document.getElementById('addBillableTime');
                 const addMileage = document.getElementById('addMileage');
@@ -740,38 +745,53 @@
         });
 
         btnSaveAdd.addEventListener('click', () => {
-            const client = addClient.value.trim();
-            const startTimeVal = addStartTime.value;
-            const endTimeVal = addEndTime.value;
-            const notes = addNotes.value.trim() || "No notes provided.";
+                    const client = addClient.value.trim();
+                    const startTimeVal = addStartTime.value;
+                    const endTimeVal = addEndTime.value;
+                    const arrivalTimeVal = addArrivalTime.value;
+                    const notes = addNotes.value.trim() || "No notes provided.";
 
-            if (!client || !startTimeVal || !endTimeVal) {
-                alert("Please fill in all required fields.");
-                return;
-            }
+                    if (!client || !startTimeVal || !endTimeVal) {
+                        alert("Please fill in all required fields.");
+                        return;
+                    }
 
-            let selectedBillableTime = addBillableTime.value || '1';
+                    let selectedBillableTime = addBillableTime.value || '1';
 
-            const start = new Date(startTimeVal);
-            const end = new Date(endTimeVal);
-            const durationMs = end - start;
+                    const start = new Date(startTimeVal);
+                    const end = new Date(endTimeVal);
+                    const arrival = arrivalTimeVal ? new Date(arrivalTimeVal) : null;
+                    const durationMs = end - start;
 
-            let selectedTravelMileage = null;
-            if (addMileage.value && parseFloat(addMileage.value) > 0) {
-                selectedTravelMileage = parseFloat(addMileage.value);
-            }
+                    let formattedArrivalTime = null;
+                    let travelDurationMs = null;
+                    let onSiteDurationMs = null;
 
-            const newLog = {
-                client: client,
-                start: start.toLocaleString(),
-                end: end.toLocaleString(),
-                duration: formatDuration(durationMs),
-                durationMs: durationMs,
-                decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-                notes: notes,
-                billableTime: selectedBillableTime,
-                travelMileage: selectedTravelMileage
-            };
+                    if (arrival) {
+                        formattedArrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        travelDurationMs = arrival - start;
+                        onSiteDurationMs = end - arrival;
+                    }
+
+                    let selectedTravelMileage = null;
+                    if (addMileage.value && parseFloat(addMileage.value) > 0) {
+                        selectedTravelMileage = parseFloat(addMileage.value);
+                    }
+
+                    const newLog = {
+                        client: client,
+                        start: start.toLocaleString(),
+                        end: end.toLocaleString(),
+                        duration: formatDuration(durationMs),
+                        durationMs: durationMs,
+                        decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                        notes: notes,
+                        billableTime: selectedBillableTime,
+                        arrivalTime: formattedArrivalTime,
+                        travelDurationMs: travelDurationMs,
+                        onSiteDurationMs: onSiteDurationMs,
+                        travelMileage: selectedTravelMileage
+                    };
 
             const transaction = db.transaction(["logs"], "readwrite");
             const store = transaction.objectStore("logs");
