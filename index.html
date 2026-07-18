@@ -905,22 +905,23 @@
                 const logs = e.target.result;
                 if(logs.length === 0) { alert("There is no data recorded to export."); return; }
 
-                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Notes"];
+                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Notes"];
                 const csvRows = [headers.join(",")];
 
                 logs.forEach(log => {
                     const row = [
-                        log.id,
-                        '"' + log.client.replace(/"/g, '""') + '"',
-                        '"' + log.start + '"',
-                        '"' + (log.arrivalTime || "") + '"',
-                        '"' + log.end + '"',
-                        '"' + log.duration + '"',
-                        '"' + (log.travelDuration || "") + '"',
-                        '"' + (log.onSiteDuration || "") + '"',
-                        log.decimalHours,
-                        '"' + log.notes.replace(/"/g, '""') + '"'
-                    ];
+                                            log.id,
+                                            '"' + log.client.replace(/"/g, '""') + '"',
+                                            '"' + log.start + '"',
+                                            '"' + (log.arrivalTime || "") + '"',
+                                            '"' + log.end + '"',
+                                            '"' + log.duration + '"',
+                                            '"' + (log.travelDuration || "") + '"',
+                                            '"' + (log.onSiteDuration || "") + '"',
+                                            log.decimalHours,
+                                            '"' + (log.billableTime || "") + '"',
+                                            '"' + log.notes.replace(/"/g, '""') + '"'
+                                        ];
                     csvRows.push(row.join(","));
                 });
 
