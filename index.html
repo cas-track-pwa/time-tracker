@@ -187,32 +187,40 @@
             </div>
 
             <div id="editModal" class="modal-overlay hidden">
-                <div class="modal-dialog">
-                    <h3 class="modal-title">Edit Log Entry</h3>
-                    <div class="form-group">
-                        <label class="label-title">Client Name</label>
-                        <input type="text" id="editClient" class="input-field">
-                    </div>
-                    <div class="form-group">
-                        <label class="label-title">Work Notes</label>
-                        <textarea id="editNotes" rows="3" class="textarea-field"></textarea>
-                    </div>
-                                        <div class="form-group">
-                                            <label class="label-title">Billable Time (decimal hours)</label>
-                                            <input type="number" id="editBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="label-title">Travel Miles</label>
-                        <input type="number" id="editMileage" placeholder="Enter miles" class="input-field">
-                    </div>
-                    <div class="form-group">
-                        <label class="label-title">Date/Time</label>
-                        <input type="datetime-local" id="editDateTime" class="input-field">
-                    </div>
-                    <div class="flex-row-gap">
-                        <button id="btnCancelEdit" class="btn-cancel">Cancel</button>
-                        <button id="btnSaveEdit" class="btn-save-log">Save</button>
-                    </div>
+                            <div class="modal-dialog">
+                                <h3 class="modal-title">Edit Log Entry</h3>
+                                <div class="form-group">
+                                    <label class="label-title">Client Name</label>
+                                    <input type="text" id="editClient" class="input-field">
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-title">Start Time</label>
+                                    <input type="datetime-local" id="editStartTime" class="input-field">
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-title">Arrival Time</label>
+                                    <input type="datetime-local" id="editArrivalTime" class="input-field">
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-title">End Time</label>
+                                    <input type="datetime-local" id="editEndTime" class="input-field">
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-title">Work Notes</label>
+                                    <textarea id="editNotes" rows="3" class="textarea-field"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-title">Billable Time (decimal hours)</label>
+                                    <input type="number" id="editBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-title">Travel Miles</label>
+                                    <input type="number" id="editMileage" placeholder="Enter miles" class="input-field">
+                                </div>
+                                <div class="flex-row-gap">
+                                    <button id="btnCancelEdit" class="btn-cancel">Cancel</button>
+                                    <button id="btnSaveEdit" class="btn-save-log">Save</button>
+                                </div>
                 </div>
             </div>
 
@@ -378,11 +386,13 @@
         const btnSaveArrivalMileage = document.getElementById('btnSaveArrivalMileage');
 
         const editModal = document.getElementById('editModal');
-        const editClient = document.getElementById('editClient');
-        const editNotes = document.getElementById('editNotes');
-        const editBillableTimeInputs = document.getElementsByName('editBillableTime');
-        const editMileage = document.getElementById('editMileage');
-                const editDateTime = document.getElementById('editDateTime');
+                const editClient = document.getElementById('editClient');
+                const editStartTime = document.getElementById('editStartTime');
+                const editArrivalTime = document.getElementById('editArrivalTime');
+                const editEndTime = document.getElementById('editEndTime');
+                const editNotes = document.getElementById('editNotes');
+                const editBillableTimeInputs = document.getElementsByName('editBillableTime');
+                const editMileage = document.getElementById('editMileage');
                 const editBillableTime = document.getElementById('editBillableTime');
                 const btnCancelEdit = document.getElementById('btnCancelEdit');
                 const btnSaveEdit = document.getElementById('btnSaveEdit');
@@ -662,26 +672,43 @@
         }
 
         // Edit log function
-        window.editLog = function(id) {
-            const transaction = db.transaction(["logs"], "readwrite");
-            const store = transaction.objectStore("logs");
-            const request = store.get(id);
+                window.editLog = function(id) {
+                    const transaction = db.transaction(["logs"], "readwrite");
+                    const store = transaction.objectStore("logs");
+                    const request = store.get(id);
 
-            request.onsuccess = () => {
-                const log = request.result;
-                if (!log) return;
+                    request.onsuccess = () => {
+                        const log = request.result;
+                        if (!log) return;
 
-                editingLogId = id;
+                        editingLogId = id;
 
-                editClient.value = log.client;
-                                editNotes.value = log.notes;
-                                editBillableTime.value = log.billableTime;
-                                editMileage.value = log.travelMileage || '';
-                                editDateTime.value = log.start.replace(/,/g, 'T').replace(/ /g, 'T');
+                        editClient.value = log.client;
+                        editNotes.value = log.notes;
+                        editBillableTime.value = log.billableTime;
+                        editMileage.value = log.travelMileage || '';
 
-                editModal.classList.remove('hidden');
-            };
-        };
+                        // Set start time
+                        const startDate = new Date(log.start);
+                        editStartTime.value = startDate.toISOString().slice(0, 16);
+
+                        // Set arrival time if exists
+                        if (log.arrivalTime) {
+                            const arrivalDate = new Date(log.start);
+                            const [hours, minutes] = log.arrivalTime.split(':');
+                            arrivalDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+                            editArrivalTime.value = arrivalDate.toISOString().slice(0, 16);
+                        } else {
+                            editArrivalTime.value = '';
+                        }
+
+                        // Set end time
+                        const endDate = new Date(log.end);
+                        editEndTime.value = endDate.toISOString().slice(0, 16);
+
+                        editModal.classList.remove('hidden');
+                    };
+                };
 
         // Delete log function
         window.deleteLog = function(id) {
@@ -697,32 +724,71 @@
         };
 
         // Save edit
-        btnSaveEdit.addEventListener('click', () => {
-            if (!editingLogId) return;
+                btnSaveEdit.addEventListener('click', () => {
+                    if (!editingLogId) return;
 
-            const transaction = db.transaction(["logs"], "readwrite");
-            const store = transaction.objectStore("logs");
-            const request = store.get(editingLogId);
+                    const transaction = db.transaction(["logs"], "readwrite");
+                    const store = transaction.objectStore("logs");
+                    const request = store.get(editingLogId);
 
-            request.onsuccess = () => {
-                const log = request.result;
-                if (!log) return;
+                    request.onsuccess = () => {
+                        const log = request.result;
+                        if (!log) return;
 
-                let selectedBillableTime = editBillableTime.value ? editBillableTime.value : '1';
+                        let selectedBillableTime = editBillableTime.value ? editBillableTime.value : '1';
 
-                                log.client = editClient.value.trim();
-                                log.notes = editNotes.value.trim() || "No notes provided.";
-                                log.billableTime = selectedBillableTime;
-                                log.travelMileage = editMileage.value ? parseFloat(editMileage.value) : null;
+                        log.client = editClient.value.trim();
+                        log.notes = editNotes.value.trim() || "No notes provided.";
+                        log.billableTime = selectedBillableTime;
+                        log.travelMileage = editMileage.value ? parseFloat(editMileage.value) : null;
 
-                const putRequest = store.put(log);
-                putRequest.onsuccess = () => {
-                    editModal.classList.add('hidden');
-                    editingLogId = null;
-                    renderLogs();
-                };
-            };
-        });
+                        // Update start time
+                        if (editStartTime.value) {
+                            const start = new Date(editStartTime.value);
+                            log.start = start.toLocaleString();
+                            log.durationMs = null; // Will need recalculation
+                            log.decimalHours = null;
+                            log.duration = null;
+                        }
+
+                        // Update arrival time and calculate travel/on-site durations
+                        if (editArrivalTime.value) {
+                            const start = new Date(editStartTime.value);
+                            const arrival = new Date(editArrivalTime.value);
+                            const end = new Date(editEndTime.value);
+
+                            log.arrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            log.travelDurationMs = arrival - start;
+                            log.onSiteDurationMs = end - arrival;
+                            log.durationMs = end - start;
+                            log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
+                            log.duration = formatDuration(log.durationMs);
+                        } else {
+                            // No arrival time - recalculate from start and end
+                            const start = new Date(editStartTime.value);
+                            const end = new Date(editEndTime.value);
+                            log.arrivalTime = null;
+                            log.travelDurationMs = null;
+                            log.onSiteDurationMs = null;
+                            log.durationMs = end - start;
+                            log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
+                            log.duration = formatDuration(log.durationMs);
+                        }
+
+                        // Update end time
+                        if (editEndTime.value) {
+                            const end = new Date(editEndTime.value);
+                            log.end = end.toLocaleString();
+                        }
+
+                        const putRequest = store.put(log);
+                        putRequest.onsuccess = () => {
+                            editModal.classList.add('hidden');
+                            editingLogId = null;
+                            renderLogs();
+                        };
+                    };
+                });
 
         btnCancelEdit.addEventListener('click', () => {
             editModal.classList.add('hidden');
