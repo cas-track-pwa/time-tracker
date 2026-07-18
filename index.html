@@ -957,25 +957,31 @@
                                     const endTimeStr = new Date(log.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                                     let timelineHtml = "";
-                                    let timelineText = "";
-                                    let breakdownHtml = "";
-                                    let breakdownText = "";
+                                                                        let timelineText = "";
+                                                                        let breakdownHtml = "";
+                                                                        let breakdownText = "";
 
-                                    const billableDecimal = formatBillableTime(log.travelDurationMs, log.onSiteDurationMs, log.durationMs);
+                                                                        // Use billableTime from log if it was set, otherwise calculate it
+                                                                        let billableDecimal;
+                                                                        if (log.billableTime && log.billableTime !== '1') {
+                                                                            billableDecimal = log.billableTime;
+                                                                        } else {
+                                                                            billableDecimal = formatBillableTime(log.travelDurationMs, log.onSiteDurationMs, log.durationMs);
+                                                                        }
 
-                                    if (log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
-                                        const travelDecimal = formatDecimalQuarter(log.travelDurationMs);
-                                        const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
-                                        timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
-                                        timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
-                                        breakdownHtml = `${billableDecimal}`;
-                                        breakdownText = `  - Billable Time: ${billableDecimal}\n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
-                                    } else {
-                                        timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
-                                        timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
-                                        breakdownHtml = `${billableDecimal}`;
-                                        breakdownText = `  - Billable Time: ${billableDecimal}`;
-                                    }
+                                                                        if (log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
+                                                                            const travelDecimal = formatDecimalQuarter(log.travelDurationMs);
+                                                                            const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
+                                                                            timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
+                                                                            timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
+                                                                            breakdownHtml = `${billableDecimal}`;
+                                                                            breakdownText = `  - Billable Time: ${billableDecimal}\n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
+                                                                        } else {
+                                                                            timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
+                                                                            timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
+                                                                            breakdownHtml = `${billableDecimal}`;
+                                                                            breakdownText = `  - Billable Time: ${billableDecimal}`;
+                                                                        }
 
                                     tableHtml += '<tr>';
                                     tableHtml += `<td>${dateOnly}</td>`;
