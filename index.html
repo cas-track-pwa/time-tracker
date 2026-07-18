@@ -614,19 +614,33 @@
                 </div>
             </div>
 
-            <div id="mileageModal" class="modal-overlay hidden">
-                <div class="modal-dialog">
-                    <h3 class="modal-title">Enter Mileage</h3>
-                    <div class="form-group">
-                        <label class="label-title">Mileage</label>
-                        <input type="number" id="mileageInput" placeholder="Enter miles" class="input-field">
-                    </div>
-                    <div class="flex-row-gap">
-                        <button id="btnCancelMileage" class="btn-cancel">Cancel</button>
-                        <button id="btnSaveMileage" class="btn-save-log">Save</button>
-                    </div>
-                </div>
-            </div>
+            <div id="startMileageModal" class="modal-overlay hidden">
+                            <div class="modal-dialog">
+                                <h3 class="modal-title">Enter Start Mileage</h3>
+                                <div class="form-group">
+                                    <label class="label-title">Current Odometer Reading</label>
+                                    <input type="number" id="startMileageInput" placeholder="Enter current mileage" class="input-field">
+                                </div>
+                                <div class="flex-row-gap">
+                                    <button id="btnCancelStartMileage" class="btn-cancel">Cancel</button>
+                                    <button id="btnSaveStartMileage" class="btn-save-log">Save</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="arrivalMileageModal" class="modal-overlay hidden">
+                            <div class="modal-dialog">
+                                <h3 class="modal-title">Enter Arrival Mileage</h3>
+                                <div class="form-group">
+                                    <label class="label-title">Current Odometer Reading</label>
+                                    <input type="number" id="arrivalMileageInput" placeholder="Enter current mileage" class="input-field">
+                                </div>
+                                <div class="flex-row-gap">
+                                    <button id="btnCancelArrivalMileage" class="btn-cancel">Cancel</button>
+                                    <button id="btnSaveArrivalMileage" class="btn-save-log">Save</button>
+                                </div>
+                            </div>
+                        </div>
 
             <div id="clearConfirmModal" class="modal-overlay hidden">
                 <div class="modal-dialog">
@@ -733,7 +747,7 @@
         dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); };
         dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, mileage = null;
+        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null;
 
         const clientInput = document.getElementById('clientInput');
         const liveTimer = document.getElementById('liveTimer');
@@ -767,58 +781,104 @@
         const reportStartDate = document.getElementById('reportStartDate');
         const reportEndDate = document.getElementById('reportEndDate');
 
-        const mileageModal = document.getElementById('mileageModal');
-        const mileageInput = document.getElementById('mileageInput');
-        const btnCancelMileage = document.getElementById('btnCancelMileage');
-        const btnSaveMileage = document.getElementById('btnSaveMileage');
+        const startMileageModal = document.getElementById('startMileageModal');
+                const startMileageInput = document.getElementById('startMileageInput');
+                const btnCancelStartMileage = document.getElementById('btnCancelStartMileage');
+                const btnSaveStartMileage = document.getElementById('btnSaveStartMileage');
+
+                const arrivalMileageModal = document.getElementById('arrivalMileageModal');
+                const arrivalMileageInput = document.getElementById('arrivalMileageInput');
+                const btnCancelArrivalMileage = document.getElementById('btnCancelArrivalMileage');
+                const btnSaveArrivalMileage = document.getElementById('btnSaveArrivalMileage');
 
         let clipboardText = "";
 
         btnAction.addEventListener('click', () => {
-            if (!isRunning) {
-                const clientName = clientInput.value.trim();
-                if (!clientName) { alert("Please input a Client Name first."); return; }
+                    if (!isRunning) {
+                        const clientName = clientInput.value.trim();
+                        if (!clientName) { alert("Please input a Client Name first."); return; }
 
-                isRunning = true;
-                startTime = Date.now();
-                arrivalTime = null;
-                mileage = null;
-                clientInput.disabled = true;
-                activeClientLabel.textContent = "Tracking: " + clientName;
+                        isRunning = true;
+                        startTime = Date.now();
+                        arrivalTime = null;
+                        startMileage = null;
+                        arrivalMileage = null;
+                        travelMileage = null;
+                        clientInput.disabled = true;
+                        activeClientLabel.textContent = "Tracking: " + clientName;
 
-                btnAction.textContent = "End Timer";
-                btnAction.classList.remove('start');
-                btnAction.classList.add('stop');
-                liveTimer.classList.add('running');
+                        btnAction.textContent = "End Timer";
+                        btnAction.classList.remove('start');
+                        btnAction.classList.add('stop');
+                        liveTimer.classList.add('running');
 
-                btnMarkArrival.classList.remove('hidden');
-                arrivalBadge.classList.add('hidden');
+                        btnMarkArrival.classList.remove('hidden');
+                        arrivalBadge.classList.add('hidden');
 
-                timerInterval = setInterval(updateLiveDisplay, 1000);
-            } else {
-                clearInterval(timerInterval);
-                notesModal.classList.remove('hidden');
-                notesInput.focus();
-            }
-        });
+                        timerInterval = setInterval(updateLiveDisplay, 1000);
+
+                        // Show start mileage modal
+                        startMileageInput.value = '';
+                        startMileageModal.classList.remove('hidden');
+                        startMileageInput.focus();
+                    } else {
+                        clearInterval(timerInterval);
+                        notesModal.classList.remove('hidden');
+                        notesInput.focus();
+                    }
+                });
 
         btnMarkArrival.addEventListener('click', () => {
-            if (!isRunning || arrivalTime) return;
-            arrivalTime = Date.now();
-            btnMarkArrival.classList.add('hidden');
+                    if (!isRunning || arrivalTime) return;
+                    arrivalTime = Date.now();
+                    btnMarkArrival.classList.add('hidden');
 
-            const travelMs = arrivalTime - startTime;
-            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
-            arrivalBadge.classList.remove('hidden');
+                    const travelMs = arrivalTime - startTime;
+                    const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+                    arrivalBadge.classList.remove('hidden');
 
-            // Show mileage modal
-            mileageInput.value = '';
-            mileageModal.classList.remove('hidden');
-            mileageInput.focus();
-        });
+                    // Show arrival mileage modal
+                    arrivalMileageInput.value = '';
+                    arrivalMileageModal.classList.remove('hidden');
+                    arrivalMileageInput.focus();
+                                    });
 
-        function updateLiveDisplay() {
+                            // Mileage event listeners
+                            btnCancelStartMileage.addEventListener('click', () => {
+                                startMileageModal.classList.add('hidden');
+                            });
+
+                            btnSaveStartMileage.addEventListener('click', () => {
+                                const startValue = startMileageInput.value.trim();
+                                if (startValue && parseFloat(startValue) >= 0) {
+                                    startMileage = parseFloat(startValue);
+                                } else {
+                                    startMileage = null;
+                                }
+                                startMileageModal.classList.add('hidden');
+                            });
+
+                            btnCancelArrivalMileage.addEventListener('click', () => {
+                                arrivalMileageModal.classList.add('hidden');
+                            });
+
+                            btnSaveArrivalMileage.addEventListener('click', () => {
+                                const arrivalValue = arrivalMileageInput.value.trim();
+                                if (arrivalValue && parseFloat(arrivalValue) >= 0) {
+                                    arrivalMileage = parseFloat(arrivalValue);
+                                    // Calculate travel mileage
+                                    if (startMileage !== null && arrivalMileage !== null) {
+                                        travelMileage = arrivalMileage - startMileage;
+                                    }
+                                } else {
+                                    arrivalMileage = null;
+                                    travelMileage = null;
+                                }
+                                arrivalMileageModal.classList.add('hidden');
+                            });
+
+                            function updateLiveDisplay() {
             const elapsedMs = Date.now() - startTime;
             liveTimer.textContent = formatDuration(elapsedMs);
         }
@@ -875,19 +935,21 @@
             }
 
             const newLog = {
-                client: clientInput.value.trim(),
-                start: new Date(startTime).toLocaleString(),
-                end: new Date(endTime).toLocaleString(),
-                duration: formatDuration(durationMs),
-                durationMs: durationMs,
-                decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-                notes: notesInput.value.trim() || "No notes provided.",
-                billableTime: selectedBillableTime,
-                arrivalTime: formattedArrivalTime,
-                travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
-                onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null,
-                mileage: mileage
-            };
+                            client: clientInput.value.trim(),
+                            start: new Date(startTime).toLocaleString(),
+                            end: new Date(endTime).toLocaleString(),
+                            duration: formatDuration(durationMs),
+                            durationMs: durationMs,
+                            decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                            notes: notesInput.value.trim() || "No notes provided.",
+                            billableTime: selectedBillableTime,
+                            arrivalTime: formattedArrivalTime,
+                            travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
+                            onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null,
+                            startMileage: startMileage,
+                            arrivalMileage: arrivalMileage,
+                            travelMileage: travelMileage
+                        };
 
             const transaction = db.transaction(["logs"], "readwrite");
             transaction.objectStore(["logs"]).add(newLog);
@@ -917,26 +979,12 @@
 
                 notesModal.classList.add('hidden');
                 renderLogs();
-            };
-        });
+                            };
+                        });
 
-        btnCancelMileage.addEventListener('click', () => {
-            mileageModal.classList.add('hidden');
-        });
-
-        btnSaveMileage.addEventListener('click', () => {
-            const mileageValue = mileageInput.value.trim();
-            if (mileageValue && parseFloat(mileageValue) > 0) {
-                mileage = parseFloat(mileageValue);
-            } else {
-                mileage = null;
-            }
-            mileageModal.classList.add('hidden');
-        });
-
-        btnClear.addEventListener('click', () => {
-            clearConfirmModal.classList.remove('hidden');
-        });
+                        btnClear.addEventListener('click', () => {
+                            clearConfirmModal.classList.remove('hidden');
+                        });
 
         btnCancelClear.addEventListener('click', () => {
             clearConfirmModal.classList.add('hidden');
@@ -987,9 +1035,9 @@
                         html += '</div>';
                     }
 
-                    if (log.mileage && log.mileage > 0) {
-                        html += '<div class="log-travel-details"><span>🚙 Mileage: ' + log.mileage + ' mi</span></div>';
-                    }
+                    if (log.travelMileage && log.travelMileage > 0) {
+                                            html += '<div class="log-travel-details"><span>🚗 Travel Miles: ' + log.travelMileage + ' mi</span></div>';
+                                        }
 
                     if (log.billableTime && log.billableTime !== '1') {
                         const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
@@ -1009,24 +1057,26 @@
                 const logs = e.target.result;
                 if(logs.length === 0) { alert("There is no data recorded to export."); return; }
 
-                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Mileage", "Notes"];
+                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
                 const csvRows = [headers.join(",")];
 
                 logs.forEach(log => {
                     const row = [
-                        log.id,
-                        '"' + log.client.replace(/"/g, '""') + '"',
-                        '"' + log.start + '"',
-                        '"' + (log.arrivalTime || "") + '"',
-                        '"' + log.end + '"',
-                        '"' + log.duration + '"',
-                        '"' + (log.travelDuration || "") + '"',
-                        '"' + (log.onSiteDuration || "") + '"',
-                        log.decimalHours,
-                        '"' + (log.billableTime || "") + '"',
-                        (log.mileage || ""),
-                        '"' + log.notes.replace(/"/g, '""') + '"'
-                    ];
+                                            log.id,
+                                            '"' + log.client.replace(/"/g, '""') + '"',
+                                            '"' + log.start + '"',
+                                            '"' + (log.arrivalTime || "") + '"',
+                                            '"' + log.end + '"',
+                                            '"' + log.duration + '"',
+                                            '"' + (log.travelDuration || "") + '"',
+                                            '"' + (log.onSiteDuration || "") + '"',
+                                            log.decimalHours,
+                                            '"' + (log.billableTime || "") + '"',
+                                            (log.startMileage || ""),
+                                            (log.arrivalMileage || ""),
+                                            (log.travelMileage || ""),
+                                            '"' + log.notes.replace(/"/g, '""') + '"'
+                                        ];
                     csvRows.push(row.join(","));
                 });
 
@@ -1205,15 +1255,14 @@
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
                     tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
-                    tableHtml += `<td>${log.mileage ? log.mileage + ' mi' : ''}</td>`;
-                    tableHtml += '</tr>';
+                    tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
 
-                    rawText += `Date: ${dateOnly}\n`;
-                    rawText += `Client: ${log.client}\n`;
-                    rawText += `Invoice #: -\n`;
-                    rawText += `Times: ${timelineText}\n`;
-                    rawText += `${breakdownText}\n`;
-                    if (log.mileage) rawText += `Mileage: ${log.mileage} mi\n`;
+                                        rawText += `Date: ${dateOnly}\n`;
+                                        rawText += `Client: ${log.client}\n`;
+                                        rawText += `Invoice #: -\n`;
+                                        rawText += `Times: ${timelineText}\n`;
+                                        rawText += `${breakdownText}\n`;
+                                        if (log.travelMileage && log.travelMileage > 0) rawText += `Travel Miles: ${log.travelMileage} mi\n`;
                     rawText += `----------------------------------------\n`;
                 });
 
