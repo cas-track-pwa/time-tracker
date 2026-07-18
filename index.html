@@ -917,12 +917,12 @@
                                         timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
                                         timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
                                         breakdownHtml = `${billableDecimal} hrs`;
-                                        breakdownText = `  - Billable Time: ${billableDecimal} hrs\n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
+                                        breakdownText = `  - Billable Time: ${billableDecimal} \n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
                                     } else {
                                         timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
                                         timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
                                         breakdownHtml = `${billableDecimal} hrs`;
-                                        breakdownText = `  - Billable Time: ${billableDecimal} hrs`;
+                                        breakdownText = `  - Billable Time: ${billableDecimal} `;
                                     }
 
                                     tableHtml += '<tr>';
