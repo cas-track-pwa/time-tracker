@@ -703,12 +703,18 @@
         }
 
         function formatDuration(ms) {
-            const totalSecs = Math.floor(ms / 1000);
-            const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
-            const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
-            const secs = String(totalSecs % 60).padStart(2, '0');
-            return hrs + ":" + mins + ":" + secs;
-        }
+                    const totalSecs = Math.floor(ms / 1000);
+                    const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+                    const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+                    const secs = String(totalSecs % 60).padStart(2, '0');
+                    return hrs + ":" + mins + ":" + secs;
+                }
+
+                function formatDecimalQuarter(ms) {
+                    const totalMinutes = ms / 1000 / 60;
+                    const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
+                    return quarterHours.toFixed(2).replace(/\.00$/, '');
+                }
 
         btnSaveLog.addEventListener('click', () => {
             const endTime = Date.now();
@@ -886,16 +892,19 @@
                     let breakdownText = "";
 
                     if (log.travelDuration && log.onSiteDuration && log.arrivalTime) {
-                        timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
-                        timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
-                        breakdownHtml = `🚗 Travel: ${log.travelDuration}<br>💼 Client: ${log.onSiteDuration}`;
-                        breakdownText = `  - Travel Time: ${log.travelDuration}\n  - On-Site Time: ${log.onSiteDuration}`;
-                    } else {
-                        timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
-                        timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
-                        breakdownHtml = `💼 Client: ${log.duration}`;
-                        breakdownText = `  - On-Site Time: ${log.duration}`;
-                    }
+                                            const travelDecimal = formatDecimalQuarter(log.travelDuration);
+                                            const onSiteDecimal = formatDecimalQuarter(log.onSiteDuration);
+                                            timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
+                                            timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
+                                            breakdownHtml = `🚗 Travel: ${travelDecimal} hrs<br>💼 Client: ${onSiteDecimal} hrs`;
+                                            breakdownText = `  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
+                                        } else {
+                                            const durationDecimal = formatDecimalQuarter(log.duration);
+                                            timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
+                                            timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
+                                            breakdownHtml = `💼 Client: ${durationDecimal} hrs`;
+                                            breakdownText = `  - On-Site Time: ${durationDecimal} hrs`;
+                                        }
                     
                     tableHtml += '<tr>';
                                         tableHtml += `<td>${dateOnly}</td>`;
