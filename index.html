@@ -4,11 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Time Tracker</title>
-
-    <!-- Primary icon for all modern desktop browsers -->
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-
-    <!-- iOS Web App Meta Tags -->
     <link rel="manifest" href="manifest.webapp">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -36,529 +32,78 @@
             --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background-color: var(--bg-app);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: var(--text-main);
-            -webkit-tap-highlight-color: transparent;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-        }
-
-        .app-container {
-            width: 100%;
-            max-width: 448px;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            background-color: var(--bg-card);
-            box-shadow: var(--shadow-lg);
-        }
-
-        header {
-            background-color: var(--primary);
-            color: white;
-            padding: 1rem;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            box-shadow: var(--shadow-md);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        header h1 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            letter-spacing: -0.025em;
-        }
-
-        .btn-export {
-            background-color: var(--primary-hover);
-            color: white;
-            border: none;
-            font-size: 0.875rem;
-            font-weight: 600;
-            padding: 0.375rem 0.75rem;
-            border-radius: 0.5rem;
-            cursor: pointer;
-            transition: all 0.15s ease-in-out;
-        }
-        .btn-export:hover {
-            background-color: #1e3a8a;
-        }
-        .btn-export:active {
-            transform: scale(0.95);
-        }
-
-        main {
-            flex: 1;
-            padding: 1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-            overflow-y: auto;
-        }
-
-        .timer-card {
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.25rem;
-            box-shadow: var(--shadow-sm);
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
-
-        .label-title {
-            display: block;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted);
-        }
-
-        .input-field {
-            width: 100%;
-            background-color: var(--bg-input);
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            padding: 0.75rem 1rem;
-            font-size: 1rem;
-            color: var(--text-main);
-            outline: none;
-            transition: all 0.15s ease-in-out;
-        }
-        .input-field:focus {
-            border-color: transparent;
-            box-shadow: 0 0 0 2px var(--primary);
-        }
-
-        .timer-display-container {
-            text-align: center;
-            padding: 0.5rem 0;
-        }
-
-        .live-timer {
-            font-size: 2.25rem;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-weight: 700;
-            color: var(--text-light);
-            transition: color 0.15s ease-in-out;
-        }
-        .live-timer.running {
-            color: var(--rose);
-        }
-
-        .active-client-label {
-            font-size: 0.75rem;
-            color: var(--primary);
-            font-weight: 500;
-            margin-top: 0.25rem;
-            height: 1rem;
-        }
-
-        .action-buttons-container {
-            display: flex;
-            gap: 0.75rem;
-            width: 100%;
-        }
-
-        .btn-action {
-            flex: 1;
-            width: 100%;
-            border: none;
-            color: white;
-            font-weight: 700;
-            padding: 1rem;
-            border-radius: 0.75rem;
-            font-size: 1.125rem;
-            cursor: pointer;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.15s ease-in-out;
-        }
-        .btn-action.start {
-            background-color: var(--emerald);
-        }
-        .btn-action.start:hover {
-            background-color: var(--emerald-hover);
-        }
-        .btn-action.stop {
-            background-color: var(--rose);
-        }
-        .btn-action.stop:hover {
-            background-color: var(--rose-hover);
-        }
-        .btn-action:active {
-            transform: scale(0.98);
-        }
-
-        .btn-action-sec {
-            flex: 1;
-            border: 2px solid var(--primary);
-            background-color: transparent;
-            color: var(--primary);
-            font-weight: 700;
-            padding: 1rem;
-            border-radius: 0.75rem;
-            font-size: 1.125rem;
-            cursor: pointer;
-            transition: all 0.15s ease-in-out;
-        }
-        .btn-action-sec:hover {
-            background-color: rgba(37, 99, 235, 0.05);
-        }
-        .btn-action-sec:active {
-            transform: scale(0.98);
-        }
-        .btn-action-sec.hidden {
-            display: none !important;
-        }
-
-        .arrival-badge {
-            background-color: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            color: #166534;
-            font-size: 0.875rem;
-            font-weight: 500;
-            border-radius: 0.5rem;
-            padding: 0.5rem 0.75rem;
-            margin-top: 0.5rem;
-            display: inline-block;
-        }
-        .arrival-badge.hidden {
-            display: none !important;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 1rem;
-            z-index: 50;
-            transition: opacity 0.15s ease-in-out;
-        }
-        .modal-overlay.hidden {
-            display: none !important;
-        }
-
-        .modal-dialog {
-            background-color: var(--bg-card);
-            width: 100%;
-            max-width: 384px;
-            border-radius: 1rem;
-            padding: 1.25rem;
-            box-shadow: var(--shadow-xl);
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .modal-title {
-            font-size: 1.125rem;
-            font-weight: 700;
-            color: var(--text-main);
-        }
-
-        .textarea-field {
-            width: 100%;
-            background-color: var(--bg-input);
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            padding: 0.75rem;
-            font-size: 1rem;
-            resize: none;
-            color: var(--text-main);
-            outline: none;
-            transition: all 0.15s ease-in-out;
-        }
-        .textarea-field:focus {
-            border-color: transparent;
-            box-shadow: 0 0 0 2px var(--primary);
-        }
-
-        .billable-options {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-        }
-
-        .billable-option {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-
-        .billable-input {
-            cursor: pointer;
-        }
-
-        .btn-save-log {
-            width: 100%;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            font-weight: 700;
-            padding: 0.75rem;
-            border-radius: 0.75rem;
-            cursor: pointer;
-            transition: background-color 0.15s ease-in-out;
-        }
-        .btn-save-log:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .flex-row-gap {
-            display: flex;
-            gap: 0.75rem;
-        }
-
-        .btn-cancel {
-            flex: 1;
-            background-color: var(--border-light);
-            color: #374151;
-            border: none;
-            font-weight: 600;
-            padding: 0.75rem;
-            border-radius: 0.75rem;
-            cursor: pointer;
-            transition: all 0.15s ease-in-out;
-        }
-        .btn-cancel:hover {
-            background-color: var(--border-color);
-        }
-        .btn-cancel:active {
-            transform: scale(0.95);
-        }
-
-        .btn-confirm-delete {
-            flex: 1;
-            background-color: var(--rose);
-            color: white;
-            border: none;
-            font-weight: 600;
-            padding: 0.75rem;
-            border-radius: 0.75rem;
-            cursor: pointer;
-            transition: all 0.15s ease-in-out;
-        }
-        .btn-confirm-delete:hover {
-            background-color: var(--rose-hover);
-        }
-        .btn-confirm-delete:active {
-            transform: scale(0.95);
-        }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .section-title {
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted);
-        }
-
-        .btn-clear-all {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--rose);
-            background: none;
-            border: none;
-            cursor: pointer;
-            transition: all 0.15s ease-in-out;
-        }
-        .btn-clear-all:hover {
-            color: var(--rose-hover);
-        }
-        .btn-clear-all:active {
-            transform: scale(0.95);
-        }
-        .btn-clear-all.hidden {
-            display: none !important;
-        }
-
-        .log-history-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .empty-state {
-            text-align: center;
-            font-size: 0.875rem;
-            color: var(--text-light);
-            padding: 1rem 0;
-        }
-
-        .log-card {
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            padding: 1rem;
-            box-shadow: var(--shadow-sm);
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .log-card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-
-        .log-client-name {
-            font-weight: 700;
-            color: var(--text-main);
-            font-size: 1rem;
-        }
-
-        .log-timestamp {
-            font-size: 0.75rem;
-            color: var(--text-light);
-            margin-top: 0.125rem;
-        }
-
-        .duration-pill {
-            background-color: #eff6ff;
-            color: var(--primary-hover);
-            font-size: 0.875rem;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-weight: 700;
-            padding: 0.25rem 0.625rem;
-            border-radius: 0.5rem;
-            white-space: nowrap;
-        }
-
-        .log-travel-details {
-            display: flex;
-            gap: 0.75rem;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            background-color: var(--border-light);
-            padding: 0.375rem 0.625rem;
-            border-radius: 0.5rem;
-            margin-top: 0.25rem;
-            border: 1px solid var(--border-color);
-            width: max-content;
-        }
-
-        .log-notes {
-            font-size: 0.875rem;
-            color: #4b5563;
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-light);
-            border-radius: 0.5rem;
-            padding: 0.5rem;
-            font-style: italic;
-            word-break: break-word;
-        }
-
-        /* Invoice Report styling */
-        .report-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.875rem;
-            text-align: left;
-            margin-top: 0.5rem;
-        }
-
-        .report-table th, .report-table td {
-            padding: 0.625rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .report-table th {
-            font-weight: 700;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.05em;
-            background-color: var(--bg-secondary);
-        }
-
-        .report-total-row {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            font-weight: 700;
-            font-size: 1rem;
-            margin-top: 1rem;
-            padding-top: 0.5rem;
-            border-top: 2px solid var(--border-color);
-        }
-
-        /* Print-specific overrides */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg-app); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--text-main); -webkit-tap-highlight-color: transparent; display: flex; justify-content: center; min-height: 100vh; }
+        .app-container { width: 100%; max-width: 448px; min-height: 100vh; display: flex; flex-direction: column; background-color: var(--bg-card); box-shadow: var(--shadow-lg); }
+        header { background-color: var(--primary); color: white; padding: 1rem; position: sticky; top: 0; z-index: 10; box-shadow: var(--shadow-md); display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.025em; }
+        .btn-export { background-color: var(--primary-hover); color: white; border: none; font-size: 0.875rem; font-weight: 600; padding: 0.375rem 0.75rem; border-radius: 0.5rem; cursor: pointer; transition: all 0.15s ease-in-out; }
+        .btn-export:hover { background-color: #1e3a8a; }
+        .btn-export:active { transform: scale(0.95); }
+        main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; }
+        .timer-card { background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 1rem; padding: 1.25rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 1rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.25rem; }
+        .label-title { display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+        .input-field { width: 100%; background-color: var(--bg-input); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 1rem; color: var(--text-main); outline: none; transition: all 0.15s ease-in-out; }
+        .input-field:focus { border-color: transparent; box-shadow: 0 0 0 2px var(--primary); }
+        .textarea-field { width: 100%; background-color: var(--bg-input); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem; font-size: 1rem; resize: none; color: var(--text-main); outline: none; }
+        .textarea-field:focus { border-color: transparent; box-shadow: 0 0 0 2px var(--primary); }
+        .timer-display-container { text-align: center; padding: 0.5rem 0; }
+        .live-timer { font-size: 2.25rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; color: var(--text-light); transition: color 0.15s ease-in-out; }
+        .live-timer.running { color: var(--rose); }
+        .active-client-label { font-size: 0.75rem; color: var(--primary); font-weight: 500; margin-top: 0.25rem; height: 1rem; }
+        .action-buttons-container { display: flex; gap: 0.75rem; width: 100%; }
+        .btn-action { flex: 1; width: 100%; border: none; color: white; font-weight: 700; padding: 1rem; border-radius: 0.75rem; font-size: 1.125rem; cursor: pointer; box-shadow: var(--shadow-sm); transition: all 0.15s ease-in-out; }
+        .btn-action.start { background-color: var(--emerald); }
+        .btn-action.start:hover { background-color: var(--emerald-hover); }
+        .btn-action.stop { background-color: var(--rose); }
+        .btn-action.stop:hover { background-color: var(--rose-hover); }
+        .btn-action:active { transform: scale(0.98); }
+        .btn-action-sec { flex: 1; border: 2px solid var(--primary); background-color: transparent; color: var(--primary); font-weight: 700; padding: 1rem; border-radius: 0.75rem; font-size: 1.125rem; cursor: pointer; transition: all 0.15s ease-in-out; }
+        .btn-action-sec:hover { background-color: rgba(37, 99, 235, 0.05); }
+        .btn-action-sec:active { transform: scale(0.98); }
+        .btn-action-sec.hidden { display: none !important; }
+        .arrival-badge { background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-size: 0.875rem; font-weight: 500; border-radius: 0.5rem; padding: 0.5rem 0.75rem; margin-top: 0.5rem; display: inline-block; }
+        .arrival-badge.hidden { display: none !important; }
+        .modal-overlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 50; transition: opacity 0.15s ease-in-out; }
+        .modal-overlay.hidden { display: none !important; }
+        .modal-dialog { background-color: var(--bg-card); width: 100%; max-width: 384px; border-radius: 1rem; padding: 1.25rem; box-shadow: var(--shadow-xl); display: flex; flex-direction: column; gap: 1rem; }
+        .modal-title { font-size: 1.125rem; font-weight: 700; color: var(--text-main); }
+        .billable-options { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+        .billable-option { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+        .billable-input { cursor: pointer; }
+        .btn-save-log { width: 100%; background-color: var(--primary); color: white; border: none; font-weight: 700; padding: 0.75rem; border-radius: 0.75rem; cursor: pointer; transition: background-color 0.15s ease-in-out; }
+        .btn-save-log:hover { background-color: var(--primary-hover); }
+        .flex-row-gap { display: flex; gap: 0.75rem; }
+        .btn-cancel { flex: 1; background-color: var(--border-light); color: #374151; border: none; font-weight: 600; padding: 0.75rem; border-radius: 0.75rem; cursor: pointer; transition: all 0.15s ease-in-out; }
+        .btn-cancel:hover { background-color: var(--border-color); }
+        .btn-cancel:active { transform: scale(0.95); }
+        .section-header { display: flex; justify-content: space-between; align-items: center; }
+        .section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+        .btn-clear-all { font-size: 0.75rem; font-weight: 600; color: var(--rose); background: none; border: none; cursor: pointer; transition: all 0.15s ease-in-out; }
+        .btn-clear-all:hover { color: var(--rose-hover); }
+        .btn-clear-all:active { transform: scale(0.95); }
+        .btn-clear-all.hidden { display: none !important; }
+        .log-history-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .empty-state { text-align: center; font-size: 0.875rem; color: var(--text-light); padding: 1rem 0; }
+        .log-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.5rem; }
+        .log-card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .log-client-name { font-weight: 700; color: var(--text-main); font-size: 1rem; }
+        .log-timestamp { font-size: 0.75rem; color: var(--text-light); margin-top: 0.125rem; }
+        .duration-pill { background-color: #eff6ff; color: var(--primary-hover); font-size: 0.875rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; padding: 0.25rem 0.625rem; border-radius: 0.5rem; white-space: nowrap; }
+        .log-travel-details { display: flex; gap: 0.75rem; font-size: 0.75rem; color: var(--text-muted); background-color: var(--border-light); padding: 0.375rem 0.625rem; border-radius: 0.5rem; margin-top: 0.25rem; border: 1px solid var(--border-color); width: max-content; }
+        .log-notes { font-size: 0.875rem; color: #4b5563; background-color: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: 0.5rem; padding: 0.5rem; font-style: italic; word-break: break-word; }
+        .report-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; text-align: left; margin-top: 0.5rem; }
+        .report-table th, .report-table td { padding: 0.625rem; border-bottom: 1px solid var(--border-color); }
+        .report-table th { font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; background-color: var(--bg-secondary); }
+        .report-total-row { display: flex; justify-content: flex-end; align-items: center; font-weight: 700; font-size: 1rem; margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid var(--border-color); }
         @media print {
-            body {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-                font-family: Georgia, serif;
-            }
-            .app-container {
-                box-shadow: none !important;
-                max-width: 100% !important;
-                width: 100% !important;
-                min-height: auto !important;
-            }
-            header,
-            .timer-card,
-            .section-header,
-            #logHistory,
-            #notesModal,
-            #clearConfirmModal,
-            .modal-overlay:not(#reportModal),
-            #btnCloseReport,
-            #btnCopyReportText,
-            #btnPrintReportAction,
-            .flex-row-gap {
-                display: none !important;
-            }
-            #reportModal {
-                position: static !important;
-                background-color: transparent !important;
-                padding: 0 !important;
-                display: block !important;
-                z-index: auto !important;
-            }
-            .modal-dialog {
-                box-shadow: none !important;
-                max-width: 100% !important;
-                width: 100% !important;
-                padding: 0 !important;
-            }
-            .report-table th {
-                background-color: #f3f4f6 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
+            body { background-color: #ffffff !important; color: #000000 !important; font-family: Georgia, serif; }
+            .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; }
+            header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
+            #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
+            .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
+            .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
     </style>
 </head>
@@ -567,9 +112,10 @@
         <header>
             <h1>Time Tracker</h1>
             <div class="flex-row-gap">
-                <button id="btnExport" class="btn-export">CSV</button>
-                <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
-            </div>
+                            <button id="btnAddEntry" class="btn-export">Add Entry</button>
+                            <button id="btnExport" class="btn-export">CSV</button>
+                            <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
+                        </div>
         </header>
 
         <main>
@@ -599,15 +145,9 @@
                     <div class="form-group">
                         <label class="label-title">Billable Time</label>
                         <div class="billable-options">
-                            <label class="billable-option">
-                                <input type="radio" name="billableTime" value="0.5" class="billable-input"> 0.5 hours
-                            </label>
-                            <label class="billable-option">
-                                <input type="radio" name="billableTime" value="0" class="billable-input"> 0 hours
-                            </label>
-                            <label class="billable-option">
-                                <input type="radio" name="billableTime" value="sales call" class="billable-input"> Sales Call
-                            </label>
+                            <label class="billable-option"><input type="radio" name="billableTime" value="0.5" class="billable-input"> 0.5 hours</label>
+                            <label class="billable-option"><input type="radio" name="billableTime" value="0" class="billable-input"> 0 hours</label>
+                            <label class="billable-option"><input type="radio" name="billableTime" value="sales call" class="billable-input"> Sales Call</label>
                         </div>
                     </div>
                     <button id="btnSaveLog" class="btn-save-log">Save Time Log</button>
@@ -615,32 +155,96 @@
             </div>
 
             <div id="startMileageModal" class="modal-overlay hidden">
-                            <div class="modal-dialog">
-                                <h3 class="modal-title">Enter Start Mileage</h3>
-                                <div class="form-group">
-                                    <label class="label-title">Current Odometer Reading</label>
-                                    <input type="number" id="startMileageInput" placeholder="Enter current mileage" class="input-field">
-                                </div>
-                                <div class="flex-row-gap">
-                                    <button id="btnCancelStartMileage" class="btn-cancel">Cancel</button>
-                                    <button id="btnSaveStartMileage" class="btn-save-log">Save</button>
-                                </div>
-                            </div>
-                        </div>
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Enter Start Mileage</h3>
+                    <div class="form-group">
+                        <label class="label-title">Current Odometer Reading</label>
+                        <input type="number" id="startMileageInput" placeholder="Enter current mileage" class="input-field">
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelStartMileage" class="btn-cancel">Cancel</button>
+                        <button id="btnSaveStartMileage" class="btn-save-log">Save</button>
+                    </div>
+                </div>
+            </div>
 
-                        <div id="arrivalMileageModal" class="modal-overlay hidden">
-                            <div class="modal-dialog">
-                                <h3 class="modal-title">Enter Arrival Mileage</h3>
-                                <div class="form-group">
-                                    <label class="label-title">Current Odometer Reading</label>
-                                    <input type="number" id="arrivalMileageInput" placeholder="Enter current mileage" class="input-field">
-                                </div>
-                                <div class="flex-row-gap">
-                                    <button id="btnCancelArrivalMileage" class="btn-cancel">Cancel</button>
-                                    <button id="btnSaveArrivalMileage" class="btn-save-log">Save</button>
-                                </div>
-                            </div>
-                        </div>
+            <div id="arrivalMileageModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Enter Arrival Mileage</h3>
+                    <div class="form-group">
+                        <label class="label-title">Current Odometer Reading</label>
+                        <input type="number" id="arrivalMileageInput" placeholder="Enter current mileage" class="input-field">
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelArrivalMileage" class="btn-cancel">Cancel</button>
+                        <button id="btnSaveArrivalMileage" class="btn-save-log">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="editModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Edit Log Entry</h3>
+                    <div class="form-group">
+                        <label class="label-title">Client Name</label>
+                        <input type="text" id="editClient" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Work Notes</label>
+                        <textarea id="editNotes" rows="3" class="textarea-field"></textarea>
+                    </div>
+                                        <div class="form-group">
+                                            <label class="label-title">Billable Time (decimal hours)</label>
+                                            <input type="number" id="editBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="label-title">Travel Miles</label>
+                        <input type="number" id="editMileage" placeholder="Enter miles" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Date/Time</label>
+                        <input type="datetime-local" id="editDateTime" class="input-field">
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelEdit" class="btn-cancel">Cancel</button>
+                        <button id="btnSaveEdit" class="btn-save-log">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="addEntryModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Add Manual Entry</h3>
+                    <div class="form-group">
+                        <label class="label-title">Client Name</label>
+                        <input type="text" id="addClient" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Start Time</label>
+                        <input type="datetime-local" id="addStartTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">End Time</label>
+                        <input type="datetime-local" id="addEndTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Work Notes</label>
+                        <textarea id="addNotes" rows="3" class="textarea-field"></textarea>
+                    </div>
+                    <div class="form-group">
+                                            <label class="label-title">Billable Time (decimal hours)</label>
+                                            <input type="number" id="addBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="label-title">Travel Miles</label>
+                        <input type="number" id="addMileage" placeholder="Enter miles" class="input-field">
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelAdd" class="btn-cancel">Cancel</button>
+                        <button id="btnSaveAdd" class="btn-save-log">Save Entry</button>
+                    </div>
+                </div>
+            </div>
 
             <div id="clearConfirmModal" class="modal-overlay hidden">
                 <div class="modal-dialog">
@@ -659,9 +263,7 @@
                         <h3 class="modal-title">Billing Summary</h3>
                         <button id="btnCloseReport" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
                     </div>
-                    <div id="reportContent" style="max-height: 400px; overflow-y: auto; padding: 0.5rem 0;">
-                        <!-- Formatted report table will be inserted here dynamically -->
-                    </div>
+                    <div id="reportContent" style="max-height: 400px; overflow-y: auto; padding: 0.5rem 0;"></div>
                     <div class="flex-row-gap" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
                         <button id="btnCopyReportText" class="btn-cancel" style="background-color: var(--primary); color: white;">Copy Invoice Text</button>
                         <button id="btnPrintReportAction" class="btn-action start" style="padding: 0.75rem;">Print Page</button>
@@ -675,15 +277,9 @@
                     <div class="form-group">
                         <label class="label-title">Report Type</label>
                         <div class="billable-options">
-                            <label class="billable-option">
-                                <input type="radio" name="reportRange" value="day" class="billable-input" checked> Last Day
-                            </label>
-                            <label class="billable-option">
-                                <input type="radio" name="reportRange" value="week" class="billable-input"> Last Week
-                            </label>
-                            <label class="billable-option">
-                                <input type="radio" name="reportRange" value="custom" class="billable-input"> Custom Range
-                            </label>
+                            <label class="billable-option"><input type="radio" name="reportRange" value="day" class="billable-input" checked> Last Day</label>
+                            <label class="billable-option"><input type="radio" name="reportRange" value="week" class="billable-input"> Last Week</label>
+                            <label class="billable-option"><input type="radio" name="reportRange" value="custom" class="billable-input"> Custom Range</label>
                         </div>
                     </div>
                     <div id="customRangeInputs" style="display: none; flex-direction: column; gap: 0.75rem;">
@@ -699,24 +295,6 @@
                     <div class="flex-row-gap">
                         <button id="btnCancelReportRange" class="btn-cancel">Cancel</button>
                         <button id="btnGenerateReport" class="btn-save-log">Generate Report</button>
-                    </div>
-                </div>
-            </div>
-
-            <div id="authModal" class="modal-overlay hidden">
-                <div class="modal-dialog">
-                    <h3 class="modal-title">Sign In / Sign Up</h3>
-                    <div class="form-group">
-                        <label class="label-title">Email</label>
-                        <input type="email" id="authEmail" class="input-field" placeholder="you@example.com">
-                    </div>
-                    <div class="form-group">
-                        <label class="label-title">Password</label>
-                        <input type="password" id="authPassword" class="input-field" placeholder="Enter password">
-                    </div>
-                    <div class="flex-row-gap">
-                        <button id="btnAuthCancel" class="btn-cancel">Cancel</button>
-                        <button id="btnAuthSubmit" class="btn-save-log">Submit</button>
                     </div>
                 </div>
             </div>
@@ -747,7 +325,7 @@
         dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); };
         dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null;
+        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null;
 
         const clientInput = document.getElementById('clientInput');
         const liveTimer = document.getElementById('liveTimer');
@@ -782,103 +360,91 @@
         const reportEndDate = document.getElementById('reportEndDate');
 
         const startMileageModal = document.getElementById('startMileageModal');
-                const startMileageInput = document.getElementById('startMileageInput');
-                const btnCancelStartMileage = document.getElementById('btnCancelStartMileage');
-                const btnSaveStartMileage = document.getElementById('btnSaveStartMileage');
+        const startMileageInput = document.getElementById('startMileageInput');
+        const btnCancelStartMileage = document.getElementById('btnCancelStartMileage');
+        const btnSaveStartMileage = document.getElementById('btnSaveStartMileage');
 
-                const arrivalMileageModal = document.getElementById('arrivalMileageModal');
-                const arrivalMileageInput = document.getElementById('arrivalMileageInput');
-                const btnCancelArrivalMileage = document.getElementById('btnCancelArrivalMileage');
-                const btnSaveArrivalMileage = document.getElementById('btnSaveArrivalMileage');
+        const arrivalMileageModal = document.getElementById('arrivalMileageModal');
+        const arrivalMileageInput = document.getElementById('arrivalMileageInput');
+        const btnCancelArrivalMileage = document.getElementById('btnCancelArrivalMileage');
+        const btnSaveArrivalMileage = document.getElementById('btnSaveArrivalMileage');
+
+        const editModal = document.getElementById('editModal');
+        const editClient = document.getElementById('editClient');
+        const editNotes = document.getElementById('editNotes');
+        const editBillableTimeInputs = document.getElementsByName('editBillableTime');
+        const editMileage = document.getElementById('editMileage');
+                const editDateTime = document.getElementById('editDateTime');
+                const editBillableTime = document.getElementById('editBillableTime');
+                const btnCancelEdit = document.getElementById('btnCancelEdit');
+                const btnSaveEdit = document.getElementById('btnSaveEdit');
+
+        const addEntryModal = document.getElementById('addEntryModal');
+        const addClient = document.getElementById('addClient');
+        const addStartTime = document.getElementById('addStartTime');
+        const addEndTime = document.getElementById('addEndTime');
+                const addNotes = document.getElementById('addNotes');
+                const addBillableTime = document.getElementById('addBillableTime');
+                const addMileage = document.getElementById('addMileage');
+                const btnCancelAdd = document.getElementById('btnCancelAdd');
+                const btnSaveAdd = document.getElementById('btnSaveAdd');
+
+        const btnAddEntry = document.getElementById('btnAddEntry');
 
         let clipboardText = "";
 
         btnAction.addEventListener('click', () => {
-                    if (!isRunning) {
-                        const clientName = clientInput.value.trim();
-                        if (!clientName) { alert("Please input a Client Name first."); return; }
+            if (!isRunning) {
+                const clientName = clientInput.value.trim();
+                if (!clientName) { alert("Please input a Client Name first."); return; }
 
-                        isRunning = true;
-                        startTime = Date.now();
-                        arrivalTime = null;
-                        startMileage = null;
-                        arrivalMileage = null;
-                        travelMileage = null;
-                        clientInput.disabled = true;
-                        activeClientLabel.textContent = "Tracking: " + clientName;
+                isRunning = true;
+                startTime = Date.now();
+                arrivalTime = null;
+                startMileage = null;
+                arrivalMileage = null;
+                travelMileage = null;
+                clientInput.disabled = true;
+                activeClientLabel.textContent = "Tracking: " + clientName;
 
-                        btnAction.textContent = "End Timer";
-                        btnAction.classList.remove('start');
-                        btnAction.classList.add('stop');
-                        liveTimer.classList.add('running');
+                btnAction.textContent = "End Timer";
+                btnAction.classList.remove('start');
+                btnAction.classList.add('stop');
+                liveTimer.classList.add('running');
 
-                        btnMarkArrival.classList.remove('hidden');
-                        arrivalBadge.classList.add('hidden');
+                btnMarkArrival.classList.remove('hidden');
+                arrivalBadge.classList.add('hidden');
 
-                        timerInterval = setInterval(updateLiveDisplay, 1000);
+                timerInterval = setInterval(updateLiveDisplay, 1000);
 
-                        // Show start mileage modal
-                        startMileageInput.value = '';
-                        startMileageModal.classList.remove('hidden');
-                        startMileageInput.focus();
-                    } else {
-                        clearInterval(timerInterval);
-                        notesModal.classList.remove('hidden');
-                        notesInput.focus();
-                    }
-                });
+                // Show start mileage modal
+                startMileageInput.value = '';
+                startMileageModal.classList.remove('hidden');
+                startMileageInput.focus();
+            } else {
+                clearInterval(timerInterval);
+                notesModal.classList.remove('hidden');
+                notesInput.focus();
+            }
+        });
 
         btnMarkArrival.addEventListener('click', () => {
-                    if (!isRunning || arrivalTime) return;
-                    arrivalTime = Date.now();
-                    btnMarkArrival.classList.add('hidden');
+            if (!isRunning || arrivalTime) return;
+            arrivalTime = Date.now();
+            btnMarkArrival.classList.add('hidden');
 
-                    const travelMs = arrivalTime - startTime;
-                    const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
-                    arrivalBadge.classList.remove('hidden');
+            const travelMs = arrivalTime - startTime;
+            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+            arrivalBadge.classList.remove('hidden');
 
-                    // Show arrival mileage modal
-                    arrivalMileageInput.value = '';
-                    arrivalMileageModal.classList.remove('hidden');
-                    arrivalMileageInput.focus();
-                                    });
+            // Show arrival mileage modal
+            arrivalMileageInput.value = '';
+            arrivalMileageModal.classList.remove('hidden');
+            arrivalMileageInput.focus();
+        });
 
-                            // Mileage event listeners
-                            btnCancelStartMileage.addEventListener('click', () => {
-                                startMileageModal.classList.add('hidden');
-                            });
-
-                            btnSaveStartMileage.addEventListener('click', () => {
-                                const startValue = startMileageInput.value.trim();
-                                if (startValue && parseFloat(startValue) >= 0) {
-                                    startMileage = parseFloat(startValue);
-                                } else {
-                                    startMileage = null;
-                                }
-                                startMileageModal.classList.add('hidden');
-                            });
-
-                            btnCancelArrivalMileage.addEventListener('click', () => {
-                                arrivalMileageModal.classList.add('hidden');
-                            });
-
-                            btnSaveArrivalMileage.addEventListener('click', () => {
-                                const arrivalValue = arrivalMileageInput.value.trim();
-                                if (arrivalValue && parseFloat(arrivalValue) >= 0) {
-                                    arrivalMileage = parseFloat(arrivalValue);
-                                    // Calculate travel mileage
-                                    if (startMileage !== null && arrivalMileage !== null) {
-                                        travelMileage = arrivalMileage - startMileage;
-                                    }
-                                } else {
-                                    arrivalMileage = null;
-                                    travelMileage = null;
-                                }
-                                arrivalMileageModal.classList.add('hidden');
-                            });
-
-                            function updateLiveDisplay() {
+        function updateLiveDisplay() {
             const elapsedMs = Date.now() - startTime;
             liveTimer.textContent = formatDuration(elapsedMs);
         }
@@ -925,8 +491,7 @@
                 formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             }
 
-            // Get selected billable time
-            let selectedBillableTime = '1'; // default to calculated time
+            let selectedBillableTime = '1';
             for (const input of billableInputs) {
                 if (input.checked) {
                     selectedBillableTime = input.value;
@@ -935,24 +500,25 @@
             }
 
             const newLog = {
-                            client: clientInput.value.trim(),
-                            start: new Date(startTime).toLocaleString(),
-                            end: new Date(endTime).toLocaleString(),
-                            duration: formatDuration(durationMs),
-                            durationMs: durationMs,
-                            decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-                            notes: notesInput.value.trim() || "No notes provided.",
-                            billableTime: selectedBillableTime,
-                            arrivalTime: formattedArrivalTime,
-                            travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
-                            onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null,
-                            startMileage: startMileage,
-                            arrivalMileage: arrivalMileage,
-                            travelMileage: travelMileage
-                        };
+                client: clientInput.value.trim(),
+                start: new Date(startTime).toLocaleString(),
+                end: new Date(endTime).toLocaleString(),
+                duration: formatDuration(durationMs),
+                durationMs: durationMs,
+                decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                notes: notesInput.value.trim() || "No notes provided.",
+                billableTime: selectedBillableTime,
+                arrivalTime: formattedArrivalTime,
+                travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
+                onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null,
+                startMileage: startMileage,
+                arrivalMileage: arrivalMileage,
+                travelMileage: travelMileage
+            };
 
             const transaction = db.transaction(["logs"], "readwrite");
-            transaction.objectStore(["logs"]).add(newLog);
+            const store = transaction.objectStore("logs");
+            store.add(newLog);
 
             transaction.oncomplete = () => {
                 isRunning = false;
@@ -963,7 +529,6 @@
                 clientInput.disabled = false;
                 notesInput.value = "";
 
-                // Reset billable time radio buttons
                 for (const input of billableInputs) {
                     input.checked = false;
                 }
@@ -979,12 +544,44 @@
 
                 notesModal.classList.add('hidden');
                 renderLogs();
-                            };
-                        });
+            };
+        });
 
-                        btnClear.addEventListener('click', () => {
-                            clearConfirmModal.classList.remove('hidden');
-                        });
+        btnCancelStartMileage.addEventListener('click', () => {
+            startMileageModal.classList.add('hidden');
+        });
+
+        btnSaveStartMileage.addEventListener('click', () => {
+            const startValue = startMileageInput.value.trim();
+            if (startValue && parseFloat(startValue) >= 0) {
+                startMileage = parseFloat(startValue);
+            } else {
+                startMileage = null;
+            }
+            startMileageModal.classList.add('hidden');
+        });
+
+        btnCancelArrivalMileage.addEventListener('click', () => {
+            arrivalMileageModal.classList.add('hidden');
+        });
+
+        btnSaveArrivalMileage.addEventListener('click', () => {
+            const arrivalValue = arrivalMileageInput.value.trim();
+            if (arrivalValue && parseFloat(arrivalValue) >= 0) {
+                arrivalMileage = parseFloat(arrivalValue);
+                if (startMileage !== null && arrivalMileage !== null) {
+                    travelMileage = arrivalMileage - startMileage;
+                }
+            } else {
+                arrivalMileage = null;
+                travelMileage = null;
+            }
+            arrivalMileageModal.classList.add('hidden');
+        });
+
+        btnClear.addEventListener('click', () => {
+            clearConfirmModal.classList.remove('hidden');
+        });
 
         btnCancelClear.addEventListener('click', () => {
             clearConfirmModal.classList.add('hidden');
@@ -1036,47 +633,188 @@
                     }
 
                     if (log.travelMileage && log.travelMileage > 0) {
-                                            html += '<div class="log-travel-details"><span>🚗 Travel Miles: ' + log.travelMileage + ' mi</span></div>';
-                                        }
+                        html += '<div class="log-travel-details"><span>🚗 Travel Miles: ' + log.travelMileage + ' mi</span></div>';
+                    }
 
                     if (log.billableTime && log.billableTime !== '1') {
-                        const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
-                        html += '<p class="log-notes"><strong>Billable:</strong> ' + billableDisplay + ' | "' + escapeHtml(log.notes) + '"</p>';
-                    } else {
-                        html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
-                    }
+                                            const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
+                                            html += '<p class="log-notes"><strong>Billable:</strong> ' + billableDisplay + ' | "' + escapeHtml(log.notes) + '"</p>';
+                                        } else {
+                                            html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
+                                        }
+                    html += '<div class="flex-row-gap" style="margin-top: 0.5rem;">';
+                    html += '<button class="btn-action start" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="editLog(' + log.id + ')">Edit</button>';
+                    html += '<button class="btn-action stop" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="deleteLog(' + log.id + ')">Delete</button>';
+                    html += '</div>';
                     html += '</div>';
                 });
                 logHistory.innerHTML = html;
             };
         }
 
+        // Edit log function
+        window.editLog = function(id) {
+            const transaction = db.transaction(["logs"], "readwrite");
+            const store = transaction.objectStore("logs");
+            const request = store.get(id);
+
+            request.onsuccess = () => {
+                const log = request.result;
+                if (!log) return;
+
+                editingLogId = id;
+
+                editClient.value = log.client;
+                                editNotes.value = log.notes;
+                                editBillableTime.value = log.billableTime;
+                                editMileage.value = log.travelMileage || '';
+                                editDateTime.value = log.start.replace(/,/g, 'T').replace(/ /g, 'T');
+
+                editModal.classList.remove('hidden');
+            };
+        };
+
+        // Delete log function
+        window.deleteLog = function(id) {
+            if (!confirm('Are you sure you want to delete this log entry?')) return;
+
+            const transaction = db.transaction(["logs"], "readwrite");
+            const store = transaction.objectStore("logs");
+            const request = store.delete(id);
+
+            request.onsuccess = () => {
+                renderLogs();
+            };
+        };
+
+        // Save edit
+        btnSaveEdit.addEventListener('click', () => {
+            if (!editingLogId) return;
+
+            const transaction = db.transaction(["logs"], "readwrite");
+            const store = transaction.objectStore("logs");
+            const request = store.get(editingLogId);
+
+            request.onsuccess = () => {
+                const log = request.result;
+                if (!log) return;
+
+                let selectedBillableTime = editBillableTime.value ? editBillableTime.value : '1';
+
+                                log.client = editClient.value.trim();
+                                log.notes = editNotes.value.trim() || "No notes provided.";
+                                log.billableTime = selectedBillableTime;
+                                log.travelMileage = editMileage.value ? parseFloat(editMileage.value) : null;
+
+                const putRequest = store.put(log);
+                putRequest.onsuccess = () => {
+                    editModal.classList.add('hidden');
+                    editingLogId = null;
+                    renderLogs();
+                };
+            };
+        });
+
+        btnCancelEdit.addEventListener('click', () => {
+            editModal.classList.add('hidden');
+            editingLogId = null;
+        });
+
+        // Add entry modal
+        btnAddEntry.addEventListener('click', () => {
+            const now = new Date();
+            const today = now.toISOString().slice(0, 10);
+            const currentTime = now.toTimeString().slice(0, 8);
+            
+            addStartTime.value = today + 'T' + currentTime;
+            addEndTime.value = today + 'T' + currentTime;
+                        addClient.value = '';
+                        addNotes.value = '';
+                        addBillableTime.value = '';
+                        addMileage.value = '';
+                        addEntryModal.classList.remove('hidden');
+        });
+
+        btnCancelAdd.addEventListener('click', () => {
+            addEntryModal.classList.add('hidden');
+        });
+
+        btnSaveAdd.addEventListener('click', () => {
+            const client = addClient.value.trim();
+            const startTimeVal = addStartTime.value;
+            const endTimeVal = addEndTime.value;
+            const notes = addNotes.value.trim() || "No notes provided.";
+
+            if (!client || !startTimeVal || !endTimeVal) {
+                alert("Please fill in all required fields.");
+                return;
+            }
+
+            let selectedBillableTime = addBillableTime.value || '1';
+
+            const start = new Date(startTimeVal);
+            const end = new Date(endTimeVal);
+            const durationMs = end - start;
+
+            let selectedTravelMileage = null;
+            if (addMileage.value && parseFloat(addMileage.value) > 0) {
+                selectedTravelMileage = parseFloat(addMileage.value);
+            }
+
+            const newLog = {
+                client: client,
+                start: start.toLocaleString(),
+                end: end.toLocaleString(),
+                duration: formatDuration(durationMs),
+                durationMs: durationMs,
+                decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                notes: notes,
+                billableTime: selectedBillableTime,
+                travelMileage: selectedTravelMileage
+            };
+
+            const transaction = db.transaction(["logs"], "readwrite");
+            const store = transaction.objectStore("logs");
+            store.add(newLog);
+
+            transaction.oncomplete = () => {
+                addEntryModal.classList.add('hidden');
+                renderLogs();
+            };
+        });
+
         btnExport.addEventListener('click', () => {
+            if (!db) return;
             const store = db.transaction(["logs"], "readonly").objectStore("logs");
-            store.getAll().onsuccess = (e) => {
+            const request = store.getAll();
+
+            request.onsuccess = function(e) {
                 const logs = e.target.result;
-                if(logs.length === 0) { alert("There is no data recorded to export."); return; }
+                if (logs.length === 0) { 
+                    alert("There is no data recorded to export."); 
+                    return; 
+                }
 
                 const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
                 const csvRows = [headers.join(",")];
 
                 logs.forEach(log => {
                     const row = [
-                                            log.id,
-                                            '"' + log.client.replace(/"/g, '""') + '"',
-                                            '"' + log.start + '"',
-                                            '"' + (log.arrivalTime || "") + '"',
-                                            '"' + log.end + '"',
-                                            '"' + log.duration + '"',
-                                            '"' + (log.travelDuration || "") + '"',
-                                            '"' + (log.onSiteDuration || "") + '"',
-                                            log.decimalHours,
-                                            '"' + (log.billableTime || "") + '"',
-                                            (log.startMileage || ""),
-                                            (log.arrivalMileage || ""),
-                                            (log.travelMileage || ""),
-                                            '"' + log.notes.replace(/"/g, '""') + '"'
-                                        ];
+                        log.id,
+                        '"' + log.client.replace(/"/g, '""') + '"',
+                        '"' + log.start + '"',
+                        '"' + (log.arrivalTime || "") + '"',
+                        '"' + log.end + '"',
+                        '"' + log.duration + '"',
+                        '"' + (log.travelDuration || "") + '"',
+                        '"' + (log.onSiteDuration || "") + '"',
+                        log.decimalHours,
+                        '"' + (log.billableTime || "") + '"',
+                        (log.startMileage || ""),
+                        (log.arrivalMileage || ""),
+                        (log.travelMileage || ""),
+                        '"' + log.notes.replace(/"/g, '""') + '"'
+                    ];
                     csvRows.push(row.join(","));
                 });
 
@@ -1117,12 +855,62 @@
         });
 
         btnPrintReportAction.addEventListener('click', () => {
-            window.print();
-        });
+                    if (confirm('Would you like to export the data as CSV before printing?')) {
+                        exportToCSV();
+                    }
+                    window.print();
+                });
+
+                function exportToCSV() {
+                    if (!db) return;
+                    const store = db.transaction(["logs"], "readonly").objectStore("logs");
+                    const request = store.getAll();
+
+                    request.onsuccess = function(e) {
+                        const logs = e.target.result;
+                        if (logs.length === 0) { 
+                            alert("There is no data recorded to export."); 
+                            return; 
+                        }
+
+                        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
+                        const csvRows = [headers.join(",")];
+
+                        logs.forEach(log => {
+                            const row = [
+                                log.id,
+                                '"' + log.client.replace(/"/g, '""') + '"',
+                                '"' + log.start + '"',
+                                '"' + (log.arrivalTime || "") + '"',
+                                '"' + log.end + '"',
+                                '"' + log.duration + '"',
+                                '"' + (log.travelDuration || "") + '"',
+                                '"' + (log.onSiteDuration || "") + '"',
+                                log.decimalHours,
+                                '"' + (log.billableTime || "") + '"',
+                                (log.startMileage || ""),
+                                (log.arrivalMileage || ""),
+                                (log.travelMileage || ""),
+                                '"' + log.notes.replace(/"/g, '""') + '"'
+                            ];
+                            csvRows.push(row.join(","));
+                        });
+
+                        const csvString = csvRows.join("\r\n");
+                        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+                        const link = document.createElement("a");
+                        const url = URL.createObjectURL(blob);
+                        link.setAttribute("href", url);
+                        link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
+                        link.style.visibility = 'hidden';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    };
+                }
 
         btnCancelReportRange.addEventListener('click', () => {
             reportRangeModal.classList.add('hidden');
-            // Reset to default selection
             for (const input of reportRangeInputs) {
                 input.checked = false;
             }
@@ -1132,12 +920,10 @@
             reportEndDate.value = '';
         });
 
-        // Show/hide custom date inputs based on selection
         for (const input of reportRangeInputs) {
             input.addEventListener('change', () => {
                 if (input.value === 'custom') {
                     customRangeInputs.style.display = 'flex';
-                    // Set default dates to today
                     const today = new Date().toISOString().split('T')[0];
                     reportStartDate.value = today;
                     reportEndDate.value = today;
@@ -1150,7 +936,6 @@
         }
 
         btnGenerateReport.addEventListener('click', () => {
-            // Find selected range
             let selectedRange = 'day';
             for (const input of reportRangeInputs) {
                 if (input.checked) {
@@ -1163,16 +948,14 @@
             let endDate = new Date();
 
             if (selectedRange === 'day') {
-                // Last day: start of today to end of today
                 startDate.setHours(0, 0, 0, 0);
                 endDate.setHours(23, 59, 59, 999);
             } else if (selectedRange === 'week') {
-                            // Last 7 days: from 6 days ago to end of today
-                            startDate.setDate(startDate.getDate() - 6);
-                            startDate.setHours(0, 0, 0, 0);
-                            endDate.setHours(23, 59, 59, 999);
+                // Last 7 days including today
+                startDate.setDate(startDate.getDate() - 6);
+                startDate.setHours(0, 0, 0, 0);
+                endDate.setHours(23, 59, 59, 999);
             } else if (selectedRange === 'custom') {
-                // Custom range
                 const startVal = reportStartDate.value;
                 const endVal = reportEndDate.value;
                 if (!startVal || !endVal) {
@@ -1191,10 +974,11 @@
         function generateReportForDateRange(startDate, endDate) {
             if (!db) return;
             const store = db.transaction(["logs"], "readonly").objectStore("logs");
-            store.getAll().onsuccess = (e) => {
+            const request = store.getAll();
+
+            request.onsuccess = function(e) {
                 const logs = e.target.result;
 
-                // Filter logs by date range
                 const filteredLogs = logs.filter(log => {
                     const logDate = new Date(log.start);
                     return logDate >= startDate && logDate <= endDate;
@@ -1225,7 +1009,6 @@
                     let breakdownHtml = "";
                     let breakdownText = "";
 
-                    // Use billableTime from log if it was set, otherwise calculate it
                     let billableDecimal;
                     if (log.billableTime && log.billableTime !== '1') {
                         billableDecimal = log.billableTime;
@@ -1254,13 +1037,14 @@
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
                     tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
                     tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
+                    tableHtml += '</tr>';
 
-                                        rawText += `Date: ${dateOnly}\n`;
-                                        rawText += `Client: ${log.client}\n`;
-                                        rawText += `Invoice #: -\n`;
-                                        rawText += `Times: ${timelineText}\n`;
-                                        rawText += `${breakdownText}\n`;
-                                        if (log.travelMileage && log.travelMileage > 0) rawText += `Travel Miles: ${log.travelMileage} mi\n`;
+                    rawText += `Date: ${dateOnly}\n`;
+                    rawText += `Client: ${log.client}\n`;
+                    rawText += `Invoice #: -\n`;
+                    rawText += `Times: ${timelineText}\n`;
+                    rawText += `${breakdownText}\n`;
+                    if (log.travelMileage && log.travelMileage > 0) rawText += `Travel Miles: ${log.travelMileage} mi\n`;
                     rawText += `----------------------------------------\n`;
                 });
 
