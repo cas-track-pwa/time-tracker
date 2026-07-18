@@ -707,10 +707,10 @@
 
         function formatDuration(ms) {
                     const totalSecs = Math.floor(ms / 1000);
-                    const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+                    const  = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
                     const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
                     const secs = String(totalSecs % 60).padStart(2, '0');
-                    return hrs + ":" + mins + ":" + secs;
+                    return  + ":" + mins + ":" + secs;
                 }
 
                 function formatDecimalQuarter(ms) {
@@ -915,13 +915,13 @@
                                                                     const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
                                                                     timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
                                                                     timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
-                                                                    breakdownHtml = `${billableDecimal} hrs`;
-                                                                    breakdownText = `  - Billable Time: ${billableDecimal} hrs\n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
+                                                                    breakdownHtml = `${billableDecimal} `;
+                                                                    breakdownText = `  - Billable Time: ${billableDecimal} \n  - Travel Time: ${travelDecimal} \n  - On-Site Time: ${onSiteDecimal} `;
                                                                 } else {
                                                                     timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
                                                                     timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
-                                                                    breakdownHtml = `${billableDecimal} hrs`;
-                                                                    breakdownText = `  - Billable Time: ${billableDecimal} hrs`;
+                                                                    breakdownHtml = `${billableDecimal} `;
+                                                                    breakdownText = `  - Billable Time: ${billableDecimal} `;
                                                                 }
 
                     tableHtml += '<tr>';
