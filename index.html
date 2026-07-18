@@ -293,13 +293,31 @@
             transition: all 0.15s ease-in-out;
         }
         .textarea-field:focus {
-            border-color: transparent;
-            box-shadow: 0 0 0 2px var(--primary);
-        }
+                    border-color: transparent;
+                    box-shadow: 0 0 0 2px var(--primary);
+                }
 
-        .btn-save-log {
-            width: 100%;
-            background-color: var(--primary);
+                .billable-options {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                    margin-top: 0.5rem;
+                }
+
+                .billable-option {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    cursor: pointer;
+                }
+
+                .billable-input {
+                    cursor: pointer;
+                }
+
+                .btn-save-log {
+                    width: 100%;
+                    background-color: var(--primary);
             color: white;
             border: none;
             font-weight: 700;
@@ -572,15 +590,29 @@
             </div>
 
             <div id="notesModal" class="modal-overlay hidden">
-                <div class="modal-dialog">
-                    <h3 class="modal-title">Job Complete</h3>
-                    <div class="form-group">
-                        <label class="label-title">Work Notes</label>
-                        <textarea id="notesInput" rows="3" placeholder="What tasks did you complete?" class="textarea-field"></textarea>
-                    </div>
-                    <button id="btnSaveLog" class="btn-save-log">Save Time Log</button>
-                </div>
-            </div>
+                            <div class="modal-dialog">
+                                <h3 class="modal-title">Job Complete</h3>
+                                <div class="form-group">
+                                    <label class="label-title">Work Notes</label>
+                                    <textarea id="notesInput" rows="3" placeholder="What tasks did you complete?" class="textarea-field"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-title">Billable Time</label>
+                                    <div class="billable-options">
+                                        <label class="billable-option">
+                                            <input type="radio" name="billableTime" value="0.5" class="billable-input"> 0.5 hours
+                                        </label>
+                                        <label class="billable-option">
+                                            <input type="radio" name="billableTime" value="0" class="billable-input"> 0 hours
+                                        </label>
+                                        <label class="billable-option">
+                                            <input type="radio" name="billableTime" value="sales call" class="billable-input"> Sales Call
+                                        </label>
+                                    </div>
+                                </div>
+                                <button id="btnSaveLog" class="btn-save-log">Save Time Log</button>
+                            </div>
+                        </div>
 
             <div id="clearConfirmModal" class="modal-overlay hidden">
                 <div class="modal-dialog">
@@ -643,8 +675,9 @@
         const btnAction = document.getElementById('btnAction');
         const notesModal = document.getElementById('notesModal');
         const notesInput = document.getElementById('notesInput');
-        const btnSaveLog = document.getElementById('btnSaveLog');
-        const logHistory = document.getElementById('logHistory');
+                const btnSaveLog = document.getElementById('btnSaveLog');
+                const billableInputs = document.getElementsByName('billableTime');
+                const logHistory = document.getElementById('logHistory');
         const btnExport = document.getElementById('btnExport');
         const btnClear = document.getElementById('btnClear');
         const clearConfirmModal = document.getElementById('clearConfirmModal');
@@ -706,85 +739,100 @@
         }
 
         function formatDuration(ms) {
-        				const totalSecs = Math.floor(ms / 1000);
-        				const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
-        				const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
-        				const secs = String(totalSecs % 60).padStart(2, '0');
-        				return hrs + ":" + mins + ":" + secs;
-        			}
+                    const totalSecs = Math.floor(ms / 1000);
+                    const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+                    const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+                    const secs = String(totalSecs % 60).padStart(2, '0');
+                    return hrs + ":" + mins + ":" + secs;
+                }
 
-        			function formatDecimalQuarter(ms) {
-        				const totalMinutes = ms / 1000 / 60;
-        				const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
-        				return quarterHours.toFixed(2).replace(/\.00$/, '');
-        			}
+                function formatDecimalQuarter(ms) {
+                    const totalMinutes = ms / 1000 / 60;
+                    const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
+                    return quarterHours.toFixed(2).replace(/\.00$/, '');
+                }
 
-        			function formatBillableTime(travelMs, onSiteMs, durationMs) {
-        				let totalMs;
-        				if (travelMs && onSiteMs) {
-        					totalMs = travelMs + onSiteMs;
-        				} else if (durationMs) {
-        					totalMs = durationMs;
-        				} else {
-        					return '1';
-        				}
-        				const totalMinutes = totalMs / 1000 / 60;
-        				const quarterHours = Math.max(1, Math.ceil(totalMinutes / 15) * 15 / 60);
-        				return quarterHours.toFixed(2).replace(/\.00$/, '');
-        			}
+                function formatBillableTime(travelMs, onSiteMs, durationMs) {
+                    let totalMs;
+                    if (travelMs && onSiteMs) {
+                        totalMs = travelMs + onSiteMs;
+                    } else if (durationMs) {
+                        totalMs = durationMs;
+                    } else {
+                        return '1';
+                    }
+                    const totalMinutes = totalMs / 1000 / 60;
+                    const quarterHours = Math.max(1, Math.ceil(totalMinutes / 15) * 15 / 60);
+                    return quarterHours.toFixed(2).replace(/\.00$/, '');
+                }
 
         btnSaveLog.addEventListener('click', () => {
-            const endTime = Date.now();
-            const durationMs = endTime - startTime;
+                    const endTime = Date.now();
+                    const durationMs = endTime - startTime;
 
-            let travelDuration = null;
-            let onSiteDuration = null;
-            let formattedArrivalTime = null;
+                    let travelDuration = null;
+                    let onSiteDuration = null;
+                    let formattedArrivalTime = null;
 
-            if (arrivalTime) {
-                travelDuration = formatDuration(arrivalTime - startTime);
-                onSiteDuration = formatDuration(endTime - arrivalTime);
-                formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }
+                    if (arrivalTime) {
+                        travelDuration = formatDuration(arrivalTime - startTime);
+                        onSiteDuration = formatDuration(endTime - arrivalTime);
+                        formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }
 
-            const newLog = {
-                            client: clientInput.value.trim(),
-                            start: new Date(startTime).toLocaleString(),
-                            end: new Date(endTime).toLocaleString(),
-                            duration: formatDuration(durationMs),
-                            durationMs: durationMs,
-                            decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-                            notes: notesInput.value.trim() || "No notes provided.",
-                            arrivalTime: formattedArrivalTime,
-                            travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
-                            onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null
-                        };
+                    // Get selected billable time
+                    let selectedBillableTime = '1'; // default to calculated time
+                    for (const input of billableInputs) {
+                        if (input.checked) {
+                            selectedBillableTime = input.value;
+                            break;
+                        }
+                    }
 
-            const transaction = db.transaction(["logs"], "readwrite");
-            transaction.objectStore(["logs"]).add(newLog);
+                    const newLog = {
+                        client: clientInput.value.trim(),
+                        start: new Date(startTime).toLocaleString(),
+                        end: new Date(endTime).toLocaleString(),
+                        duration: formatDuration(durationMs),
+                        durationMs: durationMs,
+                        decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                        notes: notesInput.value.trim() || "No notes provided.",
+                        billableTime: selectedBillableTime,
+                        arrivalTime: formattedArrivalTime,
+                        travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
+                        onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null
+                    };
 
-            transaction.oncomplete = () => {
-                isRunning = false;
-                clearInterval(timerInterval);
-                liveTimer.textContent = "00:00:00";
-                activeClientLabel.textContent = "";
-                clientInput.value = "";
-                clientInput.disabled = false;
-                notesInput.value = "";
+                    const transaction = db.transaction(["logs"], "readwrite");
+                    transaction.objectStore(["logs"]).add(newLog);
 
-                btnAction.textContent = "Start Timer";
-                btnAction.classList.remove('stop');
-                btnAction.classList.add('start');
-                liveTimer.classList.remove('running');
+                    transaction.oncomplete = () => {
+                        isRunning = false;
+                        clearInterval(timerInterval);
+                        liveTimer.textContent = "00:00:00";
+                        activeClientLabel.textContent = "";
+                        clientInput.value = "";
+                        clientInput.disabled = false;
+                        notesInput.value = "";
 
-                btnMarkArrival.classList.add('hidden');
-                arrivalBadge.classList.add('hidden');
-                arrivalTime = null;
+                        // Reset billable time radio buttons
+                        for (const input of billableInputs) {
+                            input.checked = false;
+                        }
 
-                notesModal.classList.add('hidden');
-                renderLogs();
-            };
-        });
+                        btnAction.textContent = "Start Timer";
+                        btnAction.classList.remove('stop');
+                        btnAction.classList.add('start');
+                        liveTimer.classList.remove('running');
+
+                        btnMarkArrival.classList.add('hidden');
+                        arrivalBadge.classList.add('hidden');
+                        arrivalTime = null;
+
+                        notesModal.classList.add('hidden');
+                        renderLogs();
+                    };
+                });
 
         btnClear.addEventListener('click', () => {
             clearConfirmModal.classList.remove('hidden');
@@ -833,14 +881,18 @@
                     html += '</div>';
 
                     if (log.travelDuration && log.onSiteDuration) {
-                        html += '<div class="log-travel-details">';
-                        html += '<span>🚗 Travel: ' + escapeHtml(log.travelDuration) + '</span>';
-                        html += '<span>💼 Client: ' + escapeHtml(log.onSiteDuration) + '</span>';
-                        html += '</div>';
-                    }
+                                            html += '<div class="log-travel-details">';
+                                            html += '<span>🚗 Travel: ' + escapeHtml(log.travelDuration) + '</span>';
+                                            html += '<span>💼 Client: ' + escapeHtml(log.onSiteDuration) + '</span>';
+                                            html += '</div>';
+                                        }
 
-                    html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
-                    html += '</div>';
+                                        if (log.billableTime && log.billableTime !== '1') {
+                                            html += '<p class="log-notes"><strong>Billable:</strong> ' + escapeHtml(log.billableTime) + 'h | "' + escapeHtml(log.notes) + '"</p>';
+                                        } else {
+                                            html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
+                                        }
+                                        html += '</div>';
                 });
                 logHistory.innerHTML = html;
             };
