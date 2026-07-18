@@ -117,7 +117,26 @@ time-tracker/
 ├── index.html          # Main application (HTML/CSS/JS)
 ├── manifest.webapp     # PWA manifest
 └── icons/
-    ├── icon.svg        # App icon
-    ├── icon-192.png    # 192px icon
-    └── icon-512.png    # 512px icon
+    ├── icon.svg                    # SVG app icon
+    ├── icon-16.png                   # 16x16 favicon
+    ├── icon-24.png                   # 24x24 favicon
+    ├── icon-32.png                   # 32x32 favicon
+    ├── icon-48.png                   # 48x48 Android icon
+    ├── icon-72.png                   # 72x72 Android icon
+    ├── icon-96.png                   # 96x96 Android icon
+    ├── icon-128.png                  # 128x128 Android icon
+    ├── icon-144.png                  # 144x144 Android icon
+    ├── icon-152.png                  # 152x152 iOS icon
+    ├── icon-180.png                  # 180x180 Apple touch icon
+    ├── icon-192.png                  # 192x192 Android icon
+    ├── icon-256.png                  # 256x256 Android icon
+    ├── icon-384.png                  # 384x384 Android icon
+    ├── icon-512.png                  # 512x512 Android icon
+    ├── icon-maskable-192.png         # 192x192 maskable (Android adaptive)
+    ├── icon-maskable-512.png         # 512x512 maskable (Android adaptive)
+    ├── apple-touch-icon.png            # Apple touch icon
+    ├── browserconfig.xml             # IE11 tile config
+    ├── mstile-150x150.png             # Windows tile
+    ├── safari-pinned-tab.svg         # Safari pinned tab
+    └── site.webmanifest              # Alternative manifest
 ```
