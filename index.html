@@ -44,11 +44,11 @@
         }
 
         body {
-                    background-color: var(--bg-app);
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                    color: var(--text-main);
-                    -webkit-tap-highlight-color: transparent;
-                    display: flex;
+            background-color: var(--bg-app);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text-main);
+            -webkit-tap-highlight-color: transparent;
+            display: flex;
             justify-content: center;
             min-height: 100vh;
         }
@@ -293,31 +293,31 @@
             transition: all 0.15s ease-in-out;
         }
         .textarea-field:focus {
-                    border-color: transparent;
-                    box-shadow: 0 0 0 2px var(--primary);
-                }
+            border-color: transparent;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
 
-                .billable-options {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.5rem;
-                    margin-top: 0.5rem;
-                }
+        .billable-options {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
 
-                .billable-option {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    cursor: pointer;
-                }
+        .billable-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
 
-                .billable-input {
-                    cursor: pointer;
-                }
+        .billable-input {
+            cursor: pointer;
+        }
 
-                .btn-save-log {
-                    width: 100%;
-                    background-color: var(--primary);
+        .btn-save-log {
+            width: 100%;
+            background-color: var(--primary);
             color: white;
             border: none;
             font-weight: 700;
@@ -590,29 +590,43 @@
             </div>
 
             <div id="notesModal" class="modal-overlay hidden">
-                            <div class="modal-dialog">
-                                <h3 class="modal-title">Job Complete</h3>
-                                <div class="form-group">
-                                    <label class="label-title">Work Notes</label>
-                                    <textarea id="notesInput" rows="3" placeholder="What tasks did you complete?" class="textarea-field"></textarea>
-                                </div>
-                                <div class="form-group">
-                                    <label class="label-title">Billable Time</label>
-                                    <div class="billable-options">
-                                        <label class="billable-option">
-                                            <input type="radio" name="billableTime" value="0.5" class="billable-input"> 0.5 hours
-                                        </label>
-                                        <label class="billable-option">
-                                            <input type="radio" name="billableTime" value="0" class="billable-input"> 0 hours
-                                        </label>
-                                        <label class="billable-option">
-                                            <input type="radio" name="billableTime" value="sales call" class="billable-input"> Sales Call
-                                        </label>
-                                    </div>
-                                </div>
-                                <button id="btnSaveLog" class="btn-save-log">Save Time Log</button>
-                            </div>
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Job Complete</h3>
+                    <div class="form-group">
+                        <label class="label-title">Work Notes</label>
+                        <textarea id="notesInput" rows="3" placeholder="What tasks did you complete?" class="textarea-field"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Billable Time</label>
+                        <div class="billable-options">
+                            <label class="billable-option">
+                                <input type="radio" name="billableTime" value="0.5" class="billable-input"> 0.5 hours
+                            </label>
+                            <label class="billable-option">
+                                <input type="radio" name="billableTime" value="0" class="billable-input"> 0 hours
+                            </label>
+                            <label class="billable-option">
+                                <input type="radio" name="billableTime" value="sales call" class="billable-input"> Sales Call
+                            </label>
                         </div>
+                    </div>
+                    <button id="btnSaveLog" class="btn-save-log">Save Time Log</button>
+                </div>
+            </div>
+
+            <div id="mileageModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Enter Mileage</h3>
+                    <div class="form-group">
+                        <label class="label-title">Mileage</label>
+                        <input type="number" id="mileageInput" placeholder="Enter miles" class="input-field">
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelMileage" class="btn-cancel">Cancel</button>
+                        <button id="btnSaveMileage" class="btn-save-log">Save</button>
+                    </div>
+                </div>
+            </div>
 
             <div id="clearConfirmModal" class="modal-overlay hidden">
                 <div class="modal-dialog">
@@ -626,54 +640,72 @@
             </div>
 
             <div id="reportModal" class="modal-overlay hidden">
-                                                    <div class="modal-dialog" style="max-width: 600px; width: 95%;">
-                                                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
-                                                            <h3 class="modal-title">Billing Summary</h3>
-                                                            <button id="btnCloseReport" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
-                                                        </div>
-                                                        <div id="reportContent" style="max-height: 400px; overflow-y: auto; padding: 0.5rem 0;">
-                                                            <!-- Formatted report table will be inserted here dynamically -->
-                                                        </div>
-                                            <div class="flex-row-gap" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
-                                    <button id="btnCopyReportText" class="btn-cancel" style="background-color: var(--primary); color: white;">Copy Invoice Text</button>
-                                    <button id="btnPrintReportAction" class="btn-action start" style="padding: 0.75rem;">Print Page</button>
-                                </div>
-                            </div>
-                        </div>
+                <div class="modal-dialog" style="max-width: 600px; width: 95%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+                        <h3 class="modal-title">Billing Summary</h3>
+                        <button id="btnCloseReport" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); line-height: 1;">&times;</button>
+                    </div>
+                    <div id="reportContent" style="max-height: 400px; overflow-y: auto; padding: 0.5rem 0;">
+                        <!-- Formatted report table will be inserted here dynamically -->
+                    </div>
+                    <div class="flex-row-gap" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                        <button id="btnCopyReportText" class="btn-cancel" style="background-color: var(--primary); color: white;">Copy Invoice Text</button>
+                        <button id="btnPrintReportAction" class="btn-action start" style="padding: 0.75rem;">Print Page</button>
+                    </div>
+                </div>
+            </div>
 
-                        <div id="reportRangeModal" class="modal-overlay hidden">
-                            <div class="modal-dialog">
-                                <h3 class="modal-title">Select Report Range</h3>
-                                <div class="form-group">
-                                    <label class="label-title">Report Type</label>
-                                    <div class="billable-options">
-                                        <label class="billable-option">
-                                            <input type="radio" name="reportRange" value="day" class="billable-input" checked> Last Day
-                                        </label>
-                                        <label class="billable-option">
-                                            <input type="radio" name="reportRange" value="week" class="billable-input"> Last Week
-                                        </label>
-                                        <label class="billable-option">
-                                            <input type="radio" name="reportRange" value="custom" class="billable-input"> Custom Range
-                                        </label>
-                                    </div>
-                                </div>
-                                <div id="customRangeInputs" style="display: none; flex-direction: column; gap: 0.75rem;">
-                                    <div class="form-group">
-                                        <label class="label-title">Start Date</label>
-                                        <input type="date" id="reportStartDate" class="input-field">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="label-title">End Date</label>
-                                        <input type="date" id="reportEndDate" class="input-field">
-                                    </div>
-                                </div>
-                                <div class="flex-row-gap">
-                                    <button id="btnCancelReportRange" class="btn-cancel">Cancel</button>
-                                    <button id="btnGenerateReport" class="btn-save-log">Generate Report</button>
-                                </div>
-                            </div>
+            <div id="reportRangeModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Select Report Range</h3>
+                    <div class="form-group">
+                        <label class="label-title">Report Type</label>
+                        <div class="billable-options">
+                            <label class="billable-option">
+                                <input type="radio" name="reportRange" value="day" class="billable-input" checked> Last Day
+                            </label>
+                            <label class="billable-option">
+                                <input type="radio" name="reportRange" value="week" class="billable-input"> Last Week
+                            </label>
+                            <label class="billable-option">
+                                <input type="radio" name="reportRange" value="custom" class="billable-input"> Custom Range
+                            </label>
                         </div>
+                    </div>
+                    <div id="customRangeInputs" style="display: none; flex-direction: column; gap: 0.75rem;">
+                        <div class="form-group">
+                            <label class="label-title">Start Date</label>
+                            <input type="date" id="reportStartDate" class="input-field">
+                        </div>
+                        <div class="form-group">
+                            <label class="label-title">End Date</label>
+                            <input type="date" id="reportEndDate" class="input-field">
+                        </div>
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelReportRange" class="btn-cancel">Cancel</button>
+                        <button id="btnGenerateReport" class="btn-save-log">Generate Report</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="authModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Sign In / Sign Up</h3>
+                    <div class="form-group">
+                        <label class="label-title">Email</label>
+                        <input type="email" id="authEmail" class="input-field" placeholder="you@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Password</label>
+                        <input type="password" id="authPassword" class="input-field" placeholder="Enter password">
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnAuthCancel" class="btn-cancel">Cancel</button>
+                        <button id="btnAuthSubmit" class="btn-save-log">Submit</button>
+                    </div>
+                </div>
+            </div>
 
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <div class="section-header">
@@ -701,7 +733,7 @@
         dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); };
         dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null;
+        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, mileage = null;
 
         const clientInput = document.getElementById('clientInput');
         const liveTimer = document.getElementById('liveTimer');
@@ -709,9 +741,9 @@
         const btnAction = document.getElementById('btnAction');
         const notesModal = document.getElementById('notesModal');
         const notesInput = document.getElementById('notesInput');
-                const btnSaveLog = document.getElementById('btnSaveLog');
-                const billableInputs = document.getElementsByName('billableTime');
-                const logHistory = document.getElementById('logHistory');
+        const btnSaveLog = document.getElementById('btnSaveLog');
+        const billableInputs = document.getElementsByName('billableTime');
+        const logHistory = document.getElementById('logHistory');
         const btnExport = document.getElementById('btnExport');
         const btnClear = document.getElementById('btnClear');
         const clearConfirmModal = document.getElementById('clearConfirmModal');
@@ -721,19 +753,24 @@
         const arrivalBadge = document.getElementById('arrivalBadge');
 
         const btnOpenReport = document.getElementById('btnOpenReport');
-                const reportModal = document.getElementById('reportModal');
-                const btnCloseReport = document.getElementById('btnCloseReport');
-                const reportContent = document.getElementById('reportContent');
-                const btnCopyReportText = document.getElementById('btnCopyReportText');
-                const btnPrintReportAction = document.getElementById('btnPrintReportAction');
+        const reportModal = document.getElementById('reportModal');
+        const btnCloseReport = document.getElementById('btnCloseReport');
+        const reportContent = document.getElementById('reportContent');
+        const btnCopyReportText = document.getElementById('btnCopyReportText');
+        const btnPrintReportAction = document.getElementById('btnPrintReportAction');
 
-                const reportRangeModal = document.getElementById('reportRangeModal');
-                const btnCancelReportRange = document.getElementById('btnCancelReportRange');
-                const btnGenerateReport = document.getElementById('btnGenerateReport');
-                const reportRangeInputs = document.getElementsByName('reportRange');
-                const customRangeInputs = document.getElementById('customRangeInputs');
-                const reportStartDate = document.getElementById('reportStartDate');
-                const reportEndDate = document.getElementById('reportEndDate');
+        const reportRangeModal = document.getElementById('reportRangeModal');
+        const btnCancelReportRange = document.getElementById('btnCancelReportRange');
+        const btnGenerateReport = document.getElementById('btnGenerateReport');
+        const reportRangeInputs = document.getElementsByName('reportRange');
+        const customRangeInputs = document.getElementById('customRangeInputs');
+        const reportStartDate = document.getElementById('reportStartDate');
+        const reportEndDate = document.getElementById('reportEndDate');
+
+        const mileageModal = document.getElementById('mileageModal');
+        const mileageInput = document.getElementById('mileageInput');
+        const btnCancelMileage = document.getElementById('btnCancelMileage');
+        const btnSaveMileage = document.getElementById('btnSaveMileage');
 
         let clipboardText = "";
 
@@ -745,6 +782,7 @@
                 isRunning = true;
                 startTime = Date.now();
                 arrivalTime = null;
+                mileage = null;
                 clientInput.disabled = true;
                 activeClientLabel.textContent = "Tracking: " + clientName;
 
@@ -773,6 +811,11 @@
             const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
             arrivalBadge.classList.remove('hidden');
+
+            // Show mileage modal
+            mileageInput.value = '';
+            mileageModal.classList.remove('hidden');
+            mileageInput.focus();
         });
 
         function updateLiveDisplay() {
@@ -781,100 +824,115 @@
         }
 
         function formatDuration(ms) {
-                    const totalSecs = Math.floor(ms / 1000);
-                    const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
-                    const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
-                    const secs = String(totalSecs % 60).padStart(2, '0');
-                    return hrs + ":" + mins + ":" + secs;
-                }
+            const totalSecs = Math.floor(ms / 1000);
+            const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+            const secs = String(totalSecs % 60).padStart(2, '0');
+            return hrs + ":" + mins + ":" + secs;
+        }
 
-                function formatDecimalQuarter(ms) {
-                    const totalMinutes = ms / 1000 / 60;
-                    const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
-                    return quarterHours.toFixed(2).replace(/\.00$/, '');
-                }
+        function formatDecimalQuarter(ms) {
+            const totalMinutes = ms / 1000 / 60;
+            const quarterHours = Math.ceil(totalMinutes / 15) * 15 / 60;
+            return quarterHours.toFixed(2).replace(/\.00$/, '');
+        }
 
-                function formatBillableTime(travelMs, onSiteMs, durationMs) {
-                    let totalMs;
-                    if (travelMs && onSiteMs) {
-                        totalMs = travelMs + onSiteMs;
-                    } else if (durationMs) {
-                        totalMs = durationMs;
-                    } else {
-                        return '1';
-                    }
-                    const totalMinutes = totalMs / 1000 / 60;
-                    const quarterHours = Math.max(1, Math.ceil(totalMinutes / 15) * 15 / 60);
-                    return quarterHours.toFixed(2).replace(/\.00$/, '');
-                }
+        function formatBillableTime(travelMs, onSiteMs, durationMs) {
+            let totalMs;
+            if (travelMs && onSiteMs) {
+                totalMs = travelMs + onSiteMs;
+            } else if (durationMs) {
+                totalMs = durationMs;
+            } else {
+                return '1';
+            }
+            const totalMinutes = totalMs / 1000 / 60;
+            const quarterHours = Math.max(1, Math.ceil(totalMinutes / 15) * 15 / 60);
+            return quarterHours.toFixed(2).replace(/\.00$/, '');
+        }
 
         btnSaveLog.addEventListener('click', () => {
-                    const endTime = Date.now();
-                    const durationMs = endTime - startTime;
+            const endTime = Date.now();
+            const durationMs = endTime - startTime;
 
-                    let travelDuration = null;
-                    let onSiteDuration = null;
-                    let formattedArrivalTime = null;
+            let travelDuration = null;
+            let onSiteDuration = null;
+            let formattedArrivalTime = null;
 
-                    if (arrivalTime) {
-                        travelDuration = formatDuration(arrivalTime - startTime);
-                        onSiteDuration = formatDuration(endTime - arrivalTime);
-                        formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    }
+            if (arrivalTime) {
+                travelDuration = formatDuration(arrivalTime - startTime);
+                onSiteDuration = formatDuration(endTime - arrivalTime);
+                formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
 
-                    // Get selected billable time
-                    let selectedBillableTime = '1'; // default to calculated time
-                    for (const input of billableInputs) {
-                        if (input.checked) {
-                            selectedBillableTime = input.value;
-                            break;
-                        }
-                    }
+            // Get selected billable time
+            let selectedBillableTime = '1'; // default to calculated time
+            for (const input of billableInputs) {
+                if (input.checked) {
+                    selectedBillableTime = input.value;
+                    break;
+                }
+            }
 
-                    const newLog = {
-                        client: clientInput.value.trim(),
-                        start: new Date(startTime).toLocaleString(),
-                        end: new Date(endTime).toLocaleString(),
-                        duration: formatDuration(durationMs),
-                        durationMs: durationMs,
-                        decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-                        notes: notesInput.value.trim() || "No notes provided.",
-                        billableTime: selectedBillableTime,
-                        arrivalTime: formattedArrivalTime,
-                        travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
-                        onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null
-                    };
+            const newLog = {
+                client: clientInput.value.trim(),
+                start: new Date(startTime).toLocaleString(),
+                end: new Date(endTime).toLocaleString(),
+                duration: formatDuration(durationMs),
+                durationMs: durationMs,
+                decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+                notes: notesInput.value.trim() || "No notes provided.",
+                billableTime: selectedBillableTime,
+                arrivalTime: formattedArrivalTime,
+                travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
+                onSiteDurationMs: arrivalTime ? endTime - arrivalTime : null,
+                mileage: mileage
+            };
 
-                    const transaction = db.transaction(["logs"], "readwrite");
-                    transaction.objectStore(["logs"]).add(newLog);
+            const transaction = db.transaction(["logs"], "readwrite");
+            transaction.objectStore(["logs"]).add(newLog);
 
-                    transaction.oncomplete = () => {
-                        isRunning = false;
-                        clearInterval(timerInterval);
-                        liveTimer.textContent = "00:00:00";
-                        activeClientLabel.textContent = "";
-                        clientInput.value = "";
-                        clientInput.disabled = false;
-                        notesInput.value = "";
+            transaction.oncomplete = () => {
+                isRunning = false;
+                clearInterval(timerInterval);
+                liveTimer.textContent = "00:00:00";
+                activeClientLabel.textContent = "";
+                clientInput.value = "";
+                clientInput.disabled = false;
+                notesInput.value = "";
 
-                        // Reset billable time radio buttons
-                        for (const input of billableInputs) {
-                            input.checked = false;
-                        }
+                // Reset billable time radio buttons
+                for (const input of billableInputs) {
+                    input.checked = false;
+                }
 
-                        btnAction.textContent = "Start Timer";
-                        btnAction.classList.remove('stop');
-                        btnAction.classList.add('start');
-                        liveTimer.classList.remove('running');
+                btnAction.textContent = "Start Timer";
+                btnAction.classList.remove('stop');
+                btnAction.classList.add('start');
+                liveTimer.classList.remove('running');
 
-                        btnMarkArrival.classList.add('hidden');
-                        arrivalBadge.classList.add('hidden');
-                        arrivalTime = null;
+                btnMarkArrival.classList.add('hidden');
+                arrivalBadge.classList.add('hidden');
+                arrivalTime = null;
 
-                        notesModal.classList.add('hidden');
-                        renderLogs();
-                    };
-                });
+                notesModal.classList.add('hidden');
+                renderLogs();
+            };
+        });
+
+        btnCancelMileage.addEventListener('click', () => {
+            mileageModal.classList.add('hidden');
+        });
+
+        btnSaveMileage.addEventListener('click', () => {
+            const mileageValue = mileageInput.value.trim();
+            if (mileageValue && parseFloat(mileageValue) > 0) {
+                mileage = parseFloat(mileageValue);
+            } else {
+                mileage = null;
+            }
+            mileageModal.classList.add('hidden');
+        });
 
         btnClear.addEventListener('click', () => {
             clearConfirmModal.classList.remove('hidden');
@@ -923,19 +981,23 @@
                     html += '</div>';
 
                     if (log.travelDuration && log.onSiteDuration) {
-                                            html += '<div class="log-travel-details">';
-                                            html += '<span>🚗 Travel: ' + escapeHtml(log.travelDuration) + '</span>';
-                                            html += '<span>💼 Client: ' + escapeHtml(log.onSiteDuration) + '</span>';
-                                            html += '</div>';
-                                        }
+                        html += '<div class="log-travel-details">';
+                        html += '<span>🚗 Travel: ' + escapeHtml(log.travelDuration) + '</span>';
+                        html += '<span>💼 Client: ' + escapeHtml(log.onSiteDuration) + '</span>';
+                        html += '</div>';
+                    }
 
-                                        if (log.billableTime && log.billableTime !== '1') {
-                                                                                    const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
-                                                                                    html += '<p class="log-notes"><strong>Billable:</strong> ' + billableDisplay + ' | "' + escapeHtml(log.notes) + '"</p>';
-                                                                                } else {
-                                            html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
-                                        }
-                                        html += '</div>';
+                    if (log.mileage && log.mileage > 0) {
+                        html += '<div class="log-travel-details"><span>🚙 Mileage: ' + log.mileage + ' mi</span></div>';
+                    }
+
+                    if (log.billableTime && log.billableTime !== '1') {
+                        const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
+                        html += '<p class="log-notes"><strong>Billable:</strong> ' + billableDisplay + ' | "' + escapeHtml(log.notes) + '"</p>';
+                    } else {
+                        html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
+                    }
+                    html += '</div>';
                 });
                 logHistory.innerHTML = html;
             };
@@ -947,23 +1009,24 @@
                 const logs = e.target.result;
                 if(logs.length === 0) { alert("There is no data recorded to export."); return; }
 
-                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Notes"];
+                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Mileage", "Notes"];
                 const csvRows = [headers.join(",")];
 
                 logs.forEach(log => {
                     const row = [
-                                            log.id,
-                                            '"' + log.client.replace(/"/g, '""') + '"',
-                                            '"' + log.start + '"',
-                                            '"' + (log.arrivalTime || "") + '"',
-                                            '"' + log.end + '"',
-                                            '"' + log.duration + '"',
-                                            '"' + (log.travelDuration || "") + '"',
-                                            '"' + (log.onSiteDuration || "") + '"',
-                                            log.decimalHours,
-                                            '"' + (log.billableTime || "") + '"',
-                                            '"' + log.notes.replace(/"/g, '""') + '"'
-                                        ];
+                        log.id,
+                        '"' + log.client.replace(/"/g, '""') + '"',
+                        '"' + log.start + '"',
+                        '"' + (log.arrivalTime || "") + '"',
+                        '"' + log.end + '"',
+                        '"' + log.duration + '"',
+                        '"' + (log.travelDuration || "") + '"',
+                        '"' + (log.onSiteDuration || "") + '"',
+                        log.decimalHours,
+                        '"' + (log.billableTime || "") + '"',
+                        (log.mileage || ""),
+                        '"' + log.notes.replace(/"/g, '""') + '"'
+                    ];
                     csvRows.push(row.join(","));
                 });
 
@@ -981,8 +1044,8 @@
         });
 
         btnOpenReport.addEventListener('click', () => {
-                    reportRangeModal.classList.remove('hidden');
-                });
+            reportRangeModal.classList.remove('hidden');
+        });
 
         btnCloseReport.addEventListener('click', () => {
             reportModal.classList.add('hidden');
@@ -1004,162 +1067,164 @@
         });
 
         btnPrintReportAction.addEventListener('click', () => {
-                    window.print();
-                });
+            window.print();
+        });
 
-                btnCancelReportRange.addEventListener('click', () => {
-                    reportRangeModal.classList.add('hidden');
-                    // Reset to default selection
-                    for (const input of reportRangeInputs) {
-                        input.checked = false;
-                    }
-                    reportRangeInputs[0].checked = true;
+        btnCancelReportRange.addEventListener('click', () => {
+            reportRangeModal.classList.add('hidden');
+            // Reset to default selection
+            for (const input of reportRangeInputs) {
+                input.checked = false;
+            }
+            reportRangeInputs[0].checked = true;
+            customRangeInputs.style.display = 'none';
+            reportStartDate.value = '';
+            reportEndDate.value = '';
+        });
+
+        // Show/hide custom date inputs based on selection
+        for (const input of reportRangeInputs) {
+            input.addEventListener('change', () => {
+                if (input.value === 'custom') {
+                    customRangeInputs.style.display = 'flex';
+                    // Set default dates to today
+                    const today = new Date().toISOString().split('T')[0];
+                    reportStartDate.value = today;
+                    reportEndDate.value = today;
+                } else {
                     customRangeInputs.style.display = 'none';
                     reportStartDate.value = '';
                     reportEndDate.value = '';
+                }
+            });
+        }
+
+        btnGenerateReport.addEventListener('click', () => {
+            // Find selected range
+            let selectedRange = 'day';
+            for (const input of reportRangeInputs) {
+                if (input.checked) {
+                    selectedRange = input.value;
+                    break;
+                }
+            }
+
+            let startDate = new Date();
+            let endDate = new Date();
+
+            if (selectedRange === 'day') {
+                // Last day: start of today to end of today
+                startDate.setHours(0, 0, 0, 0);
+                endDate.setHours(23, 59, 59, 999);
+            } else if (selectedRange === 'week') {
+                // Last week: start of this week to end of this week
+                const day = startDate.getDay();
+                startDate.setDate(startDate.getDate() - day - 7);
+                startDate.setHours(0, 0, 0, 0);
+                endDate.setDate(startDate.getDate() + 6);
+                endDate.setHours(23, 59, 59, 999);
+            } else if (selectedRange === 'custom') {
+                // Custom range
+                const startVal = reportStartDate.value;
+                const endVal = reportEndDate.value;
+                if (!startVal || !endVal) {
+                    alert('Please select both start and end dates.');
+                    return;
+                }
+                startDate = new Date(startVal);
+                endDate = new Date(endVal);
+                endDate.setHours(23, 59, 59, 999);
+            }
+
+            generateReportForDateRange(startDate, endDate);
+            reportRangeModal.classList.add('hidden');
+        });
+
+        function generateReportForDateRange(startDate, endDate) {
+            if (!db) return;
+            const store = db.transaction(["logs"], "readonly").objectStore("logs");
+            store.getAll().onsuccess = (e) => {
+                const logs = e.target.result;
+
+                // Filter logs by date range
+                const filteredLogs = logs.filter(log => {
+                    const logDate = new Date(log.start);
+                    return logDate >= startDate && logDate <= endDate;
                 });
 
-                // Show/hide custom date inputs based on selection
-                for (const input of reportRangeInputs) {
-                    input.addEventListener('change', () => {
-                        if (input.value === 'custom') {
-                            customRangeInputs.style.display = 'flex';
-                            // Set default dates to today
-                            const today = new Date().toISOString().split('T')[0];
-                            reportStartDate.value = today;
-                            reportEndDate.value = today;
-                        } else {
-                            customRangeInputs.style.display = 'none';
-                            reportStartDate.value = '';
-                            reportEndDate.value = '';
-                        }
-                    });
+                if (filteredLogs.length === 0) {
+                    alert('No data found for the selected date range.');
+                    return;
                 }
 
-                btnGenerateReport.addEventListener('click', () => {
-                    // Find selected range
-                    let selectedRange = 'day';
-                    for (const input of reportRangeInputs) {
-                        if (input.checked) {
-                            selectedRange = input.value;
-                            break;
-                        }
+                let tableHtml = '<table class="report-table">';
+                tableHtml += '<thead><tr><th>Date</th><th>Client</th><th>Invoice #</th><th>Timeline</th><th>Billable Time</th><th>Mileage</th></tr></thead>';
+                tableHtml += '<tbody>';
+
+                let rawText = "BILLING SUMMARY\n";
+                rawText += "Generated: " + new Date().toLocaleString() + "\n";
+                rawText += "========================================\n\n";
+                rawText += `Report Range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}\n`;
+                rawText += "========================================\n\n";
+
+                filteredLogs.forEach(log => {
+                    const dateOnly = log.start.split(',')[0];
+                    const startTimeStr = new Date(log.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const endTimeStr = new Date(log.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                    let timelineHtml = "";
+                    let timelineText = "";
+                    let breakdownHtml = "";
+                    let breakdownText = "";
+
+                    // Use billableTime from log if it was set, otherwise calculate it
+                    let billableDecimal;
+                    if (log.billableTime && log.billableTime !== '1') {
+                        billableDecimal = log.billableTime;
+                    } else {
+                        billableDecimal = formatBillableTime(log.travelDurationMs, log.onSiteDurationMs, log.durationMs);
                     }
 
-                    let startDate = new Date();
-                    let endDate = new Date();
-
-                    if (selectedRange === 'day') {
-                        // Last day: start of today to end of today
-                        startDate.setHours(0, 0, 0, 0);
-                        endDate.setHours(23, 59, 59, 999);
-                    } else if (selectedRange === 'week') {
-                        // Last week: start of this week to end of this week
-                        const day = startDate.getDay();
-                        startDate.setDate(startDate.getDate() - day - 7);
-                        startDate.setHours(0, 0, 0, 0);
-                        endDate.setDate(startDate.getDate() + 6);
-                        endDate.setHours(23, 59, 59, 999);
-                    } else if (selectedRange === 'custom') {
-                        // Custom range
-                        const startVal = reportStartDate.value;
-                        const endVal = reportEndDate.value;
-                        if (!startVal || !endVal) {
-                            alert('Please select both start and end dates.');
-                            return;
-                        }
-                        startDate = new Date(startVal);
-                        endDate = new Date(endVal);
-                        endDate.setHours(23, 59, 59, 999);
+                    if (log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
+                        const travelDecimal = formatDecimalQuarter(log.travelDurationMs);
+                        const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
+                        timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
+                        timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
+                        breakdownHtml = `${billableDecimal}`;
+                        breakdownText = `  - Billable Time: ${billableDecimal}\n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
+                    } else {
+                        timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
+                        timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
+                        breakdownHtml = `${billableDecimal}`;
+                        breakdownText = `  - Billable Time: ${billableDecimal}`;
                     }
 
-                    generateReportForDateRange(startDate, endDate);
-                    reportRangeModal.classList.add('hidden');
+                    tableHtml += '<tr>';
+                    tableHtml += `<td>${dateOnly}</td>`;
+                    tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
+                    tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
+                    tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
+                    tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
+                    tableHtml += `<td>${log.mileage ? log.mileage + ' mi' : ''}</td>`;
+                    tableHtml += '</tr>';
+
+                    rawText += `Date: ${dateOnly}\n`;
+                    rawText += `Client: ${log.client}\n`;
+                    rawText += `Invoice #: -\n`;
+                    rawText += `Times: ${timelineText}\n`;
+                    rawText += `${breakdownText}\n`;
+                    if (log.mileage) rawText += `Mileage: ${log.mileage} mi\n`;
+                    rawText += `----------------------------------------\n`;
                 });
 
-                function generateReportForDateRange(startDate, endDate) {
-                    if (!db) return;
-                    const store = db.transaction(["logs"], "readonly").objectStore("logs");
-                    store.getAll().onsuccess = (e) => {
-                        const logs = e.target.result;
+                tableHtml += '</tbody></table>';
 
-                        // Filter logs by date range
-                        const filteredLogs = logs.filter(log => {
-                            const logDate = new Date(log.start);
-                            return logDate >= startDate && logDate <= endDate;
-                        });
+                reportContent.innerHTML = tableHtml;
+                clipboardText = rawText;
 
-                        if (filteredLogs.length === 0) {
-                            alert('No data found for the selected date range.');
-                            return;
-                        }
-
-                        let tableHtml = '<table class="report-table">';
-                        tableHtml += '<thead><tr><th>Date</th><th>Client</th><th>Invoice #</th><th>Timeline</th><th>Billable Time</th></tr></thead>';
-                        tableHtml += '<tbody>';
-
-                        let rawText = "BILLING SUMMARY\n";
-                        rawText += "Generated: " + new Date().toLocaleString() + "\n";
-                        rawText += "========================================\n\n";
-                        rawText += `Report Range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}\n`;
-                        rawText += "========================================\n\n";
-
-                        filteredLogs.forEach(log => {
-                            const dateOnly = log.start.split(',')[0];
-                            const startTimeStr = new Date(log.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            const endTimeStr = new Date(log.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-                            let timelineHtml = "";
-                            let timelineText = "";
-                            let breakdownHtml = "";
-                            let breakdownText = "";
-
-                            // Use billableTime from log if it was set, otherwise calculate it
-                            let billableDecimal;
-                            if (log.billableTime && log.billableTime !== '1') {
-                                billableDecimal = log.billableTime;
-                            } else {
-                                billableDecimal = formatBillableTime(log.travelDurationMs, log.onSiteDurationMs, log.durationMs);
-                            }
-
-                            if (log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
-                                const travelDecimal = formatDecimalQuarter(log.travelDurationMs);
-                                const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
-                                timelineHtml = `Start: ${startTimeStr}<br>Arrived: ${log.arrivalTime}<br>End: ${endTimeStr}`;
-                                timelineText = `Start: ${startTimeStr} -> Arrived: ${log.arrivalTime} -> End: ${endTimeStr}`;
-                                breakdownHtml = `${billableDecimal}`;
-                                breakdownText = `  - Billable Time: ${billableDecimal}\n  - Travel Time: ${travelDecimal} hrs\n  - On-Site Time: ${onSiteDecimal} hrs`;
-                            } else {
-                                timelineHtml = `Start: ${startTimeStr}<br>End: ${endTimeStr}`;
-                                timelineText = `Start: ${startTimeStr} -> End: ${endTimeStr}`;
-                                breakdownHtml = `${billableDecimal}`;
-                                breakdownText = `  - Billable Time: ${billableDecimal}`;
-                            }
-
-                            tableHtml += '<tr>';
-                            tableHtml += `<td>${dateOnly}</td>`;
-                            tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
-                            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
-                            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
-                            tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
-                            tableHtml += '</tr>';
-
-                            rawText += `Date: ${dateOnly}\n`;
-                            rawText += `Client: ${log.client}\n`;
-                            rawText += `Invoice #: -\n`;
-                            rawText += `Times: ${timelineText}\n`;
-                            rawText += `${breakdownText}\n`;
-                            rawText += `----------------------------------------\n`;
-                        });
-
-                        tableHtml += '</tbody></table>';
-
-                        reportContent.innerHTML = tableHtml;
-                        clipboardText = rawText;
-
-                        reportModal.classList.remove('hidden');
-                    };
-                }
+                reportModal.classList.remove('hidden');
+            };
+        }
 
         function escapeHtml(str) {
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
