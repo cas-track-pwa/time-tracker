@@ -134,10 +134,16 @@
                     <div id="arrivalBadge" class="arrival-badge hidden"></div>
                 </div>
                 <div class="action-buttons-container">
-                    <button id="btnAction" class="btn-action start">Start Timer</button>
-                    <button id="btnMarkArrival" class="btn-action-sec hidden">Mark Arrival</button>
-                </div>
-            </div>
+                                    <button id="btnAction" class="btn-action start">Start Timer</button>
+                                    <button id="btnMarkArrival" class="btn-action-sec hidden">Mark Arrival</button>
+                                </div>
+                                <div class="form-group" style="margin-top: 0.5rem;">
+                                    <label class="label-title" style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <input type="checkbox" id="toggleMileage" checked>
+                                        <span>Request Mileage</span>
+                                    </label>
+                                </div>
+                            </div>
 
             <div id="notesModal" class="modal-overlay hidden">
                 <div class="modal-dialog">
@@ -329,19 +335,100 @@
 
     <script>
         let db;
-        const dbRequest = indexedDB.open("TimeTrackerDB", 1);
+        const dbRequest = indexedDB.open("TimeTrackerDB", 2);
 
         dbRequest.onupgradeneeded = (e) => {
-            db = e.target.result;
-            if (!db.objectStoreNames.contains("logs")) {
-                db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
-            }
-        };
+                    db = e.target.result;
+                    if (!db.objectStoreNames.contains("logs")) {
+                        db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+                    }
+                    if (!db.objectStoreNames.contains("timerState")) {
+                        db.createObjectStore("timerState", { keyPath: "id" });
+                    }
+                };
 
-        dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); };
-        dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
+        dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); };
+                dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null;
+                let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = true;
+
+                // Save timer state to IndexedDB
+                                function saveTimerState() {
+                                    if (!db) return;
+                                    if (!db.objectStoreNames.contains("timerState")) return;
+                                    const transaction = db.transaction(["timerState"], "readwrite");
+                                    const store = transaction.objectStore("timerState");
+                                    const state = {
+                                        id: "current",
+                                        startTime: startTime,
+                                        isRunning: isRunning,
+                                        arrivalTime: arrivalTime,
+                                        startMileage: startMileage,
+                                        arrivalMileage: arrivalMileage,
+                                        client: clientInput.value.trim()
+                                    };
+                                    store.put(state);
+                                }
+
+                // Restore timer state from IndexedDB
+                                function restoreTimerState() {
+                                    if (!db) return;
+                                    if (!db.objectStoreNames.contains("timerState")) return;
+                                    const transaction = db.transaction(["timerState"], "readonly");
+                                    const store = transaction.objectStore("timerState");
+                                    const request = store.get("current");
+
+                                    request.onsuccess = () => {
+                                        const state = request.result;
+                                        if (!state || !state.isRunning) return;
+
+                                        startTime = state.startTime;
+                                        arrivalTime = state.arrivalTime;
+                                        startMileage = state.startMileage;
+                                        arrivalMileage = state.arrivalMileage;
+                                        isRunning = true;
+                                        clientInput.value = state.client;
+                                        clientInput.disabled = true;
+                                        activeClientLabel.textContent = "Tracking: " + state.client;
+
+                                        btnAction.textContent = "End Timer";
+                                        btnAction.classList.remove('start');
+                                        btnAction.classList.add('stop');
+                                        liveTimer.classList.add('running');
+                                        btnMarkArrival.classList.remove('hidden');
+                                        arrivalBadge.classList.add('hidden');
+
+                                        // If arrival time was set, show the badge
+                                        if (arrivalTime) {
+                                            const travelMs = arrivalTime - startTime;
+                                            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+                                            arrivalBadge.classList.remove('hidden');
+                                            btnMarkArrival.classList.add('hidden');
+                                        }
+
+                                        timerInterval = setInterval(updateLiveDisplay, 1000);
+
+                                        // Show appropriate modal based on state
+                                        if (startMileage === null) {
+                                            startMileageInput.value = '';
+                                            startMileageModal.classList.remove('hidden');
+                                            startMileageInput.focus();
+                                        } else if (arrivalMileage === null && arrivalTime) {
+                                            arrivalMileageInput.value = '';
+                                            arrivalMileageModal.classList.remove('hidden');
+                                            arrivalMileageInput.focus();                        }
+                                    };
+                                }
+
+                // Clear timer state from IndexedDB
+                                function clearTimerState() {
+                                    if (!db) return;
+                                    if (!db.objectStoreNames.contains("timerState")) return;
+                                    const transaction = db.transaction(["timerState"], "readwrite");
+                                    const store = transaction.objectStore("timerState");
+                                    store.delete("current");
+                                }
 
         const clientInput = document.getElementById('clientInput');
         const liveTimer = document.getElementById('liveTimer');
@@ -359,6 +446,7 @@
         const btnConfirmClear = document.getElementById('btnConfirmClear');
         const btnMarkArrival = document.getElementById('btnMarkArrival');
         const arrivalBadge = document.getElementById('arrivalBadge');
+                const toggleMileage = document.getElementById('toggleMileage');
 
         const btnOpenReport = document.getElementById('btnOpenReport');
         const reportModal = document.getElementById('reportModal');
@@ -413,55 +501,79 @@
         let clipboardText = "";
 
         btnAction.addEventListener('click', () => {
-            if (!isRunning) {
-                const clientName = clientInput.value.trim();
-                if (!clientName) { alert("Please input a Client Name first."); return; }
+                    if (!isRunning) {
+                        const clientName = clientInput.value.trim();
+                        if (!clientName) { alert("Please input a Client Name first."); return; }
 
-                isRunning = true;
-                startTime = Date.now();
-                arrivalTime = null;
-                startMileage = null;
-                arrivalMileage = null;
-                travelMileage = null;
-                clientInput.disabled = true;
-                activeClientLabel.textContent = "Tracking: " + clientName;
+                        isRunning = true;
+                        startTime = Date.now();
+                        arrivalTime = null;
+                        startMileage = null;
+                        arrivalMileage = null;
+                        travelMileage = null;
+                        clientInput.disabled = true;
+                        activeClientLabel.textContent = "Tracking: " + clientName;
 
-                btnAction.textContent = "End Timer";
-                btnAction.classList.remove('start');
-                btnAction.classList.add('stop');
-                liveTimer.classList.add('running');
+                        btnAction.textContent = "End Timer";
+                        btnAction.classList.remove('start');
+                        btnAction.classList.add('stop');
+                        liveTimer.classList.add('running');
 
-                btnMarkArrival.classList.remove('hidden');
-                arrivalBadge.classList.add('hidden');
+                        btnMarkArrival.classList.remove('hidden');
+                        arrivalBadge.classList.add('hidden');
 
-                timerInterval = setInterval(updateLiveDisplay, 1000);
+                        timerInterval = setInterval(updateLiveDisplay, 1000);
 
-                // Show start mileage modal
-                startMileageInput.value = '';
-                startMileageModal.classList.remove('hidden');
-                startMileageInput.focus();
-            } else {
-                clearInterval(timerInterval);
-                notesModal.classList.remove('hidden');
-                notesInput.focus();
-            }
-        });
+                        // Save timer state for persistence
+                                                saveTimerState();
 
-        btnMarkArrival.addEventListener('click', () => {
-            if (!isRunning || arrivalTime) return;
-            arrivalTime = Date.now();
-            btnMarkArrival.classList.add('hidden');
+                                                // Show start mileage modal if mileage is requested
+                                                if (requestMileage) {
+                                                    startMileageInput.value = '';
+                                                    startMileageModal.classList.remove('hidden');
+                                                    startMileageInput.focus();
+                                                } else {
+                                                    startMileage = null;
+                                                }
+                    } else {
+                        clearInterval(timerInterval);
+                        isRunning = false;
+                        clearTimerState();
+                        btnAction.textContent = "Start Timer";
+                        btnAction.classList.remove('stop');
+                        btnAction.classList.add('start');
+                        liveTimer.classList.remove('running');
+                        clientInput.disabled = false;
+                        activeClientLabel.textContent = "";
+                        notesModal.classList.remove('hidden');
+                        notesInput.focus();
+                                            }
+                                        });
 
-            const travelMs = arrivalTime - startTime;
-            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
-            arrivalBadge.classList.remove('hidden');
+                                // Mileage toggle
+                                toggleMileage.addEventListener('change', () => {
+                                    requestMileage = toggleMileage.checked;
+                                });
 
-            // Show arrival mileage modal
-            arrivalMileageInput.value = '';
-            arrivalMileageModal.classList.remove('hidden');
-            arrivalMileageInput.focus();
-        });
+                                btnMarkArrival.addEventListener('click', () => {
+                                            if (!isRunning || arrivalTime) return;
+                                            arrivalTime = Date.now();
+                                            btnMarkArrival.classList.add('hidden');
+
+                                            const travelMs = arrivalTime - startTime;
+                                            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+                                            arrivalBadge.classList.remove('hidden');
+
+                                            // Show arrival mileage modal if mileage is requested
+                                            if (requestMileage) {
+                                                arrivalMileageInput.value = '';
+                                                arrivalMileageModal.classList.remove('hidden');
+                                                arrivalMileageInput.focus();
+                                            } else {
+                                                arrivalMileage = null;
+                                            }
+                                        });
 
         function updateLiveDisplay() {
             const elapsedMs = Date.now() - startTime;
@@ -540,30 +652,34 @@
             store.add(newLog);
 
             transaction.oncomplete = () => {
-                isRunning = false;
-                clearInterval(timerInterval);
-                liveTimer.textContent = "00:00:00";
-                activeClientLabel.textContent = "";
-                clientInput.value = "";
-                clientInput.disabled = false;
-                notesInput.value = "";
+                            isRunning = false;
+                            clearInterval(timerInterval);
+                            clearTimerState();
+                            liveTimer.textContent = "00:00:00";
+                            activeClientLabel.textContent = "";
+                            clientInput.value = "";
+                            clientInput.disabled = false;
+                            notesInput.value = "";
 
-                for (const input of billableInputs) {
-                    input.checked = false;
-                }
+                            for (const input of billableInputs) {
+                                input.checked = false;
+                            }
 
-                btnAction.textContent = "Start Timer";
-                btnAction.classList.remove('stop');
-                btnAction.classList.add('start');
-                liveTimer.classList.remove('running');
+                            btnAction.textContent = "Start Timer";
+                            btnAction.classList.remove('stop');
+                            btnAction.classList.add('start');
+                            liveTimer.classList.remove('running');
 
-                btnMarkArrival.classList.add('hidden');
-                arrivalBadge.classList.add('hidden');
-                arrivalTime = null;
+                            btnMarkArrival.classList.add('hidden');
+                            arrivalBadge.classList.add('hidden');
+                            arrivalTime = null;
+                            startMileage = null;
+                            arrivalMileage = null;
+                            travelMileage = null;
 
-                notesModal.classList.add('hidden');
-                renderLogs();
-            };
+                            notesModal.classList.add('hidden');
+                            renderLogs();
+                        };
         });
 
         btnCancelStartMileage.addEventListener('click', () => {
