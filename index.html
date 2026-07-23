@@ -102,13 +102,14 @@
         .report-table th { font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; background-color: var(--bg-secondary); }
         .report-total-row { display: flex; justify-content: flex-end; align-items: center; font-weight: 700; font-size: 1rem; margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid var(--border-color); }
         @media print {
-            body { background-color: #ffffff !important; color: #000000 !important; font-family: Georgia, serif; }
-            .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; }
-            header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
-            #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
-            .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
-            .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
+                    body { background-color: #ffffff !important; color: #000000 !important; font-family: Georgia, serif; }
+                    .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; }
+                    header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
+                    #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
+                    .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
+                    #reportContent { max-height: none !important; overflow: visible !important; }
+                    .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
     </style>
 </head>
 <body>
