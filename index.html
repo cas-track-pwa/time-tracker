@@ -116,10 +116,12 @@
         <header>
             <h1>Time Tracker</h1>
             <div class="flex-row-gap">
-                            <button id="btnAddEntry" class="btn-export">Add Entry</button>
-                            <button id="btnExport" class="btn-export">CSV</button>
-                            <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
-                        </div>
+                                        <button id="btnAddEntry" class="btn-export">Add Entry</button>
+                                        <button id="btnExport" class="btn-export">CSV</button>
+                                        <input type="file" id="btnImportCsv" accept=".csv" style="display: none;">
+                                        <button id="btnImport" class="btn-export">Import CSV</button>
+                                        <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
+                                    </div>
         </header>
 
         <main>
@@ -1070,8 +1072,127 @@
                                 });
 
                                 btnOpenReport.addEventListener('click', () => {
-            reportRangeModal.classList.remove('hidden');
-        });
+                                            reportRangeModal.classList.remove('hidden');
+                                        });
+
+                                        // Import CSV functionality
+                                        const btnImport = document.getElementById('btnImport');
+                                        const btnImportCsv = document.getElementById('btnImportCsv');
+
+                                        btnImport.addEventListener('click', () => {
+                                            btnImportCsv.click();
+                                        });
+
+                                        btnImportCsv.addEventListener('change', (e) => {
+                                            const file = e.target.files[0];
+                                            if (!file) return;
+
+                                            const reader = new FileReader();
+                                            reader.onload = function(e) {
+                                                const content = e.target.result;
+                                                // Remove BOM if present
+                                                const csvContent = content.replace(/\ufeff/, '');
+                                                const lines = csvContent.split(/\r\n|\n/).filter(line => line.trim() !== '');
+
+                                                if (lines.length < 2) {
+                                                    alert('Invalid CSV file. File must have headers and at least one data row.');
+                                                    btnImportCsv.value = '';
+                                                    return;
+                                                }
+
+                                                // Parse header to verify format
+                                                const headers = lines[0].split(',');
+                                                const expectedHeaders = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
+
+                                                if (headers.length !== expectedHeaders.length) {
+                                                    alert('Invalid CSV format. Expected ' + expectedHeaders.length + ' columns, found ' + headers.length + '.');
+                                                    btnImportCsv.value = '';
+                                                    return;
+                                                }
+
+                                                // Parse data rows
+                                                const newLogs = [];
+                                                for (let i = 1; i < lines.length; i++) {
+                                                    const row = parseCsvRow(lines[i]);
+                                                    if (row.length >= 14) {
+                                                        const log = {
+                                                            client: row[1].replace(/^"|"$/g, ''),
+                                                            start: row[2].replace(/^"|"$/g, ''),
+                                                            arrivalTime: row[3].replace(/^"|"$/g, '') || null,
+                                                            end: row[4].replace(/^"|"$/g, ''),
+                                                            duration: row[5].replace(/^"|"$/g, ''),
+                                                            durationMs: row.length > 5 && row[5] !== '' ? parseInt(row[5]) : null,
+                                                            decimalHours: row[8] || '0',
+                                                            notes: row[13].replace(/^"|"$/g, ''),
+                                                            billableTime: row[9].replace(/^"|"$/g, '') || '1',
+                                                            travelDurationMs: row[6] !== '' ? parseInt(row[6]) : null,
+                                                            onSiteDurationMs: row[7] !== '' ? parseInt(row[7]) : null,
+                                                            startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
+                                                            arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
+                                                            travelMileage: row[12] !== '' ? parseFloat(row[12]) : null
+                                                        };n                        newLogs.push(log);
+                                                    }
+                                                }
+
+                                                if (newLogs.length === 0) {
+                                                    alert('No valid entries found in CSV file.');
+                                                    btnImportCsv.value = '';
+                                                    return;
+                                                }
+
+                                                // Save to database
+                                                const transaction = db.transaction(["logs"], "readwrite");
+                                                const store = transaction.objectStore("logs");
+                                                newLogs.forEach(log => store.add(log));
+
+                                                transaction.oncomplete = () => {
+                                                    alert('Successfully imported ' + newLogs.length + ' entries.');
+                                                    btnImportCsv.value = '';
+                                                    renderLogs();
+                                                };
+
+                                                transaction.onerror = () => {
+                                                    alert('Error importing CSV file.');
+                                                    btnImportCsv.value = '';
+                                                };
+                                            };
+
+                                            reader.onerror = () => {
+                                                alert('Error reading file.');
+                                                btnImportCsv.value = '';
+                                            };
+
+                                            reader.readAsText(file);
+                                        });
+
+                                        // Helper function to parse CSV row (handles quoted fields)
+                                        function parseCsvRow(row) {
+                                            const result = [];
+                                            let current = '';
+                                            let inQuotes = false;
+
+                                            for (let i = 0; i < row.length; i++) {
+                                                const char = row[i];
+
+                                                if (char === '"' && !inQuotes) {
+                                                    inQuotes = true;
+                                                } else if (char === '"' && inQuotes) {
+                                                    if (row[i + 1] === '"') {
+                                                        current += '"';
+                                                        i++;
+                                                    } else {
+                                                        inQuotes = false;
+                                                    }
+                                                } else if (char === ',' && !inQuotes) {
+                                                    result.push(current);
+                                                    current = '';
+                                                } else {
+                                                    current += char;
+                                                }
+                                            }
+                                            result.push(current);
+                                            return result;
+                                        }
 
         btnCloseReport.addEventListener('click', () => {
             reportModal.classList.add('hidden');
