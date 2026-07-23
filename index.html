@@ -823,7 +823,7 @@
                                                     if (timeMatch) {
                                                         let hours = parseInt(timeMatch[1], 10);
                                                         const minutes = timeMatch[2];
-                                
+
                                                         // Check for PM (but not 12 PM which should stay 12)
                                                         if (log.arrivalTime.includes('PM') && hours !== 12) {
                                                             hours += 12;
@@ -832,7 +832,7 @@
                                                         if (log.arrivalTime.includes('AM') && hours === 12) {
                                                             hours = 0;
                                                         }
-                                
+
                                                         const arrivalYear = startDate.getFullYear();
                                                         const arrivalMonth = String(startDate.getMonth() + 1).padStart(2, '0');
                                                         const arrivalDay = String(startDate.getDate()).padStart(2, '0');
@@ -1049,10 +1049,10 @@
                         log.decimalHours,
                         '"' + (log.billableTime || "") + '"',
                         (log.startMileage || ""),
-                        (log.arrivalMileage || ""),
-                        log.travelMileage || ""),
-                                                '"' + log.notes.replace(/"/g, '""') + '"'
-                                            ];
+                                                (log.arrivalMileage || ""),
+                                                (log.travelMileage || ""),
+                                                                        '"' + log.notes.replace(/"/g, '""') + '"'
+                                                                    ];
                                             csvRows.push(row.join(","));
                                         });
 
@@ -1130,7 +1130,8 @@
                                                             startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
                                                             arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
                                                             travelMileage: row[12] !== '' ? parseFloat(row[12]) : null
-                                                        };n                        newLogs.push(log);
+                                                                                                                    };
+                                                                                                                    newLogs.push(log);
                                                     }
                                                 }
 
@@ -1191,10 +1192,11 @@
                                                 }
                                             }
                                             result.push(current);
-                                            return result;
-                                        }
+                                                                                        return result;
+                                                                                    }
 
-        btnCloseReport.addEventListener('click', () => {
+
+                                                    btnCloseReport.addEventListener('click', () => {
             reportModal.classList.add('hidden');
         });
 
