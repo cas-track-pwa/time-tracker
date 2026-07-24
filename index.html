@@ -451,7 +451,7 @@
         const btnConfirmClear = document.getElementById('btnConfirmClear');
         const btnMarkArrival = document.getElementById('btnMarkArrival');
         const arrivalBadge = document.getElementById('arrivalBadge');
-                const toggleMileage = document.getElementById('toggleMileage');
+        const toggleMileage = document.getElementById('toggleMileage');
 
         const btnOpenReport = document.getElementById('btnOpenReport');
         const reportModal = document.getElementById('reportModal');
@@ -479,27 +479,27 @@
         const btnSaveArrivalMileage = document.getElementById('btnSaveArrivalMileage');
 
         const editModal = document.getElementById('editModal');
-                const editClient = document.getElementById('editClient');
-                const editStartTime = document.getElementById('editStartTime');
-                const editArrivalTime = document.getElementById('editArrivalTime');
-                const editEndTime = document.getElementById('editEndTime');
-                const editNotes = document.getElementById('editNotes');
-                const editBillableTimeInputs = document.getElementsByName('editBillableTime');
-                const editMileage = document.getElementById('editMileage');
-                const editBillableTime = document.getElementById('editBillableTime');
-                const btnCancelEdit = document.getElementById('btnCancelEdit');
-                const btnSaveEdit = document.getElementById('btnSaveEdit');
+            const editClient = document.getElementById('editClient');
+            const editStartTime = document.getElementById('editStartTime');
+            const editArrivalTime = document.getElementById('editArrivalTime');
+            const editEndTime = document.getElementById('editEndTime');
+            const editNotes = document.getElementById('editNotes');
+            const editBillableTimeInputs = document.getElementsByName('editBillableTime');
+            const editMileage = document.getElementById('editMileage');
+            const editBillableTime = document.getElementById('editBillableTime');
+            const btnCancelEdit = document.getElementById('btnCancelEdit');
+            const btnSaveEdit = document.getElementById('btnSaveEdit');
 
         const addEntryModal = document.getElementById('addEntryModal');
-                const addClient = document.getElementById('addClient');
-                const addStartTime = document.getElementById('addStartTime');
-                const addEndTime = document.getElementById('addEndTime');
-                const addArrivalTime = document.getElementById('addArrivalTime');
-                const addNotes = document.getElementById('addNotes');
-                const addBillableTime = document.getElementById('addBillableTime');
-                const addMileage = document.getElementById('addMileage');
-                const btnCancelAdd = document.getElementById('btnCancelAdd');
-                const btnSaveAdd = document.getElementById('btnSaveAdd');
+            const addClient = document.getElementById('addClient');
+            const addStartTime = document.getElementById('addStartTime');
+            const addEndTime = document.getElementById('addEndTime');
+            const addArrivalTime = document.getElementById('addArrivalTime');
+            const addNotes = document.getElementById('addNotes');
+            const addBillableTime = document.getElementById('addBillableTime');
+            const addMileage = document.getElementById('addMileage');
+            const btnCancelAdd = document.getElementById('btnCancelAdd');
+            const btnSaveAdd = document.getElementById('btnSaveAdd');
 
         const btnAddEntry = document.getElementById('btnAddEntry');
 
@@ -552,8 +552,8 @@
                 activeClientLabel.textContent = "";
                 notesModal.classList.remove('hidden');
                 notesInput.focus();
-                                    }
-                                });
+                }
+            });
 
               // Mileage toggle
               toggleMileage.addEventListener('change', () => {
@@ -561,24 +561,24 @@
               });
 
               btnMarkArrival.addEventListener('click', () => {
-                          if (!isRunning || arrivalTime) return;
-                          arrivalTime = Date.now();
-                          btnMarkArrival.classList.add('hidden');
+                  if (!isRunning || arrivalTime) return;
+                  arrivalTime = Date.now();
+                  btnMarkArrival.classList.add('hidden');
 
-                          const travelMs = arrivalTime - startTime;
-                          const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                          arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
-                          arrivalBadge.classList.remove('hidden');
+                  const travelMs = arrivalTime - startTime;
+                  const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+                  arrivalBadge.classList.remove('hidden');
 
-                          // Show arrival mileage modal if mileage is requested
-                          if (requestMileage) {
-                              arrivalMileageInput.value = '';
-                              arrivalMileageModal.classList.remove('hidden');
-                              arrivalMileageInput.focus();
-                          } else {
-                              arrivalMileage = null;
-                          }
-                      });
+                  // Show arrival mileage modal if mileage is requested
+                  if (requestMileage) {
+                      arrivalMileageInput.value = '';
+                      arrivalMileageModal.classList.remove('hidden');
+                      arrivalMileageInput.focus();
+                  } else {
+                      arrivalMileage = null;
+                  }
+              });
 
         function updateLiveDisplay() {
             const elapsedMs = Date.now() - startTime;
@@ -657,34 +657,34 @@
             store.add(newLog);
 
             transaction.oncomplete = () => {
-                            isRunning = false;
-                            clearInterval(timerInterval);
-                            clearTimerState();
-                            liveTimer.textContent = "00:00:00";
-                            activeClientLabel.textContent = "";
-                            clientInput.value = "";
-                            clientInput.disabled = false;
-                            notesInput.value = "";
+                isRunning = false;
+                clearInterval(timerInterval);
+                clearTimerState();
+                liveTimer.textContent = "00:00:00";
+                activeClientLabel.textContent = "";
+                clientInput.value = "";
+                clientInput.disabled = false;
+                notesInput.value = "";
 
-                            for (const input of billableInputs) {
-                                input.checked = false;
-                            }
+                for (const input of billableInputs) {
+                    input.checked = false;
+                }
 
-                            btnAction.textContent = "Start Timer";
-                            btnAction.classList.remove('stop');
-                            btnAction.classList.add('start');
-                            liveTimer.classList.remove('running');
+                btnAction.textContent = "Start Timer";
+                btnAction.classList.remove('stop');
+                btnAction.classList.add('start');
+                liveTimer.classList.remove('running');
 
-                            btnMarkArrival.classList.add('hidden');
-                            arrivalBadge.classList.add('hidden');
-                            arrivalTime = null;
-                            startMileage = null;
-                            arrivalMileage = null;
-                            travelMileage = null;
+                btnMarkArrival.classList.add('hidden');
+                arrivalBadge.classList.add('hidden');
+                arrivalTime = null;
+                startMileage = null;
+                arrivalMileage = null;
+                travelMileage = null;
 
-                            notesModal.classList.add('hidden');
-                            renderLogs();
-                        };
+                notesModal.classList.add('hidden');
+                renderLogs();
+            };
         });
 
         btnCancelStartMileage.addEventListener('click', () => {
@@ -766,24 +766,24 @@
                     html += '</div>';
 
                     if (log.travelDurationMs && log.onSiteDurationMs) {
-                                            const travelDur = formatDuration(log.travelDurationMs);
-                                            const onSiteDur = formatDuration(log.onSiteDurationMs);
-                                            html += '<div class="log-travel-details">';
-                                            html += '<span>🚗 Travel: ' + escapeHtml(travelDur) + '</span>';
-                                            html += '<span>💼 Client: ' + escapeHtml(onSiteDur) + '</span>';
-                                            html += '</div>';
-                                        }
+                        const travelDur = formatDuration(log.travelDurationMs);
+                        const onSiteDur = formatDuration(log.onSiteDurationMs);
+                        html += '<div class="log-travel-details">';
+                        html += '<span>🚗 Travel: ' + escapeHtml(travelDur) + '</span>';
+                        html += '<span>💼 Client: ' + escapeHtml(onSiteDur) + '</span>';
+                        html += '</div>';
+                    }
 
                     if (log.travelMileage && log.travelMileage > 0) {
                         html += '<div class="log-travel-details"><span>🚗 Travel Miles: ' + log.travelMileage + ' mi</span></div>';
                     }
 
                     if (log.billableTime && log.billableTime !== '1') {
-                                            const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
-                                            html += '<p class="log-notes"><strong>Billable:</strong> ' + billableDisplay + ' | "' + escapeHtml(log.notes) + '"</p>';
-                                        } else {
-                                            html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
-                                        }
+                        const billableDisplay = log.billableTime === 'sales call' ? log.billableTime : log.billableTime + 'h';
+                        html += '<p class="log-notes"><strong>Billable:</strong> ' + billableDisplay + ' | "' + escapeHtml(log.notes) + '"</p>';
+                    } else {
+                        html += '<p class="log-notes">"' + escapeHtml(log.notes) + '"</p>';
+                    }
                     html += '<div class="flex-row-gap" style="margin-top: 0.5rem;">';
                     html += '<button class="btn-action start" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="editLog(' + log.id + ')">Edit</button>';
                     html += '<button class="btn-action stop" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="deleteLog(' + log.id + ')">Delete</button>';
@@ -795,73 +795,73 @@
         }
 
         // Edit log function
-                window.editLog = function(id) {
-                    const transaction = db.transaction(["logs"], "readwrite");
-                    const store = transaction.objectStore("logs");
-                    const request = store.get(id);
+        window.editLog = function(id) {
+            const transaction = db.transaction(["logs"], "readwrite");
+            const store = transaction.objectStore("logs");
+            const request = store.get(id);
 
-                    request.onsuccess = () => {
-                        const log = request.result;
-                        if (!log) return;
+            request.onsuccess = () => {
+                const log = request.result;
+                if (!log) return;
 
-                        editingLogId = id;
+                editingLogId = id;
 
-                        editClient.value = log.client;
-                        editNotes.value = log.notes;
-                        editBillableTime.value = log.billableTime;
-                        editMileage.value = log.travelMileage || '';
+                editClient.value = log.client;
+                editNotes.value = log.notes;
+                editBillableTime.value = log.billableTime;
+                editMileage.value = log.travelMileage || '';
 
-                        // Parse start time - log.start is a localized string
-                        const startDate = new Date(log.start);
-                        const startYear = startDate.getFullYear();
-                        const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
-                        const startDay = String(startDate.getDate()).padStart(2, '0');
-                        const startHours = String(startDate.getHours()).padStart(2, '0');
-                        const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
-                        editStartTime.value = `${startYear}-${startMonth}-${startDay}T${startHours}:${startMinutes}`;
+                // Parse start time - log.start is a localized string
+                const startDate = new Date(log.start);
+                const startYear = startDate.getFullYear();
+                const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+                const startDay = String(startDate.getDate()).padStart(2, '0');
+                const startHours = String(startDate.getHours()).padStart(2, '0');
+                const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
+                editStartTime.value = `${startYear}-${startMonth}-${startDay}T${startHours}:${startMinutes}`;
 
-                        // Set arrival time if exists
-                                                if (log.arrivalTime && log.arrivalTime.trim() !== '') {
-                                                    // Parse the arrival time - it could be in various formats
-                                                    // e.g., "2:30 PM", "14:30", "02:30:00", "02:30"
-                                                    const timeMatch = log.arrivalTime.match(/(\d{1,2}):(\d{2})/);
-                                                    if (timeMatch) {
-                                                        let hours = parseInt(timeMatch[1], 10);
-                                                        const minutes = timeMatch[2];
+                // Set arrival time if exists
+                if (log.arrivalTime && log.arrivalTime.trim() !== '') {
+                    // Parse the arrival time - it could be in various formats
+                    // e.g., "2:30 PM", "14:30", "02:30:00", "02:30"
+                    const timeMatch = log.arrivalTime.match(/(\d{1,2}):(\d{2})/);
+                    if (timeMatch) {
+                        let hours = parseInt(timeMatch[1], 10);
+                        const minutes = timeMatch[2];
 
-                                                        // Check for PM (but not 12 PM which should stay 12)
-                                                        if (log.arrivalTime.includes('PM') && hours !== 12) {
-                                                            hours += 12;
-                                                        }
-                                                        // Check for AM (and 12 AM should become 0)
-                                                        if (log.arrivalTime.includes('AM') && hours === 12) {
-                                                            hours = 0;
-                                                        }
+                        // Check for PM (but not 12 PM which should stay 12)
+                        if (log.arrivalTime.includes('PM') && hours !== 12) {
+                            hours += 12;
+                        }
+                        // Check for AM (and 12 AM should become 0)
+                        if (log.arrivalTime.includes('AM') && hours === 12) {
+                            hours = 0;
+                        }
 
-                                                        const arrivalYear = startDate.getFullYear();
-                                                        const arrivalMonth = String(startDate.getMonth() + 1).padStart(2, '0');
-                                                        const arrivalDay = String(startDate.getDate()).padStart(2, '0');
-                                                        const paddedHours = String(hours).padStart(2, '0');
-                                                        editArrivalTime.value = `${arrivalYear}-${arrivalMonth}-${arrivalDay}T${paddedHours}:${minutes}`;
-                                                    } else {
-                                                        editArrivalTime.value = '';
-                                                    }
-                                                } else {
-                                                    editArrivalTime.value = '';
-                                                }
+                        const arrivalYear = startDate.getFullYear();
+                        const arrivalMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+                        const arrivalDay = String(startDate.getDate()).padStart(2, '0');
+                        const paddedHours = String(hours).padStart(2, '0');
+                        editArrivalTime.value = `${arrivalYear}-${arrivalMonth}-${arrivalDay}T${paddedHours}:${minutes}`;
+                    } else {
+                        editArrivalTime.value = '';
+                    }
+                } else {
+                    editArrivalTime.value = '';
+                }
 
-                        // Parse end time - log.end is a localized string
-                        const endDate = new Date(log.end);
-                        const endYear = endDate.getFullYear();
-                        const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
-                        const endDay = String(endDate.getDate()).padStart(2, '0');
-                        const endHours = String(endDate.getHours()).padStart(2, '0');
-                        const endMinutes = String(endDate.getMinutes()).padStart(2, '0');
-                        editEndTime.value = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`;
+                // Parse end time - log.end is a localized string
+                const endDate = new Date(log.end);
+                const endYear = endDate.getFullYear();
+                const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
+                const endDay = String(endDate.getDate()).padStart(2, '0');
+                const endHours = String(endDate.getHours()).padStart(2, '0');
+                const endMinutes = String(endDate.getMinutes()).padStart(2, '0');
+                editEndTime.value = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`;
 
-                        editModal.classList.remove('hidden');
-                    };
-                };
+                editModal.classList.remove('hidden');
+            };
+        };
 
         // Delete log function
         window.deleteLog = function(id) {
@@ -877,71 +877,71 @@
         };
 
         // Save edit
-                btnSaveEdit.addEventListener('click', () => {
-                    if (!editingLogId) return;
+        btnSaveEdit.addEventListener('click', () => {
+            if (!editingLogId) return;
 
-                    const transaction = db.transaction(["logs"], "readwrite");
-                    const store = transaction.objectStore("logs");
-                    const request = store.get(editingLogId);
+            const transaction = db.transaction(["logs"], "readwrite");
+            const store = transaction.objectStore("logs");
+            const request = store.get(editingLogId);
 
-                    request.onsuccess = () => {
-                        const log = request.result;
-                        if (!log) return;
+            request.onsuccess = () => {
+                const log = request.result;
+                if (!log) return;
 
-                        let selectedBillableTime = editBillableTime.value ? editBillableTime.value : '1';
+                let selectedBillableTime = editBillableTime.value ? editBillableTime.value : '1';
 
-                        log.client = editClient.value.trim();
-                        log.notes = editNotes.value.trim() || "No notes provided.";
-                        log.billableTime = selectedBillableTime;
-                        log.travelMileage = editMileage.value ? parseFloat(editMileage.value) : null;
+                log.client = editClient.value.trim();
+                log.notes = editNotes.value.trim() || "No notes provided.";
+                log.billableTime = selectedBillableTime;
+                log.travelMileage = editMileage.value ? parseFloat(editMileage.value) : null;
 
-                        // Update start time
-                        if (editStartTime.value) {
-                            const start = new Date(editStartTime.value);
-                            log.start = start.toLocaleString();
-                            log.durationMs = null; // Will need recalculation
-                            log.decimalHours = null;
-                            log.duration = null;
-                        }
+                // Update start time
+                if (editStartTime.value) {
+                    const start = new Date(editStartTime.value);
+                    log.start = start.toLocaleString();
+                    log.durationMs = null; // Will need recalculation
+                    log.decimalHours = null;
+                    log.duration = null;
+                }
 
-                        // Update arrival time and calculate travel/on-site durations
-                        if (editArrivalTime.value) {
-                            const start = new Date(editStartTime.value);
-                            const arrival = new Date(editArrivalTime.value);
-                            const end = new Date(editEndTime.value);
+                // Update arrival time and calculate travel/on-site durations
+                if (editArrivalTime.value) {
+                    const start = new Date(editStartTime.value);
+                    const arrival = new Date(editArrivalTime.value);
+                    const end = new Date(editEndTime.value);
 
-                            log.arrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            log.travelDurationMs = arrival - start;
-                            log.onSiteDurationMs = end - arrival;
-                            log.durationMs = end - start;
-                            log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
-                            log.duration = formatDuration(log.durationMs);
-                        } else {
-                            // No arrival time - recalculate from start and end
-                            const start = new Date(editStartTime.value);
-                            const end = new Date(editEndTime.value);
-                            log.arrivalTime = null;
-                            log.travelDurationMs = null;
-                            log.onSiteDurationMs = null;
-                            log.durationMs = end - start;
-                            log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
-                            log.duration = formatDuration(log.durationMs);
-                        }
+                    log.arrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    log.travelDurationMs = arrival - start;
+                    log.onSiteDurationMs = end - arrival;
+                    log.durationMs = end - start;
+                    log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
+                    log.duration = formatDuration(log.durationMs);
+                } else {
+                    // No arrival time - recalculate from start and end
+                    const start = new Date(editStartTime.value);
+                    const end = new Date(editEndTime.value);
+                    log.arrivalTime = null;
+                    log.travelDurationMs = null;
+                    log.onSiteDurationMs = null;
+                    log.durationMs = end - start;
+                    log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
+                    log.duration = formatDuration(log.durationMs);
+                }
 
-                        // Update end time
-                        if (editEndTime.value) {
-                            const end = new Date(editEndTime.value);
-                            log.end = end.toLocaleString();
-                        }
+                // Update end time
+                if (editEndTime.value) {
+                    const end = new Date(editEndTime.value);
+                    log.end = end.toLocaleString();
+                }
 
-                        const putRequest = store.put(log);
-                        putRequest.onsuccess = () => {
-                            editModal.classList.add('hidden');
-                            editingLogId = null;
-                            renderLogs();
-                        };
-                    };
-                });
+                const putRequest = store.put(log);
+                putRequest.onsuccess = () => {
+                    editModal.classList.add('hidden');
+                    editingLogId = null;
+                    renderLogs();
+                };
+            };
+        });
 
         btnCancelEdit.addEventListener('click', () => {
             editModal.classList.add('hidden');
@@ -955,13 +955,13 @@
             const currentTime = now.toTimeString().slice(0, 8);
 
             addStartTime.value = today + 'T' + currentTime;
-                        addEndTime.value = today + 'T' + currentTime;
-                        addArrivalTime.value = '';
-                                    addClient.value = '';
-                                    addNotes.value = '';
-                                    addBillableTime.value = '';
-                                    addMileage.value = '';
-                                    addEntryModal.classList.remove('hidden');
+            addEndTime.value = today + 'T' + currentTime;
+            addArrivalTime.value = '';
+            addClient.value = '';
+            addNotes.value = '';
+            addBillableTime.value = '';
+            addMileage.value = '';
+            addEntryModal.classList.remove('hidden');
         });
 
         btnCancelAdd.addEventListener('click', () => {
@@ -969,258 +969,257 @@
         });
 
         btnSaveAdd.addEventListener('click', () => {
-                    const client = addClient.value.trim();
-                    const startTimeVal = addStartTime.value;
-                    const endTimeVal = addEndTime.value;
-                    const arrivalTimeVal = addArrivalTime.value;
-                    const notes = addNotes.value.trim() || "No notes provided.";
+        const client = addClient.value.trim();
+        const startTimeVal = addStartTime.value;
+        const endTimeVal = addEndTime.value;
+        const arrivalTimeVal = addArrivalTime.value;
+        const notes = addNotes.value.trim() || "No notes provided.";
 
-                    if (!client || !startTimeVal || !endTimeVal) {
-                        alert("Please fill in all required fields.");
-                        return;
-                    }
+        if (!client || !startTimeVal || !endTimeVal) {
+            alert("Please fill in all required fields.");
+            return;
+        }
 
-                    let selectedBillableTime = addBillableTime.value || '1';
+        let selectedBillableTime = addBillableTime.value || '1';
 
-                    const start = new Date(startTimeVal);
-                    const end = new Date(endTimeVal);
-                    const arrival = arrivalTimeVal ? new Date(arrivalTimeVal) : null;
-                    const durationMs = end - start;
+        const start = new Date(startTimeVal);
+        const end = new Date(endTimeVal);
+        const arrival = arrivalTimeVal ? new Date(arrivalTimeVal) : null;
+        const durationMs = end - start;
 
-                    let formattedArrivalTime = null;
-                    let travelDurationMs = null;
-                    let onSiteDurationMs = null;
+        let formattedArrivalTime = null;
+        let travelDurationMs = null;
+        let onSiteDurationMs = null;
 
-                    if (arrival) {
-                        formattedArrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        travelDurationMs = arrival - start;
-                        onSiteDurationMs = end - arrival;
-                    }
+        if (arrival) {
+            formattedArrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            travelDurationMs = arrival - start;
+            onSiteDurationMs = end - arrival;
+        }
 
-                    let selectedTravelMileage = null;
-                    if (addMileage.value && parseFloat(addMileage.value) > 0) {
-                        selectedTravelMileage = parseFloat(addMileage.value);
-                    }
+        let selectedTravelMileage = null;
+        if (addMileage.value && parseFloat(addMileage.value) > 0) {
+            selectedTravelMileage = parseFloat(addMileage.value);
+        }
 
-                    const newLog = {
-                        client: client,
-                        start: start.toLocaleString(),
-                        end: end.toLocaleString(),
-                        duration: formatDuration(durationMs),
-                        durationMs: durationMs,
-                        decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-                        notes: notes,
-                        billableTime: selectedBillableTime,
-                        arrivalTime: formattedArrivalTime,
-                        travelDurationMs: travelDurationMs,
-                        onSiteDurationMs: onSiteDurationMs,
-                        travelMileage: selectedTravelMileage
-                    };
+        const newLog = {
+            client: client,
+            start: start.toLocaleString(),
+            end: end.toLocaleString(),
+            duration: formatDuration(durationMs),
+            durationMs: durationMs,
+            decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+            notes: notes,
+            billableTime: selectedBillableTime,
+            arrivalTime: formattedArrivalTime,
+            travelDurationMs: travelDurationMs,
+            onSiteDurationMs: onSiteDurationMs,
+            travelMileage: selectedTravelMileage
+        };
 
-            const transaction = db.transaction(["logs"], "readwrite");
-            const store = transaction.objectStore("logs");
-            store.add(newLog);
+        const transaction = db.transaction(["logs"], "readwrite");
+        const store = transaction.objectStore("logs");
+        store.add(newLog);
 
-            transaction.oncomplete = () => {
-                addEntryModal.classList.add('hidden');
-                renderLogs();
+        transaction.oncomplete = () => {
+            addEntryModal.classList.add('hidden');
+            renderLogs();
             };
         });
 
         btnExport.addEventListener('click', () => {
-                    if (!db) return;
-                    const store = db.transaction(["logs"], "readonly").objectStore("logs");
-                    const request = store.getAll();
+        if (!db) return;
+        const store = db.transaction(["logs"], "readonly").objectStore("logs");
+        const request = store.getAll();
 
-                    request.onsuccess = function(e) {
-                        const logs = e.target.result;
-                        if (logs.length === 0) {
-                            alert("There is no data recorded to export.");
-                            return;
-                        }
+        request.onsuccess = function(e) {
+            const logs = e.target.result;
+            if (logs.length === 0) {
+                alert("There is no data recorded to export.");
+                return;
+            }
 
-                        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
-                        const csvRows = [headers.join(",")];
+            const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
+            const csvRows = [headers.join(",")];
 
-                        logs.forEach(log => {
-                            const row = [
-                                log.id,
-                                '"' + log.client.replace(/"/g, '""') + '"',
-                                '"' + log.start + '"',
-                                '"' + (log.arrivalTime || "") + '"',
-                                '"' + log.end + '"',
-                                '"' + log.duration + '"',
-                                '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
-                                '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
-                                log.decimalHours,
-                                '"' + (log.billableTime || "") + '"',
-                                (log.startMileage || ""),
-                                (log.arrivalMileage || ""),
-                                (log.travelMileage || ""),
-                                '"' + log.notes.replace(/"/g, '""') + '"'
-                            ];
-                            csvRows.push(row.join(","));
-                        });
+            logs.forEach(log => {
+                const row = [
+                    log.id,
+                    '"' + log.client.replace(/"/g, '""') + '"',
+                    '"' + log.start + '"',
+                    '"' + (log.arrivalTime || "") + '"',
+                    '"' + log.end + '"',
+                    '"' + log.duration + '"',
+                    '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
+                    '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
+                    log.decimalHours,
+                    '"' + (log.billableTime || "") + '"',
+                    (log.startMileage || ""),
+                    (log.arrivalMileage || ""),
+                    (log.travelMileage || ""),
+                    '"' + log.notes.replace(/"/g, '""') + '"'
+                ];
+                csvRows.push(row.join(","));
+            });
 
-                                        const csvString = csvRows.join("\r\n");
-                                        // Add UTF-8 BOM for Excel compatibility
-                                        const bom = '\ufeff';
-                                        const blob = new Blob([bom + csvString], { type: 'text/csv;charset=utf-8;' });
-                                        const link = document.createElement("a");
-                                        const url = URL.createObjectURL(blob);
-                                        link.setAttribute("href", url);
-                                        link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
-                                        link.style.visibility = 'hidden';
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                    };
-                                });
+                const csvString = csvRows.join("\r\n");
+                // Add UTF-8 BOM for Excel compatibility
+                const bom = '\ufeff';
+                const blob = new Blob([bom + csvString], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+        });
 
-                                btnOpenReport.addEventListener('click', () => {
-                                                                            reportRangeModal.classList.remove('hidden');
-                                                                        });
+        btnOpenReport.addEventListener('click', () => {
+            reportRangeModal.classList.remove('hidden');
+        });
 
-                                                                        // Helper function to parse duration string to milliseconds
-                                                                        function parseDurationToMs(durationStr) {
-                                                                            if (!durationStr || durationStr.trim() === '') return null;
-                                                                            const parts = durationStr.split(':');
-                                                                            if (parts.length === 3) {
-                                                                                const hrs = parseInt(parts[0], 10);
-                                                                                const mins = parseInt(parts[1], 10);
-                                                                                const secs = parseInt(parts[2], 10);
-                                                                                return (hrs * 3600 + mins * 60 + secs) * 1000;
-                                                                            }
-                                                                            return null;
-                                                                        }
+        // Helper function to parse duration string to milliseconds
+        function parseDurationToMs(durationStr) {
+            if (!durationStr || durationStr.trim() === '') return null;
+            const parts = durationStr.split(':');
+            if (parts.length === 3) {
+                const hrs = parseInt(parts[0], 10);
+                const mins = parseInt(parts[1], 10);
+                const secs = parseInt(parts[2], 10);
+                return (hrs * 3600 + mins * 60 + secs) * 1000;
+            }
+            return null;
+        }
 
-                                                                        // Import CSV functionality
-                                                                        const btnImport = document.getElementById('btnImport');
-                                        const btnImportCsv = document.getElementById('btnImportCsv');
+        // Import CSV functionality
+        const btnImport = document.getElementById('btnImport');
+        const btnImportCsv = document.getElementById('btnImportCsv');
 
-                                        btnImport.addEventListener('click', () => {
-                                            btnImportCsv.click();
-                                        });
+        btnImport.addEventListener('click', () => {
+            btnImportCsv.click();
+        });
 
-                                        btnImportCsv.addEventListener('change', (e) => {
-                                            const file = e.target.files[0];
-                                            if (!file) return;
+        btnImportCsv.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-                                            const reader = new FileReader();
-                                            reader.onload = function(e) {
-                                                const content = e.target.result;
-                                                // Remove BOM if present
-                                                const csvContent = content.replace(/\ufeff/, '');
-                                                const lines = csvContent.split(/\r\n|\n/).filter(line => line.trim() !== '');
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            // Remove BOM if present
+            const csvContent = content.replace(/\ufeff/, '');
+            const lines = csvContent.split(/\r\n|\n/).filter(line => line.trim() !== '');
 
-                                                if (lines.length < 2) {
-                                                    alert('Invalid CSV file. File must have headers and at least one data row.');
-                                                    btnImportCsv.value = '';
-                                                    return;
-                                                }
+        if (lines.length < 2) {
+            alert('Invalid CSV file. File must have headers and at least one data row.');
+            btnImportCsv.value = '';
+            return;
+        }
 
-                                                // Parse header to verify format
-                                                const headers = lines[0].split(',');
-                                                const expectedHeaders = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
+        // Parse header to verify format
+        const headers = lines[0].split(',');
+        const expectedHeaders = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
 
-                                                if (headers.length !== expectedHeaders.length) {
-                                                    alert('Invalid CSV format. Expected ' + expectedHeaders.length + ' columns, found ' + headers.length + '.');
-                                                    btnImportCsv.value = '';
-                                                    return;
-                                                }
+        if (headers.length !== expectedHeaders.length) {
+            alert('Invalid CSV format. Expected ' + expectedHeaders.length + ' columns, found ' + headers.length + '.');
+            btnImportCsv.value = '';
+            return;
+        }
 
-                                                // Parse data rows
-                                                const newLogs = [];
-                                                for (let i = 1; i < lines.length; i++) {
-                                                    const row = parseCsvRow(lines[i]);
-                                                    if (row.length >= 14) {
-                                                                                                            const durationStr = row[5].replace(/^"|"$/g, '');
-                                                                                                            const travelDurStr = row[6].replace(/^"|"$/g, '');
-                                                                                                            const onSiteDurStr = row[7].replace(/^"|"$/g, '');
+        // Parse data rows
+        const newLogs = [];
+        for (let i = 1; i < lines.length; i++) {
+            const row = parseCsvRow(lines[i]);
+            if (row.length >= 14) {
+            const durationStr = row[5].replace(/^"|"$/g, '');
+            const travelDurStr = row[6].replace(/^"|"$/g, '');
+            const onSiteDurStr = row[7].replace(/^"|"$/g, '');
 
-                                                                                                            const log = {
-                                                            client: row[1].replace(/^"|"$/g, ''),
-                                                            start: row[2].replace(/^"|"$/g, ''),
-                                                            arrivalTime: row[3].replace(/^"|"$/g, '') || null,
-                                                            end: row[4].replace(/^"|"$/g, ''),
-                                                            duration: durationStr,
-                                                                                                                                                                            durationMs: parseDurationToMs(durationStr),
-                                                            decimalHours: row[8] || '0',
-                                                            notes: row[13].replace(/^"|"$/g, ''),
-                                                            billableTime: row[9].replace(/^"|"$/g, '') || '1',
-                                                                                                                                                                            travelDurationMs: parseDurationToMs(travelDurStr),
-                                                                                                                                                                            onSiteDurationMs: parseDurationToMs(onSiteDurStr),
-                                                            startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
-                                                            arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
-                                                            travelMileage: row[12] !== '' ? parseFloat(row[12]) : null
-                                                                                                                    };
-                                                                                                                    newLogs.push(log);
-                                                    }
-                                                }
+            const log = {
+                client: row[1].replace(/^"|"$/g, ''),
+                start: row[2].replace(/^"|"$/g, ''),
+                arrivalTime: row[3].replace(/^"|"$/g, '') || null,
+                end: row[4].replace(/^"|"$/g, ''),
+                duration: durationStr,
+                durationMs: parseDurationToMs(durationStr),
+                decimalHours: row[8] || '0',
+                notes: row[13].replace(/^"|"$/g, ''),
+                billableTime: row[9].replace(/^"|"$/g, '') || '1',
+                travelDurationMs: parseDurationToMs(travelDurStr),
+                onSiteDurationMs: parseDurationToMs(onSiteDurStr),
+                startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
+                arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
+                travelMileage: row[12] !== '' ? parseFloat(row[12]) : null
+            };
+            newLogs.push(log);
+            }
+        }
 
-                                                if (newLogs.length === 0) {
-                                                    alert('No valid entries found in CSV file.');
-                                                    btnImportCsv.value = '';
-                                                    return;
-                                                }
+        if (newLogs.length === 0) {
+            alert('No valid entries found in CSV file.');
+            btnImportCsv.value = '';
+            return;
+        }
 
-                                                // Save to database
-                                                const transaction = db.transaction(["logs"], "readwrite");
-                                                const store = transaction.objectStore("logs");
-                                                newLogs.forEach(log => store.add(log));
+        // Save to database
+        const transaction = db.transaction(["logs"], "readwrite");
+        const store = transaction.objectStore("logs");
+        newLogs.forEach(log => store.add(log));
 
-                                                transaction.oncomplete = () => {
-                                                    alert('Successfully imported ' + newLogs.length + ' entries.');
-                                                    btnImportCsv.value = '';
-                                                    renderLogs();
-                                                };
+        transaction.oncomplete = () => {
+            alert('Successfully imported ' + newLogs.length + ' entries.');
+            btnImportCsv.value = '';
+            renderLogs();
+        };
 
-                                                transaction.onerror = () => {
-                                                    alert('Error importing CSV file.');
-                                                    btnImportCsv.value = '';
-                                                };
-                                            };
+        transaction.onerror = () => {
+            alert('Error importing CSV file.');
+            btnImportCsv.value = '';
+        };
+        };
 
-                                            reader.onerror = () => {
-                                                alert('Error reading file.');
-                                                btnImportCsv.value = '';
-                                            };
+        reader.onerror = () => {
+            alert('Error reading file.');
+            btnImportCsv.value = '';
+        };
 
-                                            reader.readAsText(file);
-                                        });
+        reader.readAsText(file);
+    });
 
-                                        // Helper function to parse CSV row (handles quoted fields)
-                                        function parseCsvRow(row) {
-                                            const result = [];
-                                            let current = '';
-                                            let inQuotes = false;
+    // Helper function to parse CSV row (handles quoted fields)
+    function parseCsvRow(row) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
 
-                                            for (let i = 0; i < row.length; i++) {
-                                                const char = row[i];
+        for (let i = 0; i < row.length; i++) {
+            const char = row[i];
 
-                                                if (char === '"' && !inQuotes) {
-                                                    inQuotes = true;
-                                                } else if (char === '"' && inQuotes) {
-                                                    if (row[i + 1] === '"') {
-                                                        current += '"';
-                                                        i++;
-                                                    } else {
-                                                        inQuotes = false;
-                                                    }
-                                                } else if (char === ',' && !inQuotes) {
-                                                    result.push(current);
-                                                    current = '';
-                                                } else {
-                                                    current += char;
-                                                }
-                                            }
-                                            result.push(current);
-                                                                                        return result;
-                                                                                    }
+            if (char === '"' && !inQuotes) {
+                inQuotes = true;
+            } else if (char === '"' && inQuotes) {
+                if (row[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current);
+        return result;
+        }
 
-
-                                                    btnCloseReport.addEventListener('click', () => {
-            reportModal.classList.add('hidden');
+        btnCloseReport.addEventListener('click', () => {
+        reportModal.classList.add('hidden');
         });
 
         btnCopyReportText.addEventListener('click', () => {
@@ -1239,63 +1238,63 @@
         });
 
         btnPrintReportAction.addEventListener('click', () => {
-                    if (confirm('Would you like to export the data as CSV before printing?')) {
-                        exportToCSV();
-                    }
-                    window.print();
-                });
+            if (confirm('Would you like to export the data as CSV before printing?')) {
+                exportToCSV();
+            }
+            window.print();
+        });
 
-                function exportToCSV() {
-                    if (!db) return;
-                    const store = db.transaction(["logs"], "readonly").objectStore("logs");
-                    const request = store.getAll();
+    function exportToCSV() {
+        if (!db) return;
+        const store = db.transaction(["logs"], "readonly").objectStore("logs");
+        const request = store.getAll();
 
-                    request.onsuccess = function(e) {
-                        const logs = e.target.result;
-                        if (logs.length === 0) {
-                            alert("There is no data recorded to export.");
-                            return;
-                        }
+        request.onsuccess = function(e) {
+            const logs = e.target.result;
+            if (logs.length === 0) {
+                alert("There is no data recorded to export.");
+                return;
+            }
 
-                        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
-                        const csvRows = [headers.join(",")];
+            const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
+            const csvRows = [headers.join(",")];
 
-                        logs.forEach(log => {
-                                                    const row = [
-                                                        log.id,
-                                                        '"' + log.client.replace(/"/g, '""') + '"',
-                                                        '"' + log.start + '"',
-                                                        '"' + (log.arrivalTime || "") + '"',
-                                                        '"' + log.end + '"',
-                                                        '"' + log.duration + '"',
-                                                        '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
-                                                        '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
-                                                        log.decimalHours,
-                                                        '"' + (log.billableTime || "") + '"',
-                                                        (log.startMileage || ""),
-                                                        (log.arrivalMileage || ""),
-                                                        (log.travelMileage || ""),
-                                                        '"' + log.notes.replace(/"/g, '""') + '"'
-                                                    ];
-                                                    csvRows.push(row.join(","));
-                                                });
+            logs.forEach(log => {
+                const row = [
+                    log.id,
+                    '"' + log.client.replace(/"/g, '""') + '"',
+                    '"' + log.start + '"',
+                    '"' + (log.arrivalTime || "") + '"',
+                    '"' + log.end + '"',
+                    '"' + log.duration + '"',
+                    '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
+                    '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
+                    log.decimalHours,
+                    '"' + (log.billableTime || "") + '"',
+                    (log.startMileage || ""),
+                    (log.arrivalMileage || ""),
+                    (log.travelMileage || ""),
+                    '"' + log.notes.replace(/"/g, '""') + '"'
+                ];
+                csvRows.push(row.join(","));
+            });
 
-                                                    const csvString = csvRows.join("\r\n");
-                                                    // Add UTF-8 BOM for Excel compatibility
-                                                    const bom = '\ufeff';
-                                                    const blob = new Blob([bom + csvString], { type: 'text/csv;charset=utf-8;' });
-                                                    const link = document.createElement("a");
-                                                    const url = URL.createObjectURL(blob);
-                                                    link.setAttribute("href", url);
-                                                    link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
-                                                    link.style.visibility = 'hidden';
-                                                    document.body.appendChild(link);
-                                                    link.click();
-                                                    document.body.removeChild(link);
-                                                };
-                                            }
+                const csvString = csvRows.join("\r\n");
+                // Add UTF-8 BOM for Excel compatibility
+                const bom = '\ufeff';
+                const blob = new Blob([bom + csvString], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                };
+            }
 
-                                    btnCancelReportRange.addEventListener('click', () => {
+            btnCancelReportRange.addEventListener('click', () => {
             reportRangeModal.classList.add('hidden');
             for (const input of reportRangeInputs) {
                 input.checked = false;
