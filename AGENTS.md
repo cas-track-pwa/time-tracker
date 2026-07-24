@@ -8,7 +8,7 @@ A progressive web app (PWA) for time tracking that allows users to:
 - Track travel time and on-site duration separately
 - Record mileage for travel
 - Generate billing reports
-- Export data to CSV
+- Export/import data to/from CSV
 
 ## Architecture
 
@@ -59,8 +59,10 @@ Each log entry in the `logs` store contains:
 - `formatDecimalQuarter(ms)`: Converts ms to quarter-hour increments
 - `formatBillableTime()`: Calculates billable time from durations
 - `renderLogs()`: Renders all logs from IndexedDB
-- `exportToCSV()`: Exports logs to CSV file
+- `exportToCSV()`: Exports logs to CSV file with UTF-8 BOM
 - `generateReportForDateRange()`: Generates billing report for date range
+- `parseDurationToMs(durationStr)`: Converts "HH:MM:SS" string to milliseconds
+- `parseCsvRow(row)`: Parses CSV row handling quoted fields
 
 ### Timer Flow
 
@@ -75,7 +77,7 @@ Each log entry in the `logs` store contains:
 
 1. User clicks "Add Entry" button
 2. Modal opens with current time pre-filled for start/end
-3. User fills in: Client, Start Time, End Time, **Arrival Time** (optional), Notes, Billable Time, Travel Miles
+3. User fills in: Client, Start Time, Arrival Time (optional), End Time, Notes, Billable Time, Travel Miles
 4. User clicks "Save Entry" → log entry created
 
 ## Coding Conventions
@@ -91,10 +93,28 @@ Each log entry in the `logs` store contains:
 - Use IndexedDB transactions for data operations
 - Format times using `toLocaleTimeString()` with 2-digit options
 
+### Data Field Names
+- **Duration fields**: `travelDurationMs`, `onSiteDurationMs`, `durationMs` (milliseconds)
+- **Formatted duration**: `duration` (HH:MM:SS string)
+- **Mileage fields**: `startMileage`, `arrivalMileage`, `travelMileage`
+
 ### Styling
 - CSS variables defined in `:root` for colors and spacing
 - Mobile-first responsive design
 - Print styles hide unnecessary elements
+
+## PWA Configuration
+
+### Android Support
+- Manifest linked via `icons/manifest.json`
+- Icons: 192x192, 512x512, and maskable variants
+- Theme color meta tag for Android Chrome
+- Standalone display mode
+
+### iOS Support
+- Apple touch icons (180x180)
+- Apple mobile web app meta tags
+- Standalone display mode
 
 ## Common Tasks
 
@@ -103,6 +123,7 @@ Each log entry in the `logs` store contains:
 2. Add `const` declaration for the new element
 3. Update `btnSaveAdd` handler to read and process the value
 4. Include the value in the `newLog` object
+5. Update CSV export headers and row data
 
 ### Modifying Data Model
 1. Update the object structure in `btnSaveLog` handler
@@ -111,32 +132,56 @@ Each log entry in the `logs` store contains:
 4. Update CSV export headers and row data
 5. Update report generation if needed
 
+### CSV Import/Export
+- Export includes UTF-8 BOM for Excel compatibility
+- Import parses duration strings (HH:MM:SS) to milliseconds
+- Header format: ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Notes
+
 ## File Structure
 ```
 time-tracker/
 ├── index.html          # Main application (HTML/CSS/JS)
-├── manifest.webapp     # PWA manifest
-└── icons/
-    ├── icon.svg                    # SVG app icon
-    ├── icon-16.png                   # 16x16 favicon
-    ├── icon-24.png                   # 24x24 favicon
-    ├── icon-32.png                   # 32x32 favicon
-    ├── icon-48.png                   # 48x48 Android icon
-    ├── icon-72.png                   # 72x72 Android icon
-    ├── icon-96.png                   # 96x96 Android icon
-    ├── icon-128.png                  # 128x128 Android icon
-    ├── icon-144.png                  # 144x144 Android icon
-    ├── icon-152.png                  # 152x152 iOS icon
-    ├── icon-180.png                  # 180x180 Apple touch icon
-    ├── icon-192.png                  # 192x192 Android icon
-    ├── icon-256.png                  # 256x256 Android icon
-    ├── icon-384.png                  # 384x384 Android icon
-    ├── icon-512.png                  # 512x512 Android icon
-    ├── icon-maskable-192.png         # 192x192 maskable (Android adaptive)
-    ├── icon-maskable-512.png         # 512x512 maskable (Android adaptive)
-    ├── apple-touch-icon.png            # Apple touch icon
-    ├── browserconfig.xml             # IE11 tile config
-    ├── mstile-150x150.png             # Windows tile
-    ├── safari-pinned-tab.svg         # Safari pinned tab
-    └── site.webmanifest              # Alternative manifest
+├── manifest.webapp     # PWA manifest (iOS focused)
+├── icons/
+│   ├── icon.svg                    # SVG app icon
+│   ├── icon-16.png                   # 16x16 favicon
+│   ├── icon-24.png                   # 24x24 favicon
+│   ├── icon-32.png                   # 32x32 favicon
+│   ├── icon-48.png                   # 48x48 Android icon
+│   ├── icon-72.png                   # 72x72 Android icon
+│   ├── icon-96.png                   # 96x96 Android icon
+│   ├── icon-128.png                  # 128x128 Android icon
+│   ├── icon-144.png                  # 144x144 Android icon
+│   ├── icon-152.png                  # 152x152 iOS icon
+│   ├── icon-180.png                  # 180x180 Apple touch icon
+│   ├── icon-192.png                  # 192x192 Android icon
+│   ├── icon-256.png                  # 256x256 Android icon
+│   ├── icon-384.png                  # 384x384 Android icon
+│   ├── icon-512.png                  # 512x512 Android icon
+│   ├── icon-maskable-192.png         # 192x192 maskable (Android adaptive)
+│   ├── icon-maskable-512.png         # 512x512 maskable (Android adaptive)
+│   ├── apple-touch-icon.png            # Apple touch icon
+│   ├── browserconfig.xml             # IE11 tile config
+│   ├── mstile-150x150.png             # Windows tile
+│   ├── safari-pinned-tab.svg         # Safari pinned tab
+│   ├── manifest.json                 # Standard web app manifest (Android)
+│   └── site.webmanifest              # Alternative manifest
 ```
+
+## Known Issues & Fixes
+
+### Entries Not Showing in Main Display
+- **Cause**: `renderLogs()` was checking `log.travelDuration` and `log.onSiteDuration` but the data model stores `log.travelDurationMs` and `log.onSiteDurationMs`
+- **Fix**: Updated to check `log.travelDurationMs` and `log.onSiteDurationMs`, then format using `formatDuration()`
+
+### Report Button Not Working
+- **Cause**: Same field name mismatch as above
+- **Fix**: Updated `renderLogs()` to use correct field names
+
+### CSV Import Billable Time Incorrect
+- **Cause**: `parseDurationToMs()` was defined after it was used, and duration strings weren't being parsed correctly
+- **Fix**: Moved function definition earlier, added proper duration string parsing
+
+### Print Report Cutoff
+- **Cause**: Missing page-break CSS for table elements
+- **Fix**: Added `page-break-inside: avoid` to table and table rows

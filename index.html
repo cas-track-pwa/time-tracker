@@ -6,14 +6,15 @@
     <title>Time Tracker</title>
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webapp">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Time Tracker">
-    <link rel="apple-touch-icon" href="icons/icon-180.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
-    <link rel="icon" type="image/png" sizes="180x180" href="icons/icon-180.png">
-    <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
+        <link rel="manifest" href="icons/manifest.json" as="manifest">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="Time Tracker">
+        <link rel="apple-touch-icon" href="icons/icon-180.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+        <link rel="icon" type="image/png" sizes="180x180" href="icons/icon-180.png">
+        <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
     <style>
         :root {
             --primary: #2563eb;
@@ -102,14 +103,16 @@
         .report-table th { font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; background-color: var(--bg-secondary); }
         .report-total-row { display: flex; justify-content: flex-end; align-items: center; font-weight: 700; font-size: 1rem; margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid var(--border-color); }
         @media print {
-                    body { background-color: #ffffff !important; color: #000000 !important; font-family: Georgia, serif; }
-                    .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; }
-                    header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
-                    #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
-                    .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
-                    #reportContent { max-height: none !important; overflow: visible !important; }
-                    .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                }
+                            body { background-color: #ffffff !important; color: #000000 !important; font-family: Georgia, serif; }
+                            .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; }
+                            header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
+                            #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
+                            .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
+                            #reportContent { max-height: none !important; overflow: visible !important; }
+                            .report-table { page-break-inside: avoid; }
+                            .report-table tr { page-break-inside: avoid; page-break-after: auto; }
+                            .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        }
     </style>
 </head>
 <body>
@@ -763,12 +766,14 @@
                     html += '<span class="duration-pill">' + log.duration + ' (' + log.decimalHours + 'h)</span>';
                     html += '</div>';
 
-                    if (log.travelDuration && log.onSiteDuration) {
-                        html += '<div class="log-travel-details">';
-                        html += '<span>🚗 Travel: ' + escapeHtml(log.travelDuration) + '</span>';
-                        html += '<span>💼 Client: ' + escapeHtml(log.onSiteDuration) + '</span>';
-                        html += '</div>';
-                    }
+                    if (log.travelDurationMs && log.onSiteDurationMs) {
+                                            const travelDur = formatDuration(log.travelDurationMs);
+                                            const onSiteDur = formatDuration(log.onSiteDurationMs);
+                                            html += '<div class="log-travel-details">';
+                                            html += '<span>🚗 Travel: ' + escapeHtml(travelDur) + '</span>';
+                                            html += '<span>💼 Client: ' + escapeHtml(onSiteDur) + '</span>';
+                                            html += '</div>';
+                                        }
 
                     if (log.travelMileage && log.travelMileage > 0) {
                         html += '<div class="log-travel-details"><span>🚗 Travel Miles: ' + log.travelMileage + ' mi</span></div>';
@@ -951,12 +956,13 @@
             const currentTime = now.toTimeString().slice(0, 8);
 
             addStartTime.value = today + 'T' + currentTime;
-            addEndTime.value = today + 'T' + currentTime;
-                        addClient.value = '';
-                        addNotes.value = '';
-                        addBillableTime.value = '';
-                        addMileage.value = '';
-                        addEntryModal.classList.remove('hidden');
+                        addEndTime.value = today + 'T' + currentTime;
+                        addArrivalTime.value = '';
+                                    addClient.value = '';
+                                    addNotes.value = '';
+                                    addBillableTime.value = '';
+                                    addMileage.value = '';
+                                    addEntryModal.classList.remove('hidden');
         });
 
         btnCancelAdd.addEventListener('click', () => {
@@ -1023,39 +1029,39 @@
         });
 
         btnExport.addEventListener('click', () => {
-            if (!db) return;
-            const store = db.transaction(["logs"], "readonly").objectStore("logs");
-            const request = store.getAll();
+                    if (!db) return;
+                    const store = db.transaction(["logs"], "readonly").objectStore("logs");
+                    const request = store.getAll();
 
-            request.onsuccess = function(e) {
-                const logs = e.target.result;
-                if (logs.length === 0) {
-                    alert("There is no data recorded to export.");
-                    return;
-                }
+                    request.onsuccess = function(e) {
+                        const logs = e.target.result;
+                        if (logs.length === 0) {
+                            alert("There is no data recorded to export.");
+                            return;
+                        }
 
-                const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
-                const csvRows = [headers.join(",")];
+                        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes"];
+                        const csvRows = [headers.join(",")];
 
-                logs.forEach(log => {
-                    const row = [
-                        log.id,
-                        '"' + log.client.replace(/"/g, '""') + '"',
-                        '"' + log.start + '"',
-                        '"' + (log.arrivalTime || "") + '"',
-                        '"' + log.end + '"',
-                        '"' + log.duration + '"',
-                        '"' + (log.travelDuration || "") + '"',
-                        '"' + (log.onSiteDuration || "") + '"',
-                        log.decimalHours,
-                        '"' + (log.billableTime || "") + '"',
-                        (log.startMileage || ""),
-                                                (log.arrivalMileage || ""),
-                                                (log.travelMileage || ""),
-                                                                        '"' + log.notes.replace(/"/g, '""') + '"'
-                                                                    ];
-                                            csvRows.push(row.join(","));
-                                        });
+                        logs.forEach(log => {
+                            const row = [
+                                log.id,
+                                '"' + log.client.replace(/"/g, '""') + '"',
+                                '"' + log.start + '"',
+                                '"' + (log.arrivalTime || "") + '"',
+                                '"' + log.end + '"',
+                                '"' + log.duration + '"',
+                                '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
+                                '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
+                                log.decimalHours,
+                                '"' + (log.billableTime || "") + '"',
+                                (log.startMileage || ""),
+                                (log.arrivalMileage || ""),
+                                (log.travelMileage || ""),
+                                '"' + log.notes.replace(/"/g, '""') + '"'
+                            ];
+                            csvRows.push(row.join(","));
+                        });
 
                                         const csvString = csvRows.join("\r\n");
                                         // Add UTF-8 BOM for Excel compatibility
@@ -1073,11 +1079,24 @@
                                 });
 
                                 btnOpenReport.addEventListener('click', () => {
-                                            reportRangeModal.classList.remove('hidden');
-                                        });
+                                                                            reportRangeModal.classList.remove('hidden');
+                                                                        });
 
-                                        // Import CSV functionality
-                                        const btnImport = document.getElementById('btnImport');
+                                                                        // Helper function to parse duration string to milliseconds
+                                                                        function parseDurationToMs(durationStr) {
+                                                                            if (!durationStr || durationStr.trim() === '') return null;
+                                                                            const parts = durationStr.split(':');
+                                                                            if (parts.length === 3) {
+                                                                                const hrs = parseInt(parts[0], 10);
+                                                                                const mins = parseInt(parts[1], 10);
+                                                                                const secs = parseInt(parts[2], 10);
+                                                                                return (hrs * 3600 + mins * 60 + secs) * 1000;
+                                                                            }
+                                                                            return null;
+                                                                        }
+
+                                                                        // Import CSV functionality
+                                                                        const btnImport = document.getElementById('btnImport');
                                         const btnImportCsv = document.getElementById('btnImportCsv');
 
                                         btnImport.addEventListener('click', () => {
@@ -1116,18 +1135,22 @@
                                                 for (let i = 1; i < lines.length; i++) {
                                                     const row = parseCsvRow(lines[i]);
                                                     if (row.length >= 14) {
-                                                        const log = {
+                                                                                                            const durationStr = row[5].replace(/^"|"$/g, '');
+                                                                                                            const travelDurStr = row[6].replace(/^"|"$/g, '');
+                                                                                                            const onSiteDurStr = row[7].replace(/^"|"$/g, '');
+                                                        
+                                                                                                            const log = {
                                                             client: row[1].replace(/^"|"$/g, ''),
                                                             start: row[2].replace(/^"|"$/g, ''),
                                                             arrivalTime: row[3].replace(/^"|"$/g, '') || null,
                                                             end: row[4].replace(/^"|"$/g, ''),
-                                                            duration: row[5].replace(/^"|"$/g, ''),
-                                                            durationMs: row.length > 5 && row[5] !== '' ? parseInt(row[5]) : null,
+                                                            duration: durationStr,
+                                                                                                                                                                            durationMs: parseDurationToMs(durationStr),
                                                             decimalHours: row[8] || '0',
                                                             notes: row[13].replace(/^"|"$/g, ''),
                                                             billableTime: row[9].replace(/^"|"$/g, '') || '1',
-                                                            travelDurationMs: row[6] !== '' ? parseInt(row[6]) : null,
-                                                            onSiteDurationMs: row[7] !== '' ? parseInt(row[7]) : null,
+                                                                                                                                                                            travelDurationMs: parseDurationToMs(travelDurStr),
+                                                                                                                                                                            onSiteDurationMs: parseDurationToMs(onSiteDurStr),
                                                             startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
                                                             arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
                                                             travelMileage: row[12] !== '' ? parseFloat(row[12]) : null
@@ -1239,24 +1262,24 @@
                         const csvRows = [headers.join(",")];
 
                         logs.forEach(log => {
-                            const row = [
-                                log.id,
-                                '"' + log.client.replace(/"/g, '""') + '"',
-                                '"' + log.start + '"',
-                                '"' + (log.arrivalTime || "") + '"',
-                                '"' + log.end + '"',
-                                '"' + log.duration + '"',
-                                '"' + (log.travelDuration || "") + '"',
-                                '"' + (log.onSiteDuration || "") + '"',
-                                log.decimalHours,
-                                '"' + (log.billableTime || "") + '"',
-                                (log.startMileage || ""),
-                                (log.arrivalMileage || ""),
-                                (log.travelMileage || ""),
-                                '"' + log.notes.replace(/"/g, '""') + '"'
-                            ];
-                            csvRows.push(row.join(","));
-                                                    });
+                                                    const row = [
+                                                        log.id,
+                                                        '"' + log.client.replace(/"/g, '""') + '"',
+                                                        '"' + log.start + '"',
+                                                        '"' + (log.arrivalTime || "") + '"',
+                                                        '"' + log.end + '"',
+                                                        '"' + log.duration + '"',
+                                                        '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
+                                                        '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
+                                                        log.decimalHours,
+                                                        '"' + (log.billableTime || "") + '"',
+                                                        (log.startMileage || ""),
+                                                        (log.arrivalMileage || ""),
+                                                        (log.travelMileage || ""),
+                                                        '"' + log.notes.replace(/"/g, '""') + '"'
+                                                    ];
+                                                    csvRows.push(row.join(","));
+                                                });
 
                                                     const csvString = csvRows.join("\r\n");
                                                     // Add UTF-8 BOM for Excel compatibility
