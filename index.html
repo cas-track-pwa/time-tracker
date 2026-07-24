@@ -355,7 +355,7 @@
         dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); };
         dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = true;
+        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') !== 'false';
 
         // Save timer state to IndexedDB
         function saveTimerState() {
@@ -558,7 +558,11 @@
               // Mileage toggle
               toggleMileage.addEventListener('change', () => {
                   requestMileage = toggleMileage.checked;
+                  localStorage.setItem('requestMileage', requestMileage.toString());
               });
+              
+              // Initialize mileage toggle from localStorage
+              toggleMileage.checked = requestMileage;
 
               btnMarkArrival.addEventListener('click', () => {
                   if (!isRunning || arrivalTime) return;
