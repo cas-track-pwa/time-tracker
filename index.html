@@ -121,7 +121,7 @@
             <h1>Time Tracker</h1>
             <div class="flex-row-gap">
                                         <button id="btnAddEntry" class="btn-export">Add Entry</button>
-                                        <button id="btnExport" class="btn-export">CSV</button>
+                                        <button id="btnExport" class="btn-export">Export CSV</button>
                                         <input type="file" id="btnImportCsv" accept=".csv" style="display: none;">
                                         <button id="btnImport" class="btn-export">Import CSV</button>
                                         <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
@@ -1138,7 +1138,7 @@
                                                                                                             const durationStr = row[5].replace(/^"|"$/g, '');
                                                                                                             const travelDurStr = row[6].replace(/^"|"$/g, '');
                                                                                                             const onSiteDurStr = row[7].replace(/^"|"$/g, '');
-                                                        
+
                                                                                                             const log = {
                                                             client: row[1].replace(/^"|"$/g, ''),
                                                             start: row[2].replace(/^"|"$/g, ''),
