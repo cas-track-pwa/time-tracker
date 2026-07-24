@@ -103,29 +103,28 @@
         .report-table th { font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; background-color: var(--bg-secondary); }
         .report-total-row { display: flex; justify-content: flex-end; align-items: center; font-weight: 700; font-size: 1rem; margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid var(--border-color); }
         @media print {
-                            body { background-color: #ffffff !important; color: #000000 !important; font-family: Georgia, serif; }
-                            .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; }
-                            header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
-                            #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
-                            .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
-                            #reportContent { max-height: none !important; overflow: visible !important; }
-                            .report-table { page-break-inside: avoid; }
-                            .report-table tr { page-break-inside: avoid; page-break-after: auto; }
-                            .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                        }
+            body { background-color: #ffffff !important; color: #000000 !important; font-family: Georgia, serif; }
+            .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; }
+            header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
+            #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
+            .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
+            #reportContent { max-height: none !important; overflow: visible !important; }
+            .report-table { page-break-inside: avoid; }
+            .report-table tr { page-break-inside: avoid; page-break-after: auto; }
+            .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
     </style>
 </head>
 <body>
     <div class="app-container">
         <header>
-            <h1>Time Tracker</h1>
             <div class="flex-row-gap">
-                                        <button id="btnAddEntry" class="btn-export">Add Entry</button>
-                                        <button id="btnExport" class="btn-export">Export CSV</button>
-                                        <input type="file" id="btnImportCsv" accept=".csv" style="display: none;">
-                                        <button id="btnImport" class="btn-export">Import CSV</button>
-                                        <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
-                                    </div>
+                <button id="btnAddEntry" class="btn-export">Add Entry</button>
+                <button id="btnExport" class="btn-export">Export CSV</button>
+                <input type="file" id="btnImportCsv" accept=".csv" style="display: none;">
+                <button id="btnImport" class="btn-export">Import CSV</button>
+                <button id="btnOpenReport" class="btn-export" style="background-color: var(--primary-hover);">Report</button>
+            </div>
         </header>
 
         <main>
@@ -140,16 +139,16 @@
                     <div id="arrivalBadge" class="arrival-badge hidden"></div>
                 </div>
                 <div class="action-buttons-container">
-                                    <button id="btnAction" class="btn-action start">Start Timer</button>
-                                    <button id="btnMarkArrival" class="btn-action-sec hidden">Mark Arrival</button>
-                                </div>
-                                <div class="form-group" style="margin-top: 0.5rem;">
-                                    <label class="label-title" style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <input type="checkbox" id="toggleMileage" checked>
-                                        <span>Request Mileage</span>
-                                    </label>
-                                </div>
-                            </div>
+                        <button id="btnAction" class="btn-action start">Start Timer</button>
+                        <button id="btnMarkArrival" class="btn-action-sec hidden">Mark Arrival</button>
+                </div>
+                <div class="form-group" style="margin-top: 0.5rem;">
+                    <label class="label-title" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="toggleMileage" checked>
+                        <span>Request Mileage</span>
+                    </label>
+                </div>
+            </div>
 
             <div id="notesModal" class="modal-overlay hidden">
                 <div class="modal-dialog">
@@ -199,40 +198,40 @@
             </div>
 
             <div id="editModal" class="modal-overlay hidden">
-                            <div class="modal-dialog">
-                                <h3 class="modal-title">Edit Log Entry</h3>
-                                <div class="form-group">
-                                    <label class="label-title">Client Name</label>
-                                    <input type="text" id="editClient" class="input-field">
-                                </div>
-                                <div class="form-group">
-                                    <label class="label-title">Start Time</label>
-                                    <input type="datetime-local" id="editStartTime" class="input-field">
-                                </div>
-                                <div class="form-group">
-                                    <label class="label-title">Arrival Time</label>
-                                    <input type="datetime-local" id="editArrivalTime" class="input-field">
-                                </div>
-                                <div class="form-group">
-                                    <label class="label-title">End Time</label>
-                                    <input type="datetime-local" id="editEndTime" class="input-field">
-                                </div>
-                                <div class="form-group">
-                                    <label class="label-title">Work Notes</label>
-                                    <textarea id="editNotes" rows="3" class="textarea-field"></textarea>
-                                </div>
-                                <div class="form-group">
-                                    <label class="label-title">Billable Time (decimal hours)</label>
-                                    <input type="number" id="editBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
-                                </div>
-                                <div class="form-group">
-                                    <label class="label-title">Travel Miles</label>
-                                    <input type="number" id="editMileage" placeholder="Enter miles" class="input-field">
-                                </div>
-                                <div class="flex-row-gap">
-                                    <button id="btnCancelEdit" class="btn-cancel">Cancel</button>
-                                    <button id="btnSaveEdit" class="btn-save-log">Save</button>
-                                </div>
+                <div class="modal-dialog">
+                    <h3 class="modal-title">Edit Log Entry</h3>
+                    <div class="form-group">
+                        <label class="label-title">Client Name</label>
+                        <input type="text" id="editClient" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Start Time</label>
+                        <input type="datetime-local" id="editStartTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Arrival Time</label>
+                        <input type="datetime-local" id="editArrivalTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">End Time</label>
+                        <input type="datetime-local" id="editEndTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Work Notes</label>
+                        <textarea id="editNotes" rows="3" class="textarea-field"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Billable Time (decimal hours)</label>
+                        <input type="number" id="editBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Travel Miles</label>
+                        <input type="number" id="editMileage" placeholder="Enter miles" class="input-field">
+                    </div>
+                    <div class="flex-row-gap">
+                        <button id="btnCancelEdit" class="btn-cancel">Cancel</button>
+                        <button id="btnSaveEdit" class="btn-save-log">Save</button>
+                    </div>
                 </div>
             </div>
 
@@ -244,28 +243,28 @@
                         <input type="text" id="addClient" class="input-field">
                     </div>
                     <div class="form-group">
-                                                    <label class="label-title">Start Time</label>
-                                                    <input type="datetime-local" id="addStartTime" class="input-field">
-                                                </div>
-                                                <div class="form-group">
-                                                    <label class="label-title">Arrival Time</label>
-                                                    <input type="datetime-local" id="addArrivalTime" class="input-field">
-                                                </div>
-                                                <div class="form-group">
-                                                    <label class="label-title">End Time</label>
-                                                    <input type="datetime-local" id="addEndTime" class="input-field">
-                                                </div>
-                                                <div class="form-group">
-                                                    <label class="label-title">Work Notes</label>
-                                                    <textarea id="addNotes" rows="3" class="textarea-field"></textarea>
-                                                </div>
-                                                <div class="form-group">
-                                                    <label class="label-title">Billable Time (decimal hours)</label>
-                                                    <input type="number" id="addBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
-                                                </div>
-                                                <div class="form-group">
-                                                    <label class="label-title">Travel Miles</label>
-                                                    <input type="number" id="addMileage" placeholder="Enter miles" class="input-field">
+                        <label class="label-title">Start Time</label>
+                        <input type="datetime-local" id="addStartTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Arrival Time</label>
+                        <input type="datetime-local" id="addArrivalTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">End Time</label>
+                        <input type="datetime-local" id="addEndTime" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Work Notes</label>
+                        <textarea id="addNotes" rows="3" class="textarea-field"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Billable Time (decimal hours)</label>
+                        <input type="number" id="addBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title">Travel Miles</label>
+                        <input type="number" id="addMileage" placeholder="Enter miles" class="input-field">
                     </div>
                     <div class="flex-row-gap">
                         <button id="btnCancelAdd" class="btn-cancel">Cancel</button>
@@ -344,97 +343,97 @@
         const dbRequest = indexedDB.open("TimeTrackerDB", 2);
 
         dbRequest.onupgradeneeded = (e) => {
-                    db = e.target.result;
-                    if (!db.objectStoreNames.contains("logs")) {
-                        db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
-                    }
-                    if (!db.objectStoreNames.contains("timerState")) {
-                        db.createObjectStore("timerState", { keyPath: "id" });
-                    }
-                };
+              db = e.target.result;
+              if (!db.objectStoreNames.contains("logs")) {
+                  db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+              }
+              if (!db.objectStoreNames.contains("timerState")) {
+                  db.createObjectStore("timerState", { keyPath: "id" });
+              }
+          };
 
         dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); };
-                dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
+        dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-                let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = true;
+        let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = true;
 
-                // Save timer state to IndexedDB
-                                function saveTimerState() {
-                                    if (!db) return;
-                                    if (!db.objectStoreNames.contains("timerState")) return;
-                                    const transaction = db.transaction(["timerState"], "readwrite");
-                                    const store = transaction.objectStore("timerState");
-                                    const state = {
-                                        id: "current",
-                                        startTime: startTime,
-                                        isRunning: isRunning,
-                                        arrivalTime: arrivalTime,
-                                        startMileage: startMileage,
-                                        arrivalMileage: arrivalMileage,
-                                        client: clientInput.value.trim()
-                                    };
-                                    store.put(state);
-                                }
+        // Save timer state to IndexedDB
+        function saveTimerState() {
+            if (!db) return;
+            if (!db.objectStoreNames.contains("timerState")) return;
+            const transaction = db.transaction(["timerState"], "readwrite");
+            const store = transaction.objectStore("timerState");
+            const state = {
+                id: "current",
+                startTime: startTime,
+                isRunning: isRunning,
+                arrivalTime: arrivalTime,
+                startMileage: startMileage,
+                arrivalMileage: arrivalMileage,
+                client: clientInput.value.trim()
+            };
+            store.put(state);
+        }
 
-                // Restore timer state from IndexedDB
-                                function restoreTimerState() {
-                                    if (!db) return;
-                                    if (!db.objectStoreNames.contains("timerState")) return;
-                                    const transaction = db.transaction(["timerState"], "readonly");
-                                    const store = transaction.objectStore("timerState");
-                                    const request = store.get("current");
+        // Restore timer state from IndexedDB
+        function restoreTimerState() {
+            if (!db) return;
+            if (!db.objectStoreNames.contains("timerState")) return;
+            const transaction = db.transaction(["timerState"], "readonly");
+            const store = transaction.objectStore("timerState");
+            const request = store.get("current");
 
-                                    request.onsuccess = () => {
-                                        const state = request.result;
-                                        if (!state || !state.isRunning) return;
+            request.onsuccess = () => {
+                const state = request.result;
+                if (!state || !state.isRunning) return;
 
-                                        startTime = state.startTime;
-                                        arrivalTime = state.arrivalTime;
-                                        startMileage = state.startMileage;
-                                        arrivalMileage = state.arrivalMileage;
-                                        isRunning = true;
-                                        clientInput.value = state.client;
-                                        clientInput.disabled = true;
-                                        activeClientLabel.textContent = "Tracking: " + state.client;
+                startTime = state.startTime;
+                arrivalTime = state.arrivalTime;
+                startMileage = state.startMileage;
+                arrivalMileage = state.arrivalMileage;
+                isRunning = true;
+                clientInput.value = state.client;
+                clientInput.disabled = true;
+                activeClientLabel.textContent = "Tracking: " + state.client;
 
-                                        btnAction.textContent = "End Timer";
-                                        btnAction.classList.remove('start');
-                                        btnAction.classList.add('stop');
-                                        liveTimer.classList.add('running');
-                                        btnMarkArrival.classList.remove('hidden');
-                                        arrivalBadge.classList.add('hidden');
+                btnAction.textContent = "End Timer";
+                btnAction.classList.remove('start');
+                btnAction.classList.add('stop');
+                liveTimer.classList.add('running');
+                btnMarkArrival.classList.remove('hidden');
+                arrivalBadge.classList.add('hidden');
 
-                                        // If arrival time was set, show the badge
-                                        if (arrivalTime) {
-                                            const travelMs = arrivalTime - startTime;
-                                            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
-                                            arrivalBadge.classList.remove('hidden');
-                                            btnMarkArrival.classList.add('hidden');
-                                        }
+                // If arrival time was set, show the badge
+                if (arrivalTime) {
+                    const travelMs = arrivalTime - startTime;
+                    const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+                    arrivalBadge.classList.remove('hidden');
+                    btnMarkArrival.classList.add('hidden');
+                }
 
-                                        timerInterval = setInterval(updateLiveDisplay, 1000);
+                timerInterval = setInterval(updateLiveDisplay, 1000);
 
-                                        // Show appropriate modal based on state
-                                        if (startMileage === null) {
-                                            startMileageInput.value = '';
-                                            startMileageModal.classList.remove('hidden');
-                                            startMileageInput.focus();
-                                        } else if (arrivalMileage === null && arrivalTime) {
-                                            arrivalMileageInput.value = '';
-                                            arrivalMileageModal.classList.remove('hidden');
-                                            arrivalMileageInput.focus();                        }
-                                    };
-                                }
+                // Show appropriate modal based on state
+                if (startMileage === null) {
+                    startMileageInput.value = '';
+                    startMileageModal.classList.remove('hidden');
+                    startMileageInput.focus();
+                } else if (arrivalMileage === null && arrivalTime) {
+                    arrivalMileageInput.value = '';
+                    arrivalMileageModal.classList.remove('hidden');
+                    arrivalMileageInput.focus();                        }
+            };
+        }
 
-                // Clear timer state from IndexedDB
-                                function clearTimerState() {
-                                    if (!db) return;
-                                    if (!db.objectStoreNames.contains("timerState")) return;
-                                    const transaction = db.transaction(["timerState"], "readwrite");
-                                    const store = transaction.objectStore("timerState");
-                                    store.delete("current");
-                                }
+        // Clear timer state from IndexedDB
+        function clearTimerState() {
+            if (!db) return;
+            if (!db.objectStoreNames.contains("timerState")) return;
+            const transaction = db.transaction(["timerState"], "readwrite");
+            const store = transaction.objectStore("timerState");
+            store.delete("current");
+        }
 
         const clientInput = document.getElementById('clientInput');
         const liveTimer = document.getElementById('liveTimer');
@@ -507,79 +506,79 @@
         let clipboardText = "";
 
         btnAction.addEventListener('click', () => {
-                    if (!isRunning) {
-                        const clientName = clientInput.value.trim();
-                        if (!clientName) { alert("Please input a Client Name first."); return; }
+        if (!isRunning) {
+            const clientName = clientInput.value.trim();
+            if (!clientName) { alert("Please input a Client Name first."); return; }
 
-                        isRunning = true;
-                        startTime = Date.now();
-                        arrivalTime = null;
-                        startMileage = null;
-                        arrivalMileage = null;
-                        travelMileage = null;
-                        clientInput.disabled = true;
-                        activeClientLabel.textContent = "Tracking: " + clientName;
+            isRunning = true;
+            startTime = Date.now();
+            arrivalTime = null;
+            startMileage = null;
+            arrivalMileage = null;
+            travelMileage = null;
+            clientInput.disabled = true;
+            activeClientLabel.textContent = "Tracking: " + clientName;
 
-                        btnAction.textContent = "End Timer";
-                        btnAction.classList.remove('start');
-                        btnAction.classList.add('stop');
-                        liveTimer.classList.add('running');
+            btnAction.textContent = "End Timer";
+            btnAction.classList.remove('start');
+            btnAction.classList.add('stop');
+            liveTimer.classList.add('running');
 
-                        btnMarkArrival.classList.remove('hidden');
-                        arrivalBadge.classList.add('hidden');
+            btnMarkArrival.classList.remove('hidden');
+            arrivalBadge.classList.add('hidden');
 
-                        timerInterval = setInterval(updateLiveDisplay, 1000);
+            timerInterval = setInterval(updateLiveDisplay, 1000);
 
-                        // Save timer state for persistence
-                                                saveTimerState();
+            // Save timer state for persistence
+            saveTimerState();
 
-                                                // Show start mileage modal if mileage is requested
-                                                if (requestMileage) {
-                                                    startMileageInput.value = '';
-                                                    startMileageModal.classList.remove('hidden');
-                                                    startMileageInput.focus();
-                                                } else {
-                                                    startMileage = null;
-                                                }
-                    } else {
-                        clearInterval(timerInterval);
-                        isRunning = false;
-                        clearTimerState();
-                        btnAction.textContent = "Start Timer";
-                        btnAction.classList.remove('stop');
-                        btnAction.classList.add('start');
-                        liveTimer.classList.remove('running');
-                        clientInput.disabled = false;
-                        activeClientLabel.textContent = "";
-                        notesModal.classList.remove('hidden');
-                        notesInput.focus();
-                                            }
-                                        });
-
-                                // Mileage toggle
-                                toggleMileage.addEventListener('change', () => {
-                                    requestMileage = toggleMileage.checked;
+            // Show start mileage modal if mileage is requested
+            if (requestMileage) {
+                startMileageInput.value = '';
+                startMileageModal.classList.remove('hidden');
+                startMileageInput.focus();
+            } else {
+                startMileage = null;
+            }
+            } else {
+                clearInterval(timerInterval);
+                isRunning = false;
+                clearTimerState();
+                btnAction.textContent = "Start Timer";
+                btnAction.classList.remove('stop');
+                btnAction.classList.add('start');
+                liveTimer.classList.remove('running');
+                clientInput.disabled = false;
+                activeClientLabel.textContent = "";
+                notesModal.classList.remove('hidden');
+                notesInput.focus();
+                                    }
                                 });
 
-                                btnMarkArrival.addEventListener('click', () => {
-                                            if (!isRunning || arrivalTime) return;
-                                            arrivalTime = Date.now();
-                                            btnMarkArrival.classList.add('hidden');
+              // Mileage toggle
+              toggleMileage.addEventListener('change', () => {
+                  requestMileage = toggleMileage.checked;
+              });
 
-                                            const travelMs = arrivalTime - startTime;
-                                            const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                            arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
-                                            arrivalBadge.classList.remove('hidden');
+              btnMarkArrival.addEventListener('click', () => {
+                          if (!isRunning || arrivalTime) return;
+                          arrivalTime = Date.now();
+                          btnMarkArrival.classList.add('hidden');
 
-                                            // Show arrival mileage modal if mileage is requested
-                                            if (requestMileage) {
-                                                arrivalMileageInput.value = '';
-                                                arrivalMileageModal.classList.remove('hidden');
-                                                arrivalMileageInput.focus();
-                                            } else {
-                                                arrivalMileage = null;
-                                            }
-                                        });
+                          const travelMs = arrivalTime - startTime;
+                          const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+                          arrivalBadge.classList.remove('hidden');
+
+                          // Show arrival mileage modal if mileage is requested
+                          if (requestMileage) {
+                              arrivalMileageInput.value = '';
+                              arrivalMileageModal.classList.remove('hidden');
+                              arrivalMileageInput.focus();
+                          } else {
+                              arrivalMileage = null;
+                          }
+                      });
 
         function updateLiveDisplay() {
             const elapsedMs = Date.now() - startTime;
