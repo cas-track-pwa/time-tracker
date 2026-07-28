@@ -108,10 +108,11 @@
             header, .timer-card, .section-header, #logHistory, #notesModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnCopyReportText, #btnPrintReportAction, .flex-row-gap { display: none !important; }
             #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; }
             .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; }
-            #reportContent { max-height: none !important; overflow: visible !important; }
-            .report-table { page-break-inside: avoid; break-inside: avoid; }
-            .report-table tr { page-break-inside: avoid; page-break-after: auto; break-after: auto; }
-            .report-table tbody tr { page-break-inside: avoid; break-inside: avoid; }
+            #reportContent { max-height: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; page-break-before: auto; }
+            .report-table { width: 100%; border-collapse: collapse; }
+            .report-table tr { break-inside: avoid; page-break-inside: avoid; }
+            .report-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
+            .report-table thead { display: table-header-group; }
             .report-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             }
     </style>
