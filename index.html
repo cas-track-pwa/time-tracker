@@ -564,7 +564,7 @@
                   requestMileage = toggleMileage.checked;
                   localStorage.setItem('requestMileage', requestMileage.toString());
               });
-              
+
               // Initialize mileage toggle from localStorage
               toggleMileage.checked = requestMileage;
 
@@ -1246,9 +1246,6 @@
         });
 
         btnPrintReportAction.addEventListener('click', () => {
-            if (confirm('Would you like to export the data as CSV before printing?')) {
-                exportToCSV();
-            }
             window.print();
         });
 
