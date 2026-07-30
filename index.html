@@ -1302,9 +1302,9 @@
             const colgroupHtml = colgroup ? colgroup.outerHTML : '';
             let html = '';
 
-            // Use a more conservative estimate - 8 rows per page to ensure
+            // Use a very conservative estimate - 5 rows per page to ensure
             // rows don't get cut off due to variable height
-            const ROWS_PER_PAGE = 8;
+            const ROWS_PER_PAGE = 5;
 
             for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
                 const chunk = rows.slice(i, i + ROWS_PER_PAGE);
