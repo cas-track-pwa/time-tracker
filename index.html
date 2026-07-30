@@ -1507,6 +1507,7 @@
                     return;
                 }
 
+                let hasMileage = filteredLogs.some(log => log.travelMileage && log.travelMileage > 0);
                 let tableHtml = '<table class="report-table">';
                 tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 25%;">Timeline</th><th style="width: 13%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
                 tableHtml += '<tbody>';
@@ -1542,7 +1543,9 @@
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
                     tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
-                    tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
+                    if (hasMileage) {
+                        tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
+                    }
                     tableHtml += '</tr>';
                 });
 
