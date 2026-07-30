@@ -1287,7 +1287,7 @@
         // gets its own <thead>. iOS Safari ignores display:table-header-group
         // for print repetition, so this is the only universal fix.
         let originalReportHtml = null;
-        const ROWS_PER_PAGE = 12;
+        const ROWS_PER_PAGE = 20;
 
         function splitTablesForPrint() {
             const table = reportContent.querySelector('table.report-table');
@@ -1305,7 +1305,7 @@
 
             for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
                 const chunk = rows.slice(i, i + ROWS_PER_PAGE);
-                const pageBreak = i > 0 ? ' report-page-break' : '';
+                const pageBreak = i > 0 ? ' page-break-before' : '';
                 html += '<table class="report-table' + pageBreak + '">';
                 html += colgroupHtml + theadHtml + '<tbody>';
                 chunk.forEach(row => { html += row.outerHTML; });
@@ -1492,8 +1492,13 @@
                     return;
                 }
 
+                let hasMileage = filteredLogs.some(log => log.travelMileage && log.travelMileage > 0);
                 let tableHtml = '<table class="report-table">';
-                tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 25%;">Timeline</th><th style="width: 13%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
+                if (hasMileage) {
+                    tableHtml += '<thead><tr><th style="width: 14%;">Date</th><th style="width: 24%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 26%;">Timeline</th><th style="width: 14%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
+                } else {
+                    tableHtml += '<thead><tr><th style="width: 16%;">Date</th><th style="width: 26%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 28%;">Timeline</th><th style="width: 18%;">Billable Time</th></tr></thead>';
+                }
                 tableHtml += '<tbody>';
 
                 filteredLogs.forEach(log => {
@@ -1527,7 +1532,9 @@
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
                     tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
-                    tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
+                    if (hasMileage) {
+                        tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
+                    }
                     tableHtml += '</tr>';
                 });
 
