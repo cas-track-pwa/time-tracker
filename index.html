@@ -1287,7 +1287,7 @@
         // gets its own <thead>. iOS Safari ignores display:table-header-group
         // for print repetition, so this is the only universal fix.
         let originalReportHtml = null;
-        const ROWS_PER_PAGE = 20;
+        const ROWS_PER_PAGE = 10;
 
         function splitTablesForPrint() {
             const table = reportContent.querySelector('table.report-table');
