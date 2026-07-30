@@ -105,16 +105,29 @@
         .report-table th { font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; background-color: var(--bg-secondary); }
         .report-total-row { display: flex; justify-content: flex-end; align-items: center; font-weight: 700; font-size: 1rem; margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid var(--border-color); }
         @media print {
+            html, body, .app-container, main, #reportModal, .modal-dialog, #reportContent {
+                position: static !important;
+                overflow: visible !important;
+                height: auto !important;
+                max-height: none !important;
+                min-height: 0 !important;
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transform: none !important;
+                box-shadow: none !important;
+                float: none !important;
+                -webkit-overflow-scrolling: auto !important;
+            }
             body { background-color: #ffffff !important; color: #000000 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-            .app-container { box-shadow: none !important; max-width: 100% !important; width: 100% !important; min-height: auto !important; height: auto !important; overflow: visible !important; }
-            main { padding: 0 !important; overflow: visible !important; height: auto !important; display: block !important; }
             header, .timer-card, .section-header, #logHistory, #notesModal, #partsModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnPrintReportAction, .flex-row-gap { display: none !important; }
-            #reportModal { position: static !important; background-color: transparent !important; padding: 0 !important; display: block !important; z-index: auto !important; height: auto !important; }
-            .modal-dialog { box-shadow: none !important; max-width: 100% !important; width: 100% !important; padding: 0 !important; height: auto !important; background: transparent !important; }
-            #reportContent { max-height: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; height: auto !important; }
-            .report-table { width: 100% !important; border-collapse: separate !important; border-spacing: 0 !important; page-break-inside: auto; }
-            .report-table thead { display: table-header-group !important; break-after: avoid !important; page-break-after: avoid !important; }
-            .report-table tr, .report-table tbody tr, .report-table td, .report-table th { break-inside: avoid !important; page-break-inside: avoid !important; }
+            #reportModal { inset: auto !important; background-color: transparent !important; z-index: auto !important; width: 100% !important; max-width: 100% !important; }
+            .modal-dialog { width: 100% !important; max-width: 100% !important; border-radius: 0 !important; background: transparent !important; }
+            .report-table { width: 100% !important; display: table !important; border-collapse: separate !important; border-spacing: 0 !important; page-break-inside: auto; table-layout: fixed !important; }
+            .report-table thead { display: table-header-group !important; break-after: avoid !important; page-break-after: avoid !important; -webkit-column-break-after: avoid !important; }
+            .report-table tbody { display: table-row-group !important; }
+            .report-table tr { display: table-row !important; break-inside: avoid !important; page-break-inside: avoid !important; -webkit-column-break-inside: avoid !important; }
+            .report-table td, .report-table th { break-inside: avoid !important; page-break-inside: avoid !important; -webkit-column-break-inside: avoid !important; word-wrap: break-break-word; overflow-wrap: break-word; }
             .report-table th { background-color: #f3f4f6 !important; border-bottom: 2pt solid #475569 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .report-table td { line-height: 1.3 !important; height: auto !important; padding: 0.5rem 0.5rem !important; white-space: normal; border-bottom: 1pt solid #94a3b8 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             @page { size: letter portrait; margin: 0.5in; }
@@ -1288,7 +1301,9 @@
                 const todayStr = new Date().toISOString().slice(0, 10);
                 document.title = "billing-report-" + todayStr;
             }
-            window.print();
+            setTimeout(() => {
+                window.print();
+            }, 50);
         });
 
         function exportToCSV() {
@@ -1436,7 +1451,7 @@
                 }
 
                 let tableHtml = '<table class="report-table">';
-                tableHtml += '<thead><tr><th>Date</th><th>Client</th><th>Invoice #</th><th>Timeline</th><th>Billable Time</th><th>Mileage</th></tr></thead>';
+                tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 25%;">Timeline</th><th style="width: 13%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
                 tableHtml += '<tbody>';
 
                 filteredLogs.forEach(log => {
