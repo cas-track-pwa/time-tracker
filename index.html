@@ -104,26 +104,30 @@
         .report-table th, .report-table td { padding: 0.625rem; border-bottom: 1px solid var(--border-color); }
         .report-table th { font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; background-color: var(--bg-secondary); }
         .report-total-row { display: flex; justify-content: flex-end; align-items: center; font-weight: 700; font-size: 1rem; margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid var(--border-color); }
+        /* Dedicated print container, kept completely outside the on-screen
+           app shell (which uses position:fixed modals + flex layouts).
+           iOS Safari's print engine frequently fails to re-paginate content
+           that ever lived inside a fixed-position / flex ancestor, even once
+           @media print overrides those to static/block - it just renders
+           whatever fit on the first "page" of the pre-print layout and
+           silently drops the rest. Printing from a plain, always-static,
+           body-level element sidesteps that bug entirely. */
+        #printArea { display: none; }
         @media print {
-            html, body, .app-container, main, #reportModal, .modal-dialog, #reportContent {
-                position: static !important;
-                overflow: visible !important;
-                height: auto !important;
-                max-height: none !important;
-                min-height: 0 !important;
+            html, body { height: auto !important; overflow: visible !important; background: #ffffff !important; }
+            .app-container { display: none !important; }
+            #printArea {
                 display: block !important;
+                position: static !important;
                 width: 100% !important;
                 max-width: 100% !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                transform: none !important;
-                box-shadow: none !important;
-                border-radius: 0 !important;
-                background: white !important;
-                -webkit-overflow-scrolling: auto !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             }
-            body { background-color: #ffffff !important; color: #000000 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-            header, .timer-card, .section-header, #logHistory, #notesModal, #partsModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnPrintReportAction, .flex-row-gap { display: none !important; }
+            #printArea .print-report-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
             .report-table { width: 100% !important; border-collapse: separate !important; border-spacing: 0 !important; table-layout: fixed !important; }
             .report-table thead { display: table-header-group !important; }
             .report-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
@@ -378,6 +382,8 @@
         </main>
     </div>
 
+    <div id="printArea"></div>
+
     <script>
         let db;
         const dbRequest = indexedDB.open("TimeTrackerDB", 2);
@@ -498,6 +504,7 @@
         const btnCloseReport = document.getElementById('btnCloseReport');
         const reportContent = document.getElementById('reportContent');
         const btnPrintReportAction = document.getElementById('btnPrintReportAction');
+        const printArea = document.getElementById('printArea');
 
         const reportRangeModal = document.getElementById('reportRangeModal');
         const btnCancelReportRange = document.getElementById('btnCancelReportRange');
@@ -1283,68 +1290,73 @@
 
         let originalTitle = document.title;
 
-        // Split a single report table into per-page tables so every page
-        // gets its own <thead>. iOS Safari ignores display:table-header-group
-        // for print repetition, so this is the only universal fix.
-        let originalReportHtml = null;
+        // Build the printable report into #printArea - a plain, always-static
+        // element parented directly under <body>, completely outside the
+        // on-screen modal (position:fixed) and flex-layout app shell.
+        //
+        // iOS Safari's print engine is unreliable at re-paginating content
+        // that ever lived inside a fixed-position / flex ancestor: even once
+        // @media print flips those ancestors to static/block, it often just
+        // renders whatever fit on the first "page" of the pre-print layout
+        // and silently drops everything after. Printing from a dedicated
+        // static container sidesteps that bug entirely.
+        //
+        // Splitting into one <table> per page (each with its own <thead>) is
+        // also required separately, since iOS Safari ignores
+        // display:table-header-group for print header repetition.
+        const ROWS_PER_PAGE = 10;
 
-        function splitTablesForPrint() {
+        function buildPrintArea() {
             const table = reportContent.querySelector('table.report-table');
-            if (!table) return;
-            originalReportHtml = reportContent.innerHTML;
+            if (!table) {
+                printArea.innerHTML = '';
+                return;
+            }
 
             const thead = table.querySelector('thead');
-            const rows = Array.from(table.querySelectorAll('tbody tr'));
-            if (rows.length === 0) return;
-
-            const theadHtml = thead.outerHTML;
+            const theadHtml = thead ? thead.outerHTML : '';
             const colgroup = table.querySelector('colgroup');
             const colgroupHtml = colgroup ? colgroup.outerHTML : '';
-            let html = '';
+            const rows = Array.from(table.querySelectorAll('tbody tr'));
 
-            // Use a very conservative estimate - 5 rows per page to ensure
-            // rows don't get cut off due to variable height
-            const ROWS_PER_PAGE = 10;
-
+            let tablesHtml = '';
             for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
                 const chunk = rows.slice(i, i + ROWS_PER_PAGE);
-                const pageBreak = i > 0 ? ' style="page-break-before: always;"' : '';
-                html += '<table class="report-table"' + pageBreak + '>';
-                html += colgroupHtml + theadHtml + '<tbody>';
-                chunk.forEach(row => { html += row.outerHTML; });
-                html += '</tbody></table>';
+                const pageBreak = i > 0 ? ' report-page-break' : '';
+                tablesHtml += '<table class="report-table' + pageBreak + '">';
+                tablesHtml += colgroupHtml + theadHtml + '<tbody>';
+                chunk.forEach(row => { tablesHtml += row.outerHTML; });
+                tablesHtml += '</tbody></table>';
             }
 
-            reportContent.innerHTML = html;
+            printArea.innerHTML = '<div class="print-report-title">Billing Summary</div>' + tablesHtml;
         }
 
-        function restoreTablesAfterPrint() {
-            if (originalReportHtml !== null) {
-                reportContent.innerHTML = originalReportHtml;
-                originalReportHtml = null;
-            }
+        function setPrintTitle() {
+            originalTitle = document.title;
+            const todayStr = new Date().toISOString().slice(0, 10);
+            document.title = "billing-report-" + todayStr;
+        }
+
+        function restorePrintTitle() {
             document.title = originalTitle || "Time Tracker";
         }
 
         window.addEventListener('beforeprint', () => {
             if (reportModal && !reportModal.classList.contains('hidden')) {
-                originalTitle = document.title;
-                const todayStr = new Date().toISOString().slice(0, 10);
-                document.title = "billing-report-" + todayStr;
-                splitTablesForPrint();
+                setPrintTitle();
+                buildPrintArea();
             }
         });
 
         window.addEventListener('afterprint', () => {
-            restoreTablesAfterPrint();
+            restorePrintTitle();
         });
 
         btnPrintReportAction.addEventListener('click', () => {
             if (!reportModal.classList.contains('hidden')) {
-                originalTitle = document.title;
-                const todayStr = new Date().toISOString().slice(0, 10);
-                document.title = "billing-report-" + todayStr;
-                splitTablesForPrint();
+                setPrintTitle();
+                buildPrintArea();
             }
             setTimeout(() => {
                 window.print();
@@ -1495,13 +1507,8 @@
                     return;
                 }
 
-                let hasMileage = filteredLogs.some(log => log.travelMileage && log.travelMileage > 0);
                 let tableHtml = '<table class="report-table">';
-                if (hasMileage) {
-                    tableHtml += '<thead><tr><th style="width: 14%;">Date</th><th style="width: 24%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 26%;">Timeline</th><th style="width: 14%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
-                } else {
-                    tableHtml += '<thead><tr><th style="width: 16%;">Date</th><th style="width: 26%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 28%;">Timeline</th><th style="width: 18%;">Billable Time</th></tr></thead>';
-                }
+                tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 25%;">Timeline</th><th style="width: 13%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
                 tableHtml += '<tbody>';
 
                 filteredLogs.forEach(log => {
@@ -1535,9 +1542,7 @@
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
                     tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
                     tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
-                    if (hasMileage) {
-                        tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
-                    }
+                    tableHtml += `<td>${log.travelMileage ? log.travelMileage + ' mi' : ''}</td>`;
                     tableHtml += '</tr>';
                 });
 
