@@ -1308,8 +1308,8 @@
 
             for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
                 const chunk = rows.slice(i, i + ROWS_PER_PAGE);
-                const pageBreak = i > 0 ? ' report-page-break' : '';
-                html += '<table class="report-table' + pageBreak + '">';
+                const pageBreak = i > 0 ? ' style="page-break-before: always;"' : '';
+                html += '<table class="report-table"' + pageBreak + '>';
                 html += colgroupHtml + theadHtml + '<tbody>';
                 chunk.forEach(row => { html += row.outerHTML; });
                 html += '</tbody></table>';
