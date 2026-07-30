@@ -1304,7 +1304,7 @@
 
             // Use a very conservative estimate - 5 rows per page to ensure
             // rows don't get cut off due to variable height
-            const ROWS_PER_PAGE = 5;
+            const ROWS_PER_PAGE = 10;
 
             for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
                 const chunk = rows.slice(i, i + ROWS_PER_PAGE);
