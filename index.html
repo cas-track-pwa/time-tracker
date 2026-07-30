@@ -112,24 +112,24 @@
                 max-height: none !important;
                 min-height: 0 !important;
                 display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 transform: none !important;
                 box-shadow: none !important;
-                float: none !important;
+                border-radius: 0 !important;
+                background: white !important;
                 -webkit-overflow-scrolling: auto !important;
             }
             body { background-color: #ffffff !important; color: #000000 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
             header, .timer-card, .section-header, #logHistory, #notesModal, #partsModal, #clearConfirmModal, .modal-overlay:not(#reportModal), #btnCloseReport, #btnPrintReportAction, .flex-row-gap { display: none !important; }
-            #reportModal { inset: auto !important; background-color: transparent !important; z-index: auto !important; width: 100% !important; max-width: 100% !important; }
-            .modal-dialog { width: 100% !important; max-width: 100% !important; border-radius: 0 !important; background: transparent !important; }
-            .report-table { width: 100% !important; display: table !important; border-collapse: collapse !important; border-spacing: 0 !important; page-break-inside: auto; }
-            .report-table thead { display: table-header-group !important; break-after: avoid !important; page-break-after: avoid !important; -webkit-column-break-after: avoid !important; }
-            .report-table tbody { display: table-row-group !important; }
-            .report-table tr { display: table-row !important; break-inside: avoid !important; page-break-inside: avoid !important; -webkit-column-break-inside: avoid !important; }
-            .report-table td, .report-table th { break-inside: avoid !important; page-break-inside: avoid !important; -webkit-column-break-inside: avoid !important; word-wrap: break-break-word; overflow-wrap: break-word; }
+            .report-table { width: 100% !important; border-collapse: separate !important; border-spacing: 0 !important; table-layout: fixed !important; }
+            .report-table thead { display: table-header-group !important; }
+            .report-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
             .report-table th { background-color: #f3f4f6 !important; border-bottom: 2pt solid #475569 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            .report-table td { line-height: 1.3 !important; height: auto !important; padding: 0.5rem 0.5rem !important; white-space: normal; border-bottom: 1pt solid #94a3b8 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .report-table td { line-height: 1.3 !important; padding: 0.5rem !important; white-space: normal; border-bottom: 1pt solid #94a3b8 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .report-page-break { page-break-before: always !important; break-before: page !important; }
             @page { size: letter portrait; margin: 0.5in; }
         }
     </style>
@@ -1283,16 +1283,57 @@
 
         let originalTitle = document.title;
 
+        // Split a single report table into per-page tables so every page
+        // gets its own <thead>. iOS Safari ignores display:table-header-group
+        // for print repetition, so this is the only universal fix.
+        let originalReportHtml = null;
+        const ROWS_PER_PAGE = 12;
+
+        function splitTablesForPrint() {
+            const table = reportContent.querySelector('table.report-table');
+            if (!table) return;
+            originalReportHtml = reportContent.innerHTML;
+
+            const thead = table.querySelector('thead');
+            const rows = Array.from(table.querySelectorAll('tbody tr'));
+            if (rows.length <= ROWS_PER_PAGE) return; // fits on one page
+
+            const theadHtml = thead.outerHTML;
+            const colgroup = table.querySelector('colgroup');
+            const colgroupHtml = colgroup ? colgroup.outerHTML : '';
+            let html = '';
+
+            for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
+                const chunk = rows.slice(i, i + ROWS_PER_PAGE);
+                const pageBreak = i > 0 ? ' report-page-break' : '';
+                html += '<table class="report-table' + pageBreak + '">';
+                html += colgroupHtml + theadHtml + '<tbody>';
+                chunk.forEach(row => { html += row.outerHTML; });
+                html += '</tbody></table>';
+            }
+
+            reportContent.innerHTML = html;
+        }
+
+        function restoreTablesAfterPrint() {
+            if (originalReportHtml !== null) {
+                reportContent.innerHTML = originalReportHtml;
+                originalReportHtml = null;
+            }
+            document.title = originalTitle || "Time Tracker";
+        }
+
         window.addEventListener('beforeprint', () => {
             if (reportModal && !reportModal.classList.contains('hidden')) {
                 originalTitle = document.title;
                 const todayStr = new Date().toISOString().slice(0, 10);
                 document.title = "billing-report-" + todayStr;
+                splitTablesForPrint();
             }
         });
 
         window.addEventListener('afterprint', () => {
-            document.title = originalTitle || "Time Tracker";
+            restoreTablesAfterPrint();
         });
 
         btnPrintReportAction.addEventListener('click', () => {
@@ -1300,10 +1341,11 @@
                 originalTitle = document.title;
                 const todayStr = new Date().toISOString().slice(0, 10);
                 document.title = "billing-report-" + todayStr;
+                splitTablesForPrint();
             }
             setTimeout(() => {
                 window.print();
-            }, 50);
+            }, 100);
         });
 
         function exportToCSV() {
