@@ -1298,7 +1298,7 @@
         // that ever lived inside a fixed-position / flex ancestor: even once
         // @media print flips those ancestors to static/block, it often just
         // renders whatever fit on the first "page" of the pre-print layout
-        // and silently drops everything after. Printing from a dedicated
+        // and silently drops the rest. Printing from a dedicated
         // static container sidesteps that bug entirely.
         //
         // Splitting into one <table> per page (each with its own <thead>) is
@@ -1509,7 +1509,11 @@
 
                 let hasMileage = filteredLogs.some(log => log.travelMileage && log.travelMileage > 0);
                 let tableHtml = '<table class="report-table">';
-                tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 25%;">Timeline</th><th style="width: 13%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
+                if (hasMileage) {
+                    tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 25%;">Timeline</th><th style="width: 13%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
+                } else {
+                    tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 30%;">Timeline</th><th style="width: 15%;">Billable Time</th></tr></thead>';
+                }
                 tableHtml += '<tbody>';
 
                 filteredLogs.forEach(log => {
