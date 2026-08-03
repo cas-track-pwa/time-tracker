@@ -1336,24 +1336,17 @@ function escapeHtml(str) {
 // Dark mode toggle
 const btnDarkMode = document.getElementById('btnDarkMode');
 
-function initDarkMode() {
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-        document.body.classList.add('dark');
-        btnDarkMode.textContent = '☀️';
-    }
-    
-    btnDarkMode.addEventListener('click', () => {
-        document.body.classList.toggle('dark');
-        const isDark = document.body.classList.contains('dark');
-        localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        btnDarkMode.textContent = isDark ? '☀️' : '🌙';
-    });
-}
+// Dark mode already initialized inline in <head>
+const isDarkMode = document.documentElement.classList.contains('dark');
+btnDarkMode.textContent = isDarkMode ? '☀️' : '🌙';
 
-initDarkMode();
+btnDarkMode.addEventListener('click', () => {
+    document.documentElement.classList.toggle('dark');
+    const isDark = document.documentElement.classList.contains('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    btnDarkMode.textContent = isDark ? '☀️' : '🌙';
+});
+
 
 // Service Worker registration
 if ('serviceWorker' in navigator) {
