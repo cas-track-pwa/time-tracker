@@ -14,7 +14,7 @@ dbRequest.onupgradeneeded = (e) => {
 dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') !== 'false';
+let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true';
 
 // Save timer state to IndexedDB
 function saveTimerState() {
@@ -600,6 +600,9 @@ window.editLog = function(id) {
     request.onerror = () => {
         alert('Failed to load the log entry for editing.');
     };
+    transaction.onerror = () => {
+        alert('Database error while loading log entry for editing.');
+    };
 };
 
 // Delete log function - opens the custom confirmation modal
@@ -796,8 +799,13 @@ if (arrival) {
 }
 
 let selectedTravelMileage = null;
-if (addMileage.value.trim() !== '' && !isNaN(parseFloat(addMileage.value)) && parseFloat(addMileage.value) >= 0) {
-    selectedTravelMileage = parseFloat(addMileage.value);
+if (addMileage.value.trim() !== '') {
+    const mileageVal = parseFloat(addMileage.value);
+    if (isNaN(mileageVal) || mileageVal < 0) {
+        alert('Travel Miles must be a non-negative number.');
+        return;
+    }
+    selectedTravelMileage = mileageVal;
 }
 
 const newLog = {
@@ -1030,7 +1038,7 @@ function parseCsvRow(row) {
     }
     result.push(current);
     return result;
-    }
+}
 
 btnCloseReport.addEventListener('click', () => {
     reportModal.classList.add('hidden');
