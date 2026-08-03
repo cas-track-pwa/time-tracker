@@ -1,9 +1,10 @@
-// Service Worker for Time Tracker PWA
-const CACHE_NAME = 'time-tracker-v1';
+// Service Worker for Time Tracker PWA — iOS offline support
+const CACHE_NAME = 'time-tracker-v2';
 const urlsToCache = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/manifest.webapp',
   '/icons/icon.svg',
   '/icons/icon-16.png',
   '/icons/icon-32.png',
@@ -19,33 +20,20 @@ const urlsToCache = [
   '/icons/icon-384.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-192.png',
-  '/icons/icon-maskable-512.png'
+  '/icons/icon-maskable-512.png',
+  '/icons/apple-touch-icon.png'
 ];
 
-// Install event - cache assets
+// Install event — cache all app assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(urlsToCache))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Fetch event - serve from cache, fall back to network
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached response or fetch from network
-        return response || fetch(event.request);
-      })
-      .catch(() => {
-        // If both cache and network fail, return the offline page
-        return caches.match('/index.html');
-      })
-  );
-});
-
-// Activate event - clean up old caches
+// Activate event — clean up old caches
 self.addEventListener('activate', (event) => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
@@ -57,6 +45,41 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
+  );
+});
+
+// Fetch event — serve from cache, fall back to network
+self.addEventListener('fetch', (event) => {
+  // For navigation requests, try cache first, then network, then cached index.html
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match('/index.html');
+      })
+    );
+    return;
+  }
+
+  // For other requests, use cache-first strategy
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => {
+        if (response) return response;
+        return fetch(event.request).then((fetchResponse) => {
+          // Cache the new response for future offline use
+          if (fetchResponse && fetchResponse.status === 200) {
+            const responseClone = fetchResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return fetchResponse;
+        });
+      })
+      .catch(() => {
+        // If both cache and network fail, return the cached index.html
+        return caches.match('/index.html');
+      })
   );
 });
