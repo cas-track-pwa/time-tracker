@@ -1374,5 +1374,19 @@ if ('serviceWorker' in navigator) {
             .catch(registrationError => {
                 console.log('SW registration failed: ', registrationError);
             });
+
+        async function login(email) {
+          const response = await fetch(`${API_BASE}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          const data = await response.json();
+          if (data.token) {
+            localStorage.setItem('authToken', data.token);
+            localStorage.setItem('userEmail', data.email);
+          }
+          return data;
+        }
     });
 }

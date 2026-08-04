@@ -3,8 +3,8 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [vars]
-# JWT secret for token signing (change this in production!)
-JWT_SECRET = "gzlwekHMwfbZUOTDkRWjs0fO5Xy+dwqt0qZXMq8Uxao="
+# JWT_SECRET should be set via wrangler secret put JWT_SECRET
+# Run: npx wrangler secret put JWT_SECRET
 
 # KV namespaces
 [[kv_namespaces]]
@@ -13,7 +13,7 @@ id = "5fe095687b3e47778649586256073f69"
 
 [[kv_namespaces]]
 binding = "ASSETS"
-id = "your-assets-kv-id-here"
+id = "d7d5bf8468034151be4ef64b4862a876"
 
 # D1 database configuration
 [[d1_databases]]
@@ -22,10 +22,14 @@ database_name = "time-tracker"
 database_id = "55a0bff8-e371-477c-867d-d8b38cac4066"
 
 [wrangler]
-# Configuration for publishing
 account_id = "ebf143a278b2c6796d9102d21a378e7a"
 zone_id = "your-zone-id"
 workers_dev = true
+
+# For local development
+[dev]
+port = 8787
+ip = "127.0.0.1"
 
 [triggers]
 crons = []
