@@ -6,6 +6,9 @@ param (
     [string]$NamespaceId
 )
 
+# Note: With the [assets] binding in wrangler.toml, `wrangler deploy` automatically
+# uploads static assets. This script is optional for manual KV uploads.
+
 # Verify directory path
 if (-not (Test-Path -Path $AssetDir)) {
     Write-Error "Directory '$AssetDir' does not exist."

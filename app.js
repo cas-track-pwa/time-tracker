@@ -1111,6 +1111,7 @@ window.addEventListener('beforeprint', () => {
 
 window.addEventListener('afterprint', () => {
     restorePrintTitle();
+    printArea.innerHTML = '';
 });
 
 btnPrintReportAction.addEventListener('click', () => {
@@ -1355,7 +1356,9 @@ function escapeHtml(str) {
 
 // --- Cloud Sync (Offline-First Backup) ---
 
-const API_BASE = 'https://time-tracker.your-worker-subdomain.workers.dev';
+// API base URL — update this to your actual Worker URL before deployment.
+// In production, this should match your deployed Worker URL (e.g. https://time-tracker.your-subdomain.workers.dev)
+const API_BASE = 'https://time-tracker.alexs-cas.workers.dev';
 
 function isAuthenticated() {
     return !!localStorage.getItem('authToken');
@@ -1504,9 +1507,42 @@ if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js')
             .then(registration => {
                 console.log('SW registered: ', registration);
+                // Notify user if a new service worker is waiting to activate
+                if (registration.waiting) {
+                    showUpdateAvailablePrompt();
+                }
+                registration.addEventListener('updatefound', () => {
+                    const installingWorker = registration.installing;
+                    if (installingWorker) {
+                        installingWorker.addEventListener('statechange', () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                showUpdateAvailablePrompt();
+                            }
+                        });
+                    }
+                });
             })
             .catch(registrationError => {
                 console.log('SW registration failed: ', registrationError);
             });
     });
+}
+
+function showUpdateAvailablePrompt() {
+    const reloadBtn = document.createElement('button');
+    reloadBtn.textContent = 'Reload';
+    reloadBtn.style.cssText = 'margin-left: 0.5rem; padding: 0.25rem 0.5rem; border: none; border-radius: 0.25rem; background: var(--primary); color: white; cursor: pointer; font-size: 0.75rem;';
+    reloadBtn.onclick = () => location.reload();
+
+    const banner = document.createElement('div');
+    banner.id = 'updateBanner';
+    banner.style.cssText = 'position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem 1rem; box-shadow: var(--shadow-lg); font-size: 0.875rem; color: var(--text-main); z-index: 1000; display: flex; align-items: center; gap: 0.5rem;';
+    banner.innerHTML = '<span>New version available!</span>';
+    banner.appendChild(reloadBtn);
+    document.body.appendChild(banner);
+
+    // Auto-dismiss after 10 seconds
+    setTimeout(() => {
+        if (banner.parentNode) banner.parentNode.removeChild(banner);
+    }, 10000);
 }

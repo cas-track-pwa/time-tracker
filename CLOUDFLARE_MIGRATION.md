@@ -51,12 +51,14 @@ Update `wrangler.toml` with your:
 
 ### 5. Deploy
 ```bash
-# Deploy to workers.dev
+# Deploy to workers.dev (automatically uploads static assets)
 wrangler deploy
 
 # Or deploy to custom domain
 wrangler deploy --zone yourdomain.com
 ```
+
+Static assets (HTML, CSS, JS, icons, manifest) are automatically uploaded to the ASSETS binding during deploy — no manual KV upload step required.
 
 ## API Endpoints
 
@@ -142,7 +144,7 @@ const response = await fetch(url, {
 1. **Password Hashing**: Replace placeholder with bcrypt/argon2
 2. **JWT Security**: Use proper JWT library with HS256/RS256
 3. **HTTPS**: All traffic is encrypted by default on Cloudflare
-4. **CORS**: Configure allowed origins in wrangler.toml
+4. **CORS**: Set `ALLOWED_ORIGIN` secret to your production domain (e.g., `npx wrangler secret put ALLOWED_ORIGIN`)
 5. **Rate Limiting**: Add rate limiting middleware
 
 ## Testing Locally
@@ -160,7 +162,7 @@ wrangler d1 execute time-tracker --local < migrations/001_initial.sql
 - [ ] Update JWT_SECRET to a secure random value
 - [ ] Configure custom domain (optional)
 - [ ] Set up SSL certificate (automatic with Cloudflare)
-- [ ] Configure CORS for your domain
+- [ ] Set ALLOWED_ORIGIN secret to your production domain
 - [ ] Add rate limiting
 - [ ] Set up monitoring/alerts
 - [ ] Test authentication flow

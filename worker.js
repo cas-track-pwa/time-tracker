@@ -1,10 +1,24 @@
 // Cloudflare Workers API endpoints for Time Tracker
 // This file will be deployed as a Cloudflare Worker
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+// CORS configuration — restrict ALLOWED_ORIGIN in production via wrangler secret/vars
+// For local dev, defaults to '*' (all origins)
+const getCORSHeaders = (origin, env) => {
+  // In production, use the ALLOWED_ORIGIN env var if set; otherwise echo the request origin
+  // For local dev, default to '*' (all origins)
+  let allowedOrigin;
+  if (env && env.ALLOWED_ORIGIN) {
+    allowedOrigin = env.ALLOWED_ORIGIN;
+  } else if (origin) {
+    allowedOrigin = origin;
+  } else {
+    allowedOrigin = '*';
+  }
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 };
 
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -16,18 +30,32 @@ export default {
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: CORS_HEADERS });
+      return new Response(null, { headers: getCORSHeaders(request.headers.get('origin'), env) });
     }
+
+    let response;
 
     // API routes
     if (pathname.startsWith('/api/')) {
-      return handleAPI(request, env, url);
+      response = await handleAPI(request, env, url);
+    } else {
+      // Serve static assets without requiring auth header.
+      // The client-side app.js handles authentication by reading the token
+      // from localStorage and including it in API requests.
+      response = await serveStaticAsset(request, env, url);
     }
 
-    // Serve static assets without requiring auth header.
-    // The client-side app.js handles authentication by reading the token
-    // from localStorage and including it in API requests.
-    return serveStaticAsset(request, env, url);
+    // Add configurable CORS headers to all responses
+    const headers = new Headers(response.headers);
+    const corsHeaders = getCORSHeaders(request.headers.get('origin'), env);
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      headers.set(key, value);
+    }
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   }
 };
 
@@ -41,16 +69,11 @@ async function isAuthenticatedRequest(request, env) {
 }
 
 // Add CORS headers to a Response
+// Note: CORS headers are now added at the fetch handler level via getCORSHeaders()
+// for configurable origin support. This function is kept for backward compatibility
+// but no longer sets headers (the fetch handler handles it).
 function withCORS(response) {
-  const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(CORS_HEADERS)) {
-    headers.set(key, value);
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return response;
 }
 
 function showLoginPage() {
@@ -61,11 +84,11 @@ function showLoginPage() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Time Tracker - Login Required</title>
     <style>
-        body { 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
             background: #f3f4f6;
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -138,28 +161,28 @@ function showLoginPage() {
     </div>
     <script>
         let isLoginMode = true;
-        
+
         function switchTab(login) {
             isLoginMode = login;
             document.getElementById('tabLogin').className = 'auth-tab ' + (login ? 'active' : 'inactive');
             document.getElementById('tabRegister').className = 'auth-tab ' + (login ? 'inactive' : 'active');
             document.getElementById('authBtn').textContent = login ? 'Login' : 'Register';
         }
-        
+
         document.getElementById('tabLogin').addEventListener('click', () => switchTab(true));
         document.getElementById('tabRegister').addEventListener('click', () => switchTab(false));
-        
+
         document.getElementById('authBtn').addEventListener('click', async () => {
             const email = document.getElementById('authEmail').value;
             const password = document.getElementById('authPassword').value;
             const errorEl = document.getElementById('authError');
-            
+
             if (!email || !password) {
                 errorEl.textContent = 'Please enter both email and password';
                 errorEl.style.display = 'block';
                 return;
             }
-            
+
             try {
                 const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
                 const response = await fetch(endpoint, {
@@ -167,9 +190,9 @@ function showLoginPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (response.ok && data.token) {
                     localStorage.setItem('authToken', data.token);
                     localStorage.setItem('userId', data.userId);
@@ -184,7 +207,7 @@ function showLoginPage() {
                 errorEl.style.display = 'block';
             }
         });
-        
+
         document.getElementById('authPassword').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') document.getElementById('authBtn').click();
         });
@@ -196,7 +219,7 @@ function showLoginPage() {
 
 async function serveStaticAsset(request, env, url) {
   const pathname = url.pathname;
-  
+
   const assetMap = {
     '/': 'index.html',
     '/index.html': 'index.html',
@@ -224,31 +247,27 @@ async function serveStaticAsset(request, env, url) {
     '/icons/icon-maskable-512.png': 'icons/icon-maskable-512.png',
     '/icons/apple-touch-icon.png': 'icons/apple-touch-icon.png',
   };
-  
+
   const assetFile = assetMap[pathname];
-  
+
   if (!assetFile) {
     return new Response('Not Found', { status: 404 });
   }
-  
-  // Try KV first (for production)
+
+  // Try the Assets binding first (production, auto-uploaded by wrangler deploy)
   if (env.ASSETS) {
     try {
-      const asset = await env.ASSETS.get(assetFile, { type: 'text' });
-      if (asset) {
-        const contentType = getContentType(assetFile);
-        return new Response(asset, {
-          headers: { 
-            'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=31536000'
-          }
-        });
+      const response = await env.ASSETS.fetch(new Request(assetFile, request));
+      if (response && response.status === 200) {
+        const headers = new Headers(response.headers);
+        headers.set('Cache-Control', 'public, max-age=31536000');
+        return new Response(response.body, { status: 200, headers });
       }
     } catch (e) {
       // Fall through to fallback
     }
   }
-  
+
   // For local development, serve a simple HTML page
   return serveFallback(request, assetFile);
 }
@@ -282,15 +301,13 @@ async function serveFallback(request, assetFile) {
         <main>
             <p style="text-align: center; padding: 2rem; color: #6b7280;">
                 Cloudflare Worker is running!<br><br>
-                To serve the full application, please:<br>
-                1. Upload your static assets to KV, or<br>
-                2. Deploy to production
+                To serve the full application, please deploy to production with \`wrangler deploy\`.
             </p>
         </main>
     </div>
 </body>
 </html>`;
-  
+
   return new Response(html, {
     headers: { 'Content-Type': 'text/html' }
   });
@@ -343,7 +360,7 @@ async function handleAPI(request, env, url) {
 async function registerUser(request, env) {
   try {
     const { email, password } = await request.json();
-    
+
     if (!email || !password) {
       return withCORS(new Response(JSON.stringify({ error: 'Email and password are required' }), {
         status: 400,
@@ -371,8 +388,8 @@ async function registerUser(request, env) {
       const userId = result.meta.id;
       const token = await createToken(env, userId, email.toLowerCase());
 
-      return withCORS(new Response(JSON.stringify({ 
-        success: true, 
+      return withCORS(new Response(JSON.stringify({
+        success: true,
         token,
         userId,
         email
@@ -401,7 +418,7 @@ async function registerUser(request, env) {
 async function loginUser(request, env) {
   try {
     const { email, password } = await request.json();
-    
+
     if (!email || !password) {
       return withCORS(new Response(JSON.stringify({ error: 'Email and password are required' }), {
         status: 400,
@@ -441,8 +458,8 @@ async function loginUser(request, env) {
     // Generate signed token
     const token = await createToken(env, user.id, user.email);
 
-    return withCORS(new Response(JSON.stringify({ 
-      success: true, 
+    return withCORS(new Response(JSON.stringify({
+      success: true,
       token,
       userId: user.id,
       email: user.email
@@ -518,11 +535,11 @@ async function createLog(request, env) {
     }
 
     const logData = await request.json();
-    
+
     const result = await env.DB.prepare(
       `INSERT INTO logs (
-        user_id, client, start, end, arrival, 
-        durationMs, decimalHours, notes, parts, 
+        user_id, client, start, end, arrival,
+        durationMs, decimalHours, notes, parts,
         billableTime, travelMileage, startMileage, arrivalMileage,
         startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -550,9 +567,9 @@ async function createLog(request, env) {
       logData.arrivalTime || null
     ).run();
 
-    return withCORS(new Response(JSON.stringify({ 
-      success: true, 
-      id: result.meta?.id || result.results?.[0]?.id 
+    return withCORS(new Response(JSON.stringify({
+      success: true,
+      id: result.meta?.id || result.results?.[0]?.id
     }), {
       headers: { 'Content-Type': 'application/json' }
     }));
@@ -575,7 +592,7 @@ async function getLog(request, env, url) {
     }
 
     const logId = url.pathname.split('/').pop();
-    
+
     const result = await env.DB.prepare(
       'SELECT * FROM logs WHERE id = ? AND user_id = ?'
     ).bind(logId, userId).first();
@@ -610,9 +627,9 @@ async function updateLog(request, env, url) {
 
     const logId = url.pathname.split('/').pop();
     const logData = await request.json();
-    
+
     const result = await env.DB.prepare(
-      `UPDATE logs SET 
+      `UPDATE logs SET
         client = ?, start = ?, end = ?, arrival = ?,
         durationMs = ?, decimalHours = ?, notes = ?, parts = ?,
         billableTime = ?, travelMileage = ?, startMileage = ?, arrivalMileage = ?,
@@ -650,7 +667,7 @@ async function deleteLog(request, env, url) {
     }
 
     const logId = url.pathname.split('/').pop();
-    
+
     const result = await env.DB.prepare(
       'DELETE FROM logs WHERE id = ? AND user_id = ?'
     ).bind(logId, userId).run();
@@ -692,13 +709,13 @@ async function isUserAllowed(email, env) {
         }
       }
     }
-    
+
     // Fallback to vars for local development
     if (env.FALLBACK_ALLOWED_USERS) {
       const allowedUsers = JSON.parse(env.FALLBACK_ALLOWED_USERS);
       return allowedUsers.includes(email.toLowerCase());
     }
-    
+
     return false;
   } catch (error) {
     console.log('Error checking allowed users:', error.message);

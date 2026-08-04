@@ -11,14 +11,35 @@ compatibility_date = "2024-01-01"
 # Update this with your actual emails
 FALLBACK_ALLOWED_USERS = '["user1@example.com", "user2@example.com"]'
 
+# CORS: restrict to your production domain in production.
+# Set via: npx wrangler secret put ALLOWED_ORIGIN
+# For local dev, leave unset to allow all origins ('*')
+# ALLOWED_ORIGIN = "https://your-domain.com"
+
 # KV namespaces
 [[kv_namespaces]]
 binding = "TIME_TRACKER_KV"
 id = "5fe095687b3e47778649586256073f69"
 
-[[kv_namespaces]]
+# Static assets - automatically uploaded by `wrangler deploy`
+[assets]
+directory = "."
 binding = "ASSETS"
-id = "d7d5bf8468034151be4ef64b4862a876"
+# Exclude files that shouldn't be served as static assets
+exclude = [
+  "node_modules",
+  ".wrangler",
+  ".dev.vars",
+  ".gitignore",
+  "AGENTS.md",
+  "CLOUDFLARE_MIGRATION.md",
+  "upload-assets.ps1",
+  "package.json",
+  "package-lock.json",
+  "wrangler.toml",
+  "migrations",
+  "manifest.webapp",
+]
 
 # D1 database configuration
 [[d1_databases]]
@@ -30,3 +51,6 @@ database_id = "55a0bff8-e371-477c-867d-d8b38cac4066"
 [dev]
 port = 8787
 ip = "127.0.0.1"
+
+# Upload static assets automatically during deploy
+# The [assets] binding above handles this — no manual KV upload needed.

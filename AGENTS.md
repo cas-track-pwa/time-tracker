@@ -10,17 +10,25 @@ A progressive web app (PWA) for time tracking that allows users to:
 - Generate billing reports (with print support)
 - Export/import data to/from CSV
 - Work offline (service worker) and use light/dark theme
+- Authenticate via email/password (Cloudflare Workers)
+- Back up and sync data across devices (Cloudflare D1 + KV)
 
 ## Architecture
 
 ### Multi-File Application
 - **index.html**: Page structure and modal markup only
-- **app.js**: All application logic (IndexedDB access, timer, modals, CSV, reports, dark mode, service worker registration)
+- **app.js**: All application logic (IndexedDB access, timer, modals, CSV, reports, dark mode, service worker registration, cloud sync/auth)
 - **styles.css**: All styling, including `:root` / `.dark` CSS variable themes and print styles
 - **sw.js**: Service worker for offline asset caching
 - **manifest.json**: Web app manifest (Android/desktop install metadata)
 - **manifest.webapp**: Legacy iOS-era manifest format, kept for compatibility but not linked from `index.html`
-- Uses IndexedDB (`TimeTrackerDB`, currently version 2) for data persistence — no external dependencies or frameworks
+- **worker.js**: Cloudflare Worker (API layer) — handles authentication, CRUD for logs, and offline-first sync
+- **wrangler.toml**: Wrangler configuration (KV namespaces, D1 database binding, dev server)
+- **migrations/001_initial.sql**: D1 database schema (users + logs tables)
+- **CLOUDFLARE_MIGRATION.md**: Migration guide for deploying to Cloudflare Workers
+- **upload-assets.ps1**: PowerShell script for bulk-uploading static assets to KV
+- Uses IndexedDB (`TimeTrackerDB`, currently version 2) as the local client-side store, with optional cloud backup/sync to Cloudflare D1 + KV
+- No external dependencies or frameworks on the client side; the Worker uses native Web Crypto APIs (PBKDF2, HMAC-SHA256) for auth
 
 ### Data Model
 
@@ -79,6 +87,22 @@ Each log entry in the `logs` store contains:
 - `parseDurationToMs(durationStr)`: Converts "HH:MM:SS" string to milliseconds
 - `parseCsvLines(csvText)` / `parseCsvRow(row)`: CSV parsing helpers that respect quoted fields and embedded newlines
 - `initDarkMode()`: Applies saved/OS-preferred theme and wires the dark mode toggle button
+
+### Cloud Sync (Offline-First Backup)
+
+The app uses an offline-first sync model: all data is stored locally in IndexedDB and optionally backed up to / synced from Cloudflare D1 via the Worker. Auth tokens are stored in `localStorage` under `authToken`; user metadata (`userId`, `userEmail`) is also stored there.
+
+- `API_BASE`: Base URL of the Cloudflare Worker (currently `https://time-tracker.your-worker-subdomain.workers.dev` — replace with your actual Worker URL)
+- `isAuthenticated()`: Returns `true` if an `authToken` exists in `localStorage`
+- `getAuthHeaders()`: Returns `{ 'Content-Type': 'application/json', 'Authorization': 'Bearer <token>' }`
+- `getLastSyncTime()` / `setLastSyncTime(ts)`: Read/write the last successful sync timestamp to `localStorage` under `lastSyncTime`
+- `syncToCloud()`: Reads all logs from the local `logs` store and POSTs them to `POST /api/sync` (upserts + soft-deletes via `_deleted` flag)
+- `syncFromCloud()`: GETs `GET /api/sync?since=<lastSyncTime>` and writes returned server logs into the local `logs` store
+- `performSync()`: Orchestrates upload-then-download; called on page load if authenticated
+- `syncAfterWrite()`: Debounced background sync triggered after any local write (1s delay)
+- `checkConnectivity()` / `updateSyncStatus(status)`: Updates the `#syncStatus` badge (online / syncing / offline / idle)
+
+Sync strategy: the client pushes all local logs to the server in a single batch (upsert by `id`, delete by `_deleted` flag). The server returns `serverTime` which the client stores as `lastSyncTime`. On the next pull, the server returns all logs with `updated_at >= since` for that user. Local IDs are preserved; new server-generated IDs are returned in the `upserted` array with `localId` mapping.
 
 ### Timer Flow
 
@@ -187,6 +211,12 @@ time-tracker/
 ├── manifest.json                     # Standard web app manifest (Android/desktop)
 ├── manifest.webapp                   # Legacy iOS-era manifest (unreferenced, kept for compatibility)
 ├── AGENTS.md                         # This file
+├── worker.js                         # Cloudflare Worker (API layer: auth, CRUD, sync)
+├── wrangler.toml                     # Wrangler configuration (KV, D1, dev server)
+├── CLOUDFLARE_MIGRATION.md           # Migration guide for Cloudflare deployment
+├── upload-assets.ps1                 # PowerShell script for bulk-uploading static assets to KV
+├── migrations/
+│   └── 001_initial.sql               # D1 database schema (users + logs tables)
 ├── icons/
 │   ├── icon.svg                      # SVG app icon
 │   ├── icon-16.png                   # 16x16 favicon
@@ -213,6 +243,82 @@ time-tracker/
 │   ├── safari-pinned-tab.svg         # Safari pinned tab
 │   └── site.webmanifest              # Alternative manifest
 ```
+
+## Cloudflare Worker (API Layer)
+
+The Worker (`worker.js`) is deployed on Cloudflare Workers and provides the authentication and cloud sync API. It is configured via `wrangler.toml` and uses two Cloudflare services:
+
+### Services & Bindings
+
+| Binding | Type | Purpose |
+|---------|------|---------|
+| `DB` | D1 Database | Stores `users` and `logs` tables (see `migrations/001_initial.sql`) |
+| `TIME_TRACKER_KV` | KV Namespace | Stores session token blocklist (`bl_<token>`) and last-sync timestamps (`sync_<userId>`) |
+| `JWT_SECRET` | Secret | HMAC-SHA256 signing key for auth tokens (set via `wrangler secret put JWT_SECRET`) |
+| `FALLBACK_ALLOWED_USERS` | Var | Comma-separated JSON array of allowed emails for local dev / allowlist gating |
+| `ALLOWED_ORIGIN` | Secret | CORS allowed origin for production (set via `wrangler secret put ALLOWED_ORIGIN`) |
+| `ASSETS` | Assets Binding | Static asset serving (auto-uploaded by `wrangler deploy` via `[assets]` config) |
+
+### Authentication
+
+- Tokens are HMAC-SHA256 signed (`base64(payload).base64(signature)`), not JWTs — the payload is a base64-encoded JSON object containing `{ userId, email, exp }`.
+- Token expiry: 24 hours (`TOKEN_EXPIRY_MS`).
+- Logout adds the token to a KV blocklist so it can't be reused.
+- Passwords are hashed with PBKDF2 (100,000 iterations, SHA-256, 16-byte random salt) — no external crypto libraries needed.
+- Registration and login are gated by an allowlist (`isUserAllowed()`): in production this reads from the `ALLOWED_USERS` KV key; in local dev it falls back to `FALLBACK_ALLOWED_USERS` var.
+
+### API Endpoints
+
+#### Authentication
+- `POST /api/auth/register` — Register a new user (email, password). Returns `{ success, token, userId, email }`.
+- `POST /api/auth/login` — Login existing user. Returns `{ success, token, userId, email }`.
+- `POST /api/auth/logout` — Revoke the current token (adds to KV blocklist).
+
+#### Logs (CRUD)
+- `GET /api/logs` — Get all logs for the authenticated user, ordered by `start DESC`.
+- `POST /api/logs` — Create a new log entry.
+- `GET /api/logs/:id` — Get a specific log by ID (scoped to the user).
+- `PUT /api/logs/:id` — Update a log entry.
+- `DELETE /api/logs/:id` — Delete a log entry.
+
+#### Sync (Offline-First Backup)
+- `POST /api/sync` — Batch upsert of all local logs. Accepts `{ logs: [...] }` where each log may have `_deleted: true` (soft-delete), `id` (update existing), or no `id` (create new). Returns `{ success, upserted, errors, serverTime }`.
+- `GET /api/sync?since=<timestamp>` — Fetch server-side changes since the last sync timestamp. Returns `{ logs: [...], serverTime }`.
+
+All API endpoints require a `Bearer <token>` Authorization header (except register/login). CORS is configurable via the `ALLOWED_ORIGIN` env var (set via `wrangler secret put ALLOWED_ORIGIN`); for local dev it falls back to echoing the request origin, and `*` only when no origin is present.
+
+### Local Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start the local dev server (serves worker.js + static assets)
+npm run dev  # or: npx wrangler dev
+
+# Apply D1 schema locally
+npx wrangler d1 execute time-tracker --local < migrations/001_initial.sql
+
+# Set local secrets (create .dev.vars file)
+echo 'JWT_SECRET="your-dev-secret-here"' > .dev.vars
+# Optionally set ALLOWED_ORIGIN for local dev (defaults to echoing request origin if unset)
+# echo 'ALLOWED_ORIGIN="http://localhost:8787"' >> .dev.vars
+```
+
+### Deployment
+
+```bash
+# Set the JWT secret in production
+npx wrangler secret put JWT_SECRET
+
+# Set the CORS allowed origin (your production domain)
+npx wrangler secret put ALLOWED_ORIGIN
+
+# Deploy (static assets are uploaded automatically)
+npm run deploy  # or: npx wrangler deploy
+```
+
+See `CLOUDFLARE_MIGRATION.md` for the full migration guide. Static assets are now auto-uploaded during deploy via the `[assets]` binding in `wrangler.toml` — the `upload-assets.ps1` script is optional for manual KV uploads only. The `[assets]` config includes an `exclude` list to prevent `node_modules`, config files, and other non-asset files from being uploaded.
 
 ## Known Issues & Fixes
 
@@ -254,8 +360,15 @@ time-tracker/
 
 ## Open Items (Not Yet Fixed)
 
-- **Service worker precache list is missing `app.js` and `styles.css`** (`sw.js`) — offline support isn't guaranteed on a first, interrupted load. Add both files to `urlsToCache`.
-- **Service worker precache paths are root-relative** (`/index.html`, `/icons/...`) while the rest of the app uses relative paths — will break if deployed under a subdirectory.
-- **Dark mode flash on load** — `initDarkMode()` runs from `app.js` at the end of `<body>`, after first paint, causing a brief flash of the wrong theme for users with a dark preference.
-- **No "update available" UX** — the service worker's `skipWaiting()`/`clients.claim()` swaps an open tab onto a new cache/service worker silently; consider a reload prompt when `registration.waiting` is set.
-- **`manifest.json` theme/background color is hardcoded dark** and doesn't follow the in-app light/dark toggle.
+- **Login page is served by the Worker** (`showLoginPage()` in `worker.js`) — unauthenticated requests to `/` return an inline HTML login/register page. The client-side `app.js` does not currently render its own auth UI; it relies on the Worker to gate access. Consider adding an in-app auth modal for a smoother UX.
+- **`API_BASE` in `app.js` is a placeholder** (`https://time-tracker.your-worker-subdomain.workers.dev`) — must be updated to the actual Worker URL before deployment.
+
+## Previously Open Items (Now Fixed)
+
+- **Service worker precache list was missing `app.js` and `styles.css`** — both files are now included in `urlsToCache` in `sw.js`.
+- **Service worker precache paths were root-relative** — all paths in `sw.js` are now relative (`./`, `index.html`, `icons/...`).
+- **Dark mode flash on load** — an inline script in `<head>` of `index.html` now applies the `dark` class before first paint, eliminating the flash.
+- **No update available UX** — added a reload prompt banner in `app.js` that appears when a new service worker is waiting to activate.
+- **`manifest.json` theme/background color was hardcoded dark** — updated to light theme values (`#f3f4f6` / `#2563eb`) to match the default light theme.
+- **CORS was configured with `Access-Control-Allow-Origin: *`** — now uses a configurable `ALLOWED_ORIGIN` env var (set via `wrangler secret put ALLOWED_ORIGIN`), falling back to echoing the request origin for local dev, and `*` only when no origin is present.
+- **Static asset deployment was manual** — replaced the KV namespace `ASSETS` binding with the `[assets]` configuration in `wrangler.toml`, so `wrangler deploy` automatically uploads all static assets. The `upload-assets.ps1` script is now optional for manual uploads only.
