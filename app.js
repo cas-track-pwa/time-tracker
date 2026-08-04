@@ -11,7 +11,7 @@ dbRequest.onupgradeneeded = (e) => {
     }
 };
 
-dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); };
+dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
 let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true';
@@ -385,6 +385,7 @@ function finalizeAndSaveLog(partsText) {
 
         partsModal.classList.add('hidden');
         renderLogs();
+        syncAfterWrite();
     };
 
     transaction.onerror = () => {
@@ -632,6 +633,7 @@ btnConfirmDelete.addEventListener('click', () => {
         pendingDeleteId = null;
         deleteConfirmModal.classList.add('hidden');
         renderLogs();
+        syncAfterWrite();
     };
     request.onerror = () => {
         btnConfirmDelete.disabled = false;
@@ -716,6 +718,7 @@ btnSaveEdit.addEventListener('click', () => {
             editModal.classList.add('hidden');
             editingLogId = null;
             renderLogs();
+            syncAfterWrite();
         };
         putRequest.onerror = () => {
             btnSaveEdit.disabled = false;
@@ -837,6 +840,7 @@ transaction.oncomplete = () => {
     btnSaveAdd.disabled = false;
     addEntryModal.classList.add('hidden');
     renderLogs();
+    syncAfterWrite();
     };
 
 transaction.onerror = () => {
@@ -1349,6 +1353,136 @@ function escapeHtml(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// --- Cloud Sync (Offline-First Backup) ---
+
+const API_BASE = 'https://time-tracker.your-worker-subdomain.workers.dev';
+
+function isAuthenticated() {
+    return !!localStorage.getItem('authToken');
+}
+
+function getAuthHeaders() {
+    const token = localStorage.getItem('authToken');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+}
+
+function getLastSyncTime() {
+    const ts = localStorage.getItem('lastSyncTime');
+    return ts ? parseInt(ts, 10) : 0;
+}
+
+function setLastSyncTime(ts) {
+    localStorage.setItem('lastSyncTime', ts.toString());
+}
+
+async function syncToCloud() {
+    if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
+    try {
+        const store = db.transaction(['logs'], 'readonly').objectStore('logs');
+        const request = store.getAll();
+        const logs = await new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        const response = await fetch(`${API_BASE}/api/sync`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ logs })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            return { success: false, error: error.error || 'Sync failed' };
+        }
+        const result = await response.json();
+        setLastSyncTime(result.serverTime);
+        return { success: true, upserted: result.upserted, errors: result.errors };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function syncFromCloud() {
+    if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
+    try {
+        const since = getLastSyncTime();
+        const response = await fetch(`${API_BASE}/api/sync?since=${since}`, {
+            headers: getAuthHeaders()
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            return { success: false, error: error.error || 'Fetch failed' };
+        }
+        const data = await response.json();
+        const serverLogs = data.logs || [];
+        const tx = db.transaction(['logs'], 'readwrite');
+        const store = tx.objectStore('logs');
+        for (const log of serverLogs) {
+            await new Promise((resolve, reject) => {
+                const req = store.put(log);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+        setLastSyncTime(data.serverTime);
+        return { success: true, count: serverLogs.length };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function performSync() {
+    if (!isAuthenticated()) return;
+    const uploadResult = await syncToCloud();
+    if (uploadResult.success) {
+        await syncFromCloud();
+    }
+    renderLogs();
+}
+
+function syncAfterWrite() {
+    if (isAuthenticated()) {
+        setTimeout(() => {
+            syncToCloud().then(result => {
+                if (!result.success) {
+                    console.log('Background sync failed:', result.error);
+                }
+            });
+        }, 1000);
+    }
+}
+
+const syncStatusEl = document.createElement('div');
+syncStatusEl.id = 'syncStatus';
+syncStatusEl.style.cssText = 'position: fixed; top: 10px; right: 10px; padding: 5px 10px; border-radius: 4px; font-size: 12px; z-index: 1000;';
+document.body.appendChild(syncStatusEl);
+
+function updateSyncStatus(status) {
+    const colors = { online: '#10b981', syncing: '#f59e0b', offline: '#ef4444', idle: '#6b7280' };
+    syncStatusEl.textContent = status;
+    syncStatusEl.style.background = colors[status] + '20';
+    syncStatusEl.style.color = colors[status];
+}
+
+function checkConnectivity() {
+    if (!isAuthenticated()) {
+        updateSyncStatus('offline');
+        return;
+    }
+    if (navigator.onLine) {
+        updateSyncStatus('online');
+    } else {
+        updateSyncStatus('offline');
+    }
+}
+
+window.addEventListener('online', checkConnectivity);
+window.addEventListener('offline', checkConnectivity);
+
+// --- Dark mode toggle ---
+
 // Dark mode toggle
 const btnDarkMode = document.getElementById('btnDarkMode');
 
@@ -1374,19 +1508,5 @@ if ('serviceWorker' in navigator) {
             .catch(registrationError => {
                 console.log('SW registration failed: ', registrationError);
             });
-
-        async function login(email) {
-          const response = await fetch(`${API_BASE}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-          });
-          const data = await response.json();
-          if (data.token) {
-            localStorage.setItem('authToken', data.token);
-            localStorage.setItem('userEmail', data.email);
-          }
-          return data;
-        }
     });
 }

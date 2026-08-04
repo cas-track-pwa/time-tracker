@@ -1,26 +1,22 @@
 // Cloudflare Workers API endpoints for Time Tracker
 // This file will be deployed as a Cloudflare Worker
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    // Check authentication for all routes except login
-    const isLoginRoute = pathname === '/api/auth/login';
-    const isAuthenticated = isLoginRoute || await isAuthenticatedRequest(request, env);
-    
-    if (!isAuthenticated) {
-      // Return 401 for API routes, redirect for static assets
-      if (pathname.startsWith('/api/')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized - Please login first' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      // For static assets, show login page
-      return showLoginPage();
+    // Handle CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: CORS_HEADERS });
     }
 
     // API routes
@@ -28,7 +24,9 @@ export default {
       return handleAPI(request, env, url);
     }
 
-    // Serve static assets
+    // Serve static assets without requiring auth header.
+    // The client-side app.js handles authentication by reading the token
+    // from localStorage and including it in API requests.
     return serveStaticAsset(request, env, url);
   }
 };
@@ -42,6 +40,19 @@ async function isAuthenticatedRequest(request, env) {
   return payload !== null;
 }
 
+// Add CORS headers to a Response
+function withCORS(response) {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function showLoginPage() {
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -49,7 +60,6 @@ function showLoginPage() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Time Tracker - Login Required</title>
-    <link rel="stylesheet" href="/styles.css">
     <style>
         body { 
             display: flex; 
@@ -57,6 +67,8 @@ function showLoginPage() {
             align-items: center; 
             min-height: 100vh; 
             background: #f3f4f6;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         .login-container {
             background: white;
@@ -65,6 +77,7 @@ function showLoginPage() {
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             text-align: center;
             max-width: 400px;
+            width: 90%;
         }
         .input-field {
             width: 100%;
@@ -73,6 +86,7 @@ function showLoginPage() {
             border: 1px solid #e5e7eb;
             border-radius: 0.5rem;
             font-size: 1rem;
+            box-sizing: border-box;
         }
         .btn-action {
             width: 100%;
@@ -83,44 +97,86 @@ function showLoginPage() {
             border-radius: 0.5rem;
             font-size: 1rem;
             cursor: pointer;
+            margin-top: 0.5rem;
         }
         .btn-action:hover { background: #1d4ed8; }
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 1rem;
+        }
+        .auth-tab {
+            flex: 1;
+            padding: 0.5rem;
+            background: #e5e7eb;
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .auth-tab.active {
+            background: #2563eb;
+            color: white;
+        }
+        .auth-tab.inactive {
+            background: #e5e7eb;
+            color: #374151;
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
         <h1>Time Tracker</h1>
-        <p>Please enter your email to access the application.</p>
-        <input type="email" id="loginEmail" class="input-field" placeholder="you@example.com">
-        <button id="loginBtn" class="btn-action">Login</button>
-        <p id="loginError" style="color: #ef4444; display: none;"></p>
+        <p>Please enter your credentials to access the application.</p>
+        <div class="auth-tabs">
+            <button id="tabLogin" class="auth-tab active">Login</button>
+            <button id="tabRegister" class="auth-tab">Register</button>
+        </div>
+        <input type="email" id="authEmail" class="input-field" placeholder="you@example.com">
+        <input type="password" id="authPassword" class="input-field" placeholder="Password">
+        <button id="authBtn" class="btn-action">Login</button>
+        <p id="authError" style="color: #ef4444; display: none;"></p>
     </div>
     <script>
-        document.getElementById('loginBtn').addEventListener('click', async () => {
-            const email = document.getElementById('loginEmail').value;
-            const errorEl = document.getElementById('loginError');
+        let isLoginMode = true;
+        
+        function switchTab(login) {
+            isLoginMode = login;
+            document.getElementById('tabLogin').className = 'auth-tab ' + (login ? 'active' : 'inactive');
+            document.getElementById('tabRegister').className = 'auth-tab ' + (login ? 'inactive' : 'active');
+            document.getElementById('authBtn').textContent = login ? 'Login' : 'Register';
+        }
+        
+        document.getElementById('tabLogin').addEventListener('click', () => switchTab(true));
+        document.getElementById('tabRegister').addEventListener('click', () => switchTab(false));
+        
+        document.getElementById('authBtn').addEventListener('click', async () => {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            const errorEl = document.getElementById('authError');
             
-            if (!email) {
-                errorEl.textContent = 'Please enter an email';
+            if (!email || !password) {
+                errorEl.textContent = 'Please enter both email and password';
                 errorEl.style.display = 'block';
                 return;
             }
             
             try {
-                const response = await fetch('/api/auth/login', {
+                const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email, password })
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok && data.token) {
                     localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('userId', data.userId);
                     localStorage.setItem('userEmail', data.email);
-                    window.location.reload();
+                    window.location.href = '/';
                 } else {
-                    errorEl.textContent = data.error || 'Login failed';
+                    errorEl.textContent = data.error || 'Authentication failed';
                     errorEl.style.display = 'block';
                 }
             } catch (e) {
@@ -129,8 +185,8 @@ function showLoginPage() {
             }
         });
         
-        document.getElementById('loginEmail').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') document.getElementById('loginBtn').click();
+        document.getElementById('authPassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('authBtn').click();
         });
     </script>
 </body>
@@ -217,7 +273,6 @@ async function serveFallback(request, assetFile) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Time Tracker - Cloudflare Worker</title>
-    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <div class="app-container">
@@ -246,8 +301,11 @@ async function handleAPI(request, env, url) {
   const path = url.pathname;
 
   // Authentication endpoints
+  if (path === '/api/auth/register' && method === 'POST') {
+    return registerUser(request, env);
+  }
   if (path === '/api/auth/login' && method === 'POST') {
-    return emailLoginHandler(request, env);
+    return loginUser(request, env);
   }
   if (path === '/api/auth/logout' && method === 'POST') {
     return logoutUser(request, env);
@@ -270,51 +328,157 @@ async function handleAPI(request, env, url) {
     return deleteLog(request, env, url);
   }
 
+  // Sync endpoints (offline-first backup)
+  if (path === '/api/sync' && method === 'POST') {
+    return syncLogs(request, env);
+  }
+  if (path === '/api/sync' && method === 'GET') {
+    return getSyncChanges(request, env, url);
+  }
+
   return new Response('Not Found', { status: 404 });
 }
 
-// Email-based login handler
-async function emailLoginHandler(request, env) {
+// Register a new user
+async function registerUser(request, env) {
   try {
-    const { email } = await request.json();
+    const { email, password } = await request.json();
     
-    if (!email) {
-      return new Response(JSON.stringify({ error: 'Email is required' }), {
+    if (!email || !password) {
+      return withCORS(new Response(JSON.stringify({ error: 'Email and password are required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
     // Check if email is in allowed users list
     if (!(await isUserAllowed(email, env))) {
-      return new Response(JSON.stringify({ error: 'Access denied - email not authorized' }), {
+      return withCORS(new Response(JSON.stringify({ error: 'Access denied - email not authorized' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
-    // Generate token
-    const token = await emailLogin(email);
-    
-    return new Response(JSON.stringify({ 
-      success: true, 
-      token,
-      email 
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    // Hash the password
+    const passwordHash = await hashPassword(password);
+
+    // Insert user into D1
+    try {
+      const result = await env.DB.prepare(
+        'INSERT INTO users (email, password_hash) VALUES (?, ?)'
+      ).bind(email.toLowerCase(), passwordHash).run();
+
+      const userId = result.meta.id;
+      const token = await createToken(env, userId, email.toLowerCase());
+
+      return withCORS(new Response(JSON.stringify({ 
+        success: true, 
+        token,
+        userId,
+        email
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    } catch (dbError) {
+      // Check if it's a unique constraint violation (email already exists)
+      if (dbError.message.includes('UNIQUE') || dbError.message.includes('constraint')) {
+        return withCORS(new Response(JSON.stringify({ error: 'User already exists' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' }
+        }));
+      }
+      throw dbError;
+    }
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
+  }
+}
+
+// Login handler - verifies password and issues signed token
+async function loginUser(request, env) {
+  try {
+    const { email, password } = await request.json();
+    
+    if (!email || !password) {
+      return withCORS(new Response(JSON.stringify({ error: 'Email and password are required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    // Check if email is in allowed users list
+    if (!(await isUserAllowed(email, env))) {
+      return withCORS(new Response(JSON.stringify({ error: 'Access denied - email not authorized' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    // Look up user in D1
+    const user = await env.DB.prepare(
+      'SELECT id, email, password_hash FROM users WHERE email = ?'
+    ).bind(email.toLowerCase()).first();
+
+    if (!user) {
+      return withCORS(new Response(JSON.stringify({ error: 'Invalid credentials' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    // Verify password
+    const passwordValid = await verifyPassword(password, user.password_hash);
+    if (!passwordValid) {
+      return withCORS(new Response(JSON.stringify({ error: 'Invalid credentials' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    // Generate signed token
+    const token = await createToken(env, user.id, user.email);
+
+    return withCORS(new Response(JSON.stringify({ 
+      success: true, 
+      token,
+      userId: user.id,
+      email: user.email
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  } catch (error) {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    }));
   }
 }
 
 async function logoutUser(request, env) {
-  return new Response(JSON.stringify({ success: true }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
+  try {
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      // Add token to blocklist in KV
+      if (env.TIME_TRACKER_KV) {
+        const expiry = Date.now() + TOKEN_EXPIRY_MS;
+        await env.TIME_TRACKER_KV.put(`bl_${token}`, '1', {
+          expirationTtl: Math.ceil(TOKEN_EXPIRY_MS / 1000)
+        });
+      }
+    }
+    return withCORS(new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  } catch (error) {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  }
 }
 
 // Logs handlers
@@ -322,24 +486,24 @@ async function getLogs(request, env) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
     const result = await env.DB.prepare(
       'SELECT * FROM logs WHERE user_id = ? ORDER BY start DESC'
     ).bind(userId).all();
 
-    return new Response(JSON.stringify(result.results), {
+    return withCORS(new Response(JSON.stringify(result.results), {
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   }
 }
 
@@ -347,10 +511,10 @@ async function createLog(request, env) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
     const logData = await request.json();
@@ -358,10 +522,11 @@ async function createLog(request, env) {
     const result = await env.DB.prepare(
       `INSERT INTO logs (
         user_id, client, start, end, arrival, 
-        duration_ms, decimal_hours, notes, parts, 
-        billable_time, travel_mileage, start_mileage, arrival_mileage,
+        durationMs, decimalHours, notes, parts, 
+        billableTime, travelMileage, startMileage, arrivalMileage,
         startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING id`
     ).bind(
       userId,
       logData.client,
@@ -385,17 +550,17 @@ async function createLog(request, env) {
       logData.arrivalTime || null
     ).run();
 
-    return new Response(JSON.stringify({ 
+    return withCORS(new Response(JSON.stringify({ 
       success: true, 
-      id: result.meta.id 
+      id: result.meta?.id || result.results?.[0]?.id 
     }), {
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   }
 }
 
@@ -403,10 +568,10 @@ async function getLog(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
     const logId = url.pathname.split('/').pop();
@@ -416,20 +581,20 @@ async function getLog(request, env, url) {
     ).bind(logId, userId).first();
 
     if (!result) {
-      return new Response(JSON.stringify({ error: 'Log not found' }), {
+      return withCORS(new Response(JSON.stringify({ error: 'Log not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
-    return new Response(JSON.stringify(result), {
+    return withCORS(new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   }
 }
 
@@ -437,10 +602,10 @@ async function updateLog(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
     const logId = url.pathname.split('/').pop();
@@ -449,8 +614,8 @@ async function updateLog(request, env, url) {
     const result = await env.DB.prepare(
       `UPDATE logs SET 
         client = ?, start = ?, end = ?, arrival = ?,
-        duration_ms = ?, decimal_hours = ?, notes = ?, parts = ?,
-        billable_time = ?, travel_mileage = ?, start_mileage = ?, arrival_mileage = ?,
+        durationMs = ?, decimalHours = ?, notes = ?, parts = ?,
+        billableTime = ?, travelMileage = ?, startMileage = ?, arrivalMileage = ?,
         startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?
       WHERE id = ? AND user_id = ?`
     ).bind(
@@ -463,14 +628,14 @@ async function updateLog(request, env, url) {
       logId, userId
     ).run();
 
-    return new Response(JSON.stringify({ success: true }), {
+    return withCORS(new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   }
 }
 
@@ -478,10 +643,10 @@ async function deleteLog(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      });
+      }));
     }
 
     const logId = url.pathname.split('/').pop();
@@ -490,14 +655,14 @@ async function deleteLog(request, env, url) {
       'DELETE FROM logs WHERE id = ? AND user_id = ?'
     ).bind(logId, userId).run();
 
-    return new Response(JSON.stringify({ success: true }), {
+    return withCORS(new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    });
+    }));
   }
 }
 
@@ -508,38 +673,287 @@ async function getUserIdFromToken(request, env) {
 
   const token = authHeader.slice(7);
   const payload = await verifyToken(env, token);
-  return payload?.userId;
+  return payload?.userId || null;
 }
 
 // Check if email is in allowed users list
 async function isUserAllowed(email, env) {
   try {
-    const allowedUsersStr = await env.TIME_TRACKER_KV.get('allowed_users');
-    if (!allowedUsersStr) return false;
-    const allowedUsers = JSON.parse(allowedUsersStr);
-    return allowedUsers.includes(email.toLowerCase());
+    // Try KV first
+    if (env.TIME_TRACKER_KV) {
+      const allowedUsersStr = await env.TIME_TRACKER_KV.get('allowed_users');
+      if (allowedUsersStr) {
+        try {
+          const allowedUsers = JSON.parse(allowedUsersStr);
+          return allowedUsers.includes(email.toLowerCase());
+        } catch (parseError) {
+          // KV value is corrupted, fall through to FALLBACK_ALLOWED_USERS
+          console.log('Corrupted allowed_users in KV, falling back to vars:', parseError.message);
+        }
+      }
+    }
+    
+    // Fallback to vars for local development
+    if (env.FALLBACK_ALLOWED_USERS) {
+      const allowedUsers = JSON.parse(env.FALLBACK_ALLOWED_USERS);
+      return allowedUsers.includes(email.toLowerCase());
+    }
+    
+    return false;
   } catch (error) {
+    console.log('Error checking allowed users:', error.message);
     return false;
   }
 }
 
-// Email-based login - generates token with email
-async function emailLogin(email) {
-  return btoa(JSON.stringify({ 
-    email, 
-    exp: Date.now() + 86400000 // 24 hours
-  }));
+// --- Sync (Offline-First Backup) ---
+
+async function syncLogs(request, env) {
+  try {
+    const userId = await getUserIdFromToken(request, env);
+    if (!userId) {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    const body = await request.json();
+    const { logs } = body;
+    if (!Array.isArray(logs)) {
+      return withCORS(new Response(JSON.stringify({ error: 'logs must be an array' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    const upserted = [];
+    const errors = [];
+
+    for (const log of logs) {
+      try {
+        if (log._deleted) {
+          if (log.id) {
+            await env.DB.prepare('DELETE FROM logs WHERE id = ? AND user_id = ?').bind(log.id, userId).run();
+            upserted.push({ id: log.id, action: 'deleted' });
+          }
+        } else if (log.id) {
+          await env.DB.prepare(
+            `INSERT INTO logs (id, user_id, client, start, end, arrival,
+              durationMs, decimalHours, notes, parts,
+              billableTime, travelMileage, startMileage, arrivalMileage,
+              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+              client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
+              durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
+              parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
+              startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
+              startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
+              duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
+              onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
+              updated_at=CURRENT_TIMESTAMP WHERE user_id=?`
+          ).bind(
+            log.id, userId, log.client, log.start, log.end, log.arrival || null,
+            log.durationMs, log.decimalHours, log.notes, log.parts,
+            log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
+            log.startMs || null, log.endMs || null, log.arrivalMs || null,
+            log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
+            log.arrivalTime || null, userId
+          ).run();
+          upserted.push({ id: log.id, action: 'updated' });
+        } else {
+          const result = await env.DB.prepare(
+            `INSERT INTO logs (user_id, client, start, end, arrival,
+              durationMs, decimalHours, notes, parts,
+              billableTime, travelMileage, startMileage, arrivalMileage,
+              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             RETURNING id`
+          ).bind(
+            userId, log.client, log.start, log.end, log.arrival || null,
+            log.durationMs, log.decimalHours, log.notes, log.parts,
+            log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
+            log.startMs || null, log.endMs || null, log.arrivalMs || null,
+            log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
+            log.arrivalTime || null
+          ).run();
+          const newId = result.meta?.id || result.results?.[0]?.id;
+          upserted.push({ id: newId, action: 'created', localId: log._localId || null });
+        }
+      } catch (logError) {
+        errors.push({ id: log.id || log._localId, error: logError.message });
+      }
+    }
+
+    if (env.TIME_TRACKER_KV) {
+      await env.TIME_TRACKER_KV.put(`sync_${userId}`, Date.now().toString());
+    }
+
+    return withCORS(new Response(JSON.stringify({
+      success: true, upserted, errors, serverTime: Date.now()
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  } catch (error) {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+      status: 500, headers: { 'Content-Type': 'application/json' }
+    }));
+  }
 }
 
-// Verify email-based token
+// Get server-side changes since last sync
+async function getSyncChanges(request, env, url) {
+  try {
+    const userId = await getUserIdFromToken(request, env);
+    if (!userId) {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    const since = url.searchParams.get('since');
+    const sinceMs = since ? parseInt(since, 10) : 0;
+    const sinceDate = sinceMs > 0 ? new Date(sinceMs).toISOString().replace('T', ' ').replace('Z', '') : '0000-01-01 00:00:00';
+
+    const result = await env.DB.prepare(
+      `SELECT * FROM logs WHERE user_id = ? AND updated_at >= ? ORDER BY start DESC`
+    ).bind(userId, sinceDate).all();
+
+    return withCORS(new Response(JSON.stringify({
+      logs: result.results || [], serverTime: Date.now()
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  } catch (error) {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+      status: 500, headers: { 'Content-Type': 'application/json' }
+    }));
+  }
+}
+
+// --- Token Management (HMAC-signed) ---
+
+// Create a signed token: base64(payload).base64(signature)
+async function createToken(env, userId, email) {
+  const payload = {
+    userId,
+    email,
+    exp: Date.now() + TOKEN_EXPIRY_MS,
+  };
+  const payloadB64 = btoa(JSON.stringify(payload));
+  const signature = await signData(env, payloadB64);
+  return `${payloadB64}.${signature}`;
+}
+
+// Verify a signed token; returns payload if valid, null otherwise
 async function verifyToken(env, token) {
   try {
-    const payload = JSON.parse(atob(token));
+    const [payloadB64, signature] = token.split('.');
+    if (!payloadB64 || !signature) return null;
+
+    // Check blocklist (logout)
+    if (env.TIME_TRACKER_KV) {
+      const blocked = await env.TIME_TRACKER_KV.get(`bl_${token}`);
+      if (blocked) return null;
+    }
+
+    // Verify signature
+    const expectedSignature = await signData(env, payloadB64);
+    if (signature !== expectedSignature) return null;
+
+    // Decode and check expiry
+    const payload = JSON.parse(atob(payloadB64));
     if (payload.exp < Date.now()) return null;
-    
-    // Return userId as email for email-based auth
-    return { userId: payload.email };
+
+    return { userId: payload.userId, email: payload.email };
   } catch {
     return null;
+  }
+}
+
+// Sign data using HMAC-SHA256 with JWT_SECRET
+async function signData(env, data) {
+  const secret = env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+  return btoa(String.fromCharCode(...new Uint8Array(signature)));
+}
+
+// --- Password Hashing (PBKDF2 via deriveBits) ---
+
+const PBKDF2_ITERATIONS = 100000;
+const HASH_LENGTH_BITS = 256;
+
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    key,
+    HASH_LENGTH_BITS
+  );
+  const saltB64 = btoa(String.fromCharCode(...salt));
+  const hashB64 = btoa(String.fromCharCode(...new Uint8Array(derivedBits)));
+  return `${saltB64}:${hashB64}`;
+}
+
+async function verifyPassword(password, storedHash) {
+  try {
+    const [saltB64, hashB64] = storedHash.split(':');
+    if (!saltB64 || !hashB64) return false;
+
+    const encoder = new TextEncoder();
+    const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
+    const storedKeyBytes = Uint8Array.from(atob(hashB64), c => c.charCodeAt(0));
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(password),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveBits']
+    );
+    const derivedBits = await crypto.subtle.deriveBits(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations: PBKDF2_ITERATIONS,
+        hash: 'SHA-256',
+      },
+      key,
+      HASH_LENGTH_BITS
+    );
+    const derivedBytes = new Uint8Array(derivedBits);
+
+    // Constant-time comparison
+    if (derivedBytes.length !== storedKeyBytes.length) return false;
+    let diff = 0;
+    for (let i = 0; i < derivedBytes.length; i++) {
+      diff |= derivedBytes[i] ^ storedKeyBytes[i];
+    }
+    return diff === 0;
+  } catch {
+    return false;
   }
 }
