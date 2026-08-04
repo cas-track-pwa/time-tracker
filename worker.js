@@ -1,8 +1,6 @@
 // Cloudflare Workers API endpoints for Time Tracker
 // This file will be deployed as a Cloudflare Worker
 
-import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
-
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -10,10 +8,10 @@ export default {
 
     // API routes
     if (pathname.startsWith('/api/')) {
-      return handleAPI(request, env);
+      return handleAPI(request, env, url);
     }
 
-    // Serve static assets
+    // Serve static assets from KV
     try {
       return await getAssetFromKV({ request, waitUntil: ctx.waitUntil.bind(ctx) });
     } catch (e) {
@@ -26,8 +24,51 @@ export default {
   }
 };
 
-async function handleAPI(request, env) {
+// Simple asset handler for static files
+async function getAssetFromKV({ request, waitUntil }) {
   const url = new URL(request.url);
+  const pathname = url.pathname;
+  
+  // Map paths to asset files
+  const assetMap = {
+    '/': '/index.html',
+    '/index.html': '/index.html',
+    '/app.js': '/app.js',
+    '/styles.css': '/styles.css',
+    '/manifest.json': '/manifest.json',
+    '/sw.js': '/sw.js',
+  };
+  
+  const assetPath = assetMap[pathname] || pathname;
+  
+  // Try to get from KV
+  try {
+    const asset = await env.ASSETS.get(assetPath, { type: 'text' });
+    if (asset) {
+      const contentType = getContentType(assetPath);
+      return new Response(asset, {
+        headers: { 'Content-Type': contentType }
+      });
+    }
+  } catch (e) {
+    // Fall through to error
+  }
+  
+  return new Response('Not Found', { status: 404 });
+}
+
+function getContentType(path) {
+  if (path.endsWith('.html')) return 'text/html';
+  if (path.endsWith('.js')) return 'application/javascript';
+  if (path.endsWith('.css')) return 'text/css';
+  if (path.endsWith('.json')) return 'application/json';
+  if (path.endsWith('.svg')) return 'image/svg+xml';
+  if (path.endsWith('.png')) return 'image/png';
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
+  return 'text/plain';
+}
+
+async function handleAPI(request, env, url) {
   const method = request.method;
   const path = url.pathname;
 
@@ -50,13 +91,13 @@ async function handleAPI(request, env) {
     return createLog(request, env);
   }
   if (path.startsWith('/api/logs/') && method === 'GET') {
-    return getLog(request, env);
+    return getLog(request, env, url);
   }
   if (path.startsWith('/api/logs/') && method === 'PUT') {
-    return updateLog(request, env);
+    return updateLog(request, env, url);
   }
   if (path.startsWith('/api/logs/') && method === 'DELETE') {
-    return deleteLog(request, env);
+    return deleteLog(request, env, url);
   }
 
   return new Response('Not Found', { status: 404 });
@@ -205,14 +246,15 @@ async function createLog(request, env) {
       `INSERT INTO logs (
         user_id, client, start, end, arrival, 
         duration_ms, decimal_hours, notes, parts, 
-        billable_time, travel_mileage, start_mileage, arrival_mileage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        billable_time, travel_mileage, start_mileage, arrival_mileage,
+        startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       userId,
       logData.client,
       logData.start,
       logData.end,
-      logData.arrival,
+      logData.arrival || null,
       logData.durationMs,
       logData.decimalHours,
       logData.notes,
@@ -220,7 +262,14 @@ async function createLog(request, env) {
       logData.billableTime,
       logData.travelMileage,
       logData.startMileage,
-      logData.arrivalMileage
+      logData.arrivalMileage,
+      logData.startMs || null,
+      logData.endMs || null,
+      logData.arrivalMs || null,
+      logData.duration || null,
+      logData.travelDurationMs || null,
+      logData.onSiteDurationMs || null,
+      logData.arrivalTime || null
     ).run();
 
     return new Response(JSON.stringify({ 
@@ -237,7 +286,7 @@ async function createLog(request, env) {
   }
 }
 
-async function getLog(request, env) {
+async function getLog(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
@@ -271,7 +320,7 @@ async function getLog(request, env) {
   }
 }
 
-async function updateLog(request, env) {
+async function updateLog(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
@@ -288,12 +337,16 @@ async function updateLog(request, env) {
       `UPDATE logs SET 
         client = ?, start = ?, end = ?, arrival = ?,
         duration_ms = ?, decimal_hours = ?, notes = ?, parts = ?,
-        billable_time = ?, travel_mileage = ?, start_mileage = ?, arrival_mileage = ?
+        billable_time = ?, travel_mileage = ?, start_mileage = ?, arrival_mileage = ?,
+        startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?
       WHERE id = ? AND user_id = ?`
     ).bind(
-      logData.client, logData.start, logData.end, logData.arrival,
+      logData.client, logData.start, logData.end, logData.arrival || null,
       logData.durationMs, logData.decimalHours, logData.notes, logData.parts,
       logData.billableTime, logData.travelMileage, logData.startMileage, logData.arrivalMileage,
+      logData.startMs || null, logData.endMs || null, logData.arrivalMs || null,
+      logData.duration || null, logData.travelDurationMs || null, logData.onSiteDurationMs || null,
+      logData.arrivalTime || null,
       logId, userId
     ).run();
 
@@ -308,7 +361,7 @@ async function updateLog(request, env) {
   }
 }
 
-async function deleteLog(request, env) {
+async function deleteLog(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
