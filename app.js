@@ -1107,6 +1107,7 @@ window.addEventListener('beforeprint', () => {
 
 window.addEventListener('afterprint', () => {
     restorePrintTitle();
+    printArea.innerHTML = '';
 });
 
 btnPrintReportAction.addEventListener('click', () => {
