@@ -1230,9 +1230,17 @@ btnGenerateReport.addEventListener('click', () => {
         startDate.setHours(0, 0, 0, 0);
         endDate.setHours(23, 59, 59, 999);
     } else if (selectedRange === 'week') {
-        // Last 7 days including today
-        startDate.setDate(startDate.getDate() - 6);
+        // Previous week: Monday to Friday
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const thisMonday = new Date(today);
+        thisMonday.setDate(today.getDate() - daysSinceMonday);
+        startDate = new Date(thisMonday);
+        startDate.setDate(thisMonday.getDate() - 7);
         startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 4);
         endDate.setHours(23, 59, 59, 999);
     } else if (selectedRange === 'custom') {
         const startVal = reportStartDate.value;
