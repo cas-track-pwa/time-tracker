@@ -1,0 +1,26 @@
+name = "time-tracker"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# JWT secret for token signing (change this in production!)
+JWT_SECRET = "your-secret-key-change-in-production"
+
+[[kv_namespaces]]
+binding = "TIME_TRACKER_KV"
+id = "your-kv-namespace-id"
+
+# D1 database configuration
+[[d1_databases]]
+binding = "DB"
+database_name = "time-tracker"
+database_id = "your-d1-database-id"
+
+[wrangler]
+# Configuration for publishing
+account_id = "your-cloudflare-account-id"
+zone_id = "your-zone-id"
+workers_dev = true
+
+[triggers]
+crons = []
