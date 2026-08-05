@@ -107,7 +107,10 @@ const notesInput = document.getElementById('notesInput');
 const btnSaveLog = document.getElementById('btnSaveLog');
 const billableInputs = document.getElementsByName('billableTime');
 const logHistory = document.getElementById('logHistory');
-const btnExport = document.getElementById('btnExport');
+const btnCsv = document.getElementById('btnCsv');
+const csvModal = document.getElementById('csvModal');
+const btnCsvExport = document.getElementById('btnCsvExport');
+const btnCsvImport = document.getElementById('btnCsvImport');
 const btnClear = document.getElementById('btnClear');
 const clearConfirmModal = document.getElementById('clearConfirmModal');
 const btnCancelClear = document.getElementById('btnCancelClear');
@@ -861,8 +864,18 @@ transaction.onerror = () => {
 };
 });
 
-btnExport.addEventListener('click', () => {
+btnCsv.addEventListener('click', () => {
+    csvModal.classList.remove('hidden');
+});
+
+btnCsvExport.addEventListener('click', () => {
+    csvModal.classList.add('hidden');
     exportToCSV();
+});
+
+btnCsvImport.addEventListener('click', () => {
+    csvModal.classList.add('hidden');
+    btnImportCsv.click();
 });
 
 btnOpenReport.addEventListener('click', () => {
@@ -883,12 +896,7 @@ function parseDurationToMs(durationStr) {
 }
 
 // Import CSV functionality
-const btnImport = document.getElementById('btnImport');
 const btnImportCsv = document.getElementById('btnImportCsv');
-
-btnImport.addEventListener('click', () => {
-    btnImportCsv.click();
-});
 
 btnImportCsv.addEventListener('change', (e) => {
     const file = e.target.files[0];

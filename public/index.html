@@ -31,14 +31,14 @@
         <header>
             <div class="flex-row-gap">
                 <button id="btnAddEntry" class="btn-export">Add Entry</button>
-                <button id="btnExport" class="btn-export">Export CSV</button>
-                <input type="file" id="btnImportCsv" accept=".csv" style="display: none;">
-                <button id="btnImport" class="btn-export">Import CSV</button>
+                <button id="btnCsv" class="btn-export">CSV</button>
                 <button id="btnOpenReport" class="btn-export">Report</button>
                 <button id="btnLogout" class="btn-export">Logout</button>
                 <button id="btnDarkMode" class="btn-export btn-dark-mode">🌙</button>
             </div>
         </header>
+
+        <input type="file" id="btnImportCsv" accept=".csv" style="display: none;">
 
         <main>
             <div class="timer-card">
@@ -226,6 +226,18 @@
                     <div class="flex-row-gap">
                         <button id="btnCancelDelete" class="btn-cancel">Cancel</button>
                         <button id="btnConfirmDelete" class="btn-confirm-delete">Delete</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CSV Import/Export Modal -->
+            <div id="csvModal" class="modal-overlay hidden">
+                <div class="modal-dialog">
+                    <h3 class="modal-title">CSV Options</h3>
+                    <p style="font-size: 0.875rem; color: var(--text-muted);">Choose whether to export your logs to a CSV file or import from an existing CSV.</p>
+                    <div class="flex-row-gap">
+                        <button id="btnCsvExport" class="btn-cancel">Export</button>
+                        <button id="btnCsvImport" class="btn-confirm-delete">Import</button>
                     </div>
                 </div>
             </div>
