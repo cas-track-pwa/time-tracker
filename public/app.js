@@ -1464,7 +1464,7 @@ async function syncFromCloud(sinceOverride) {
 
 async function performSync() {
     if (!isAuthenticated()) return;
-    syncStatusEl.style.display = 'block';
+    syncStatusEl.classList.remove('hidden');
     updateSyncStatus('syncing');
     const since = getLastSyncTime();
     await syncToCloud();
@@ -1475,7 +1475,7 @@ async function performSync() {
 
 function syncAfterWrite() {
     if (isAuthenticated()) {
-        syncStatusEl.style.display = 'block';
+        syncStatusEl.classList.remove('hidden');
         updateSyncStatus('syncing');
         setTimeout(() => {
             syncToCloud().then(result => {
@@ -1488,10 +1488,7 @@ function syncAfterWrite() {
     }
 }
 
-const syncStatusEl = document.createElement('div');
-syncStatusEl.id = 'syncStatus';
-syncStatusEl.style.cssText = 'position: fixed; top: 10px; right: 10px; padding: 5px 10px; border-radius: 4px; font-size: 12px; z-index: 1000; display: none;';
-document.body.appendChild(syncStatusEl);
+const syncStatusEl = document.getElementById('syncStatus');
 
 function updateSyncStatus(status) {
     const colors = { online: '#10b981', syncing: '#f59e0b', offline: '#ef4444', idle: '#6b7280' };
@@ -1503,10 +1500,10 @@ function updateSyncStatus(status) {
 function checkConnectivity() {
     if (!isAuthenticated()) {
         updateSyncStatus('idle');
-        syncStatusEl.style.display = 'none';
+        syncStatusEl.classList.add('hidden');
         return;
     }
-    syncStatusEl.style.display = 'block';
+    syncStatusEl.classList.remove('hidden');
     if (navigator.onLine) {
         updateSyncStatus('online');
     } else {
@@ -1613,7 +1610,7 @@ btnLogout.addEventListener('click', async () => {
     localStorage.removeItem('userId');
     localStorage.removeItem('userEmail');
     localStorage.removeItem('lastSyncTime');
-    syncStatusEl.style.display = 'none';
+    syncStatusEl.classList.add('hidden');
     showAuthModal();
 });
 
