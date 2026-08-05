@@ -60,13 +60,12 @@ export default {
   }
 };
 
-async function isAuthenticatedRequest(request, env) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return false;
-
-  const token = authHeader.slice(7);
-  const payload = await verifyToken(env, token);
-  return payload !== null;
+// Add CORS headers to a Response
+// Note: CORS headers are now added at the fetch handler level via getCORSHeaders()
+// for configurable origin support. This function is kept for backward compatibility
+// but no longer sets headers (the fetch handler handles it).
+function withCORS(response) {
+  return response;
 }
 
 async function serveStaticAsset(request, env, url) {
@@ -122,19 +121,6 @@ async function serveStaticAsset(request, env, url) {
 
   // For local development, serve a simple HTML page
   return serveFallback(request, assetFile);
-}
-
-function getContentType(path) {
-  if (path.endsWith('.html')) return 'text/html';
-  if (path.endsWith('.js')) return 'application/javascript';
-  if (path.endsWith('.css')) return 'text/css';
-  if (path.endsWith('.json')) return 'application/json';
-  if (path.endsWith('.svg')) return 'image/svg+xml';
-  if (path.endsWith('.png')) return 'image/png';
-  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
-  if (path.endsWith('.ico')) return 'image/x-icon';
-  if (path.endsWith('.xml')) return 'application/xml';
-  return 'text/plain';
 }
 
 async function serveFallback(request, assetFile) {
@@ -485,7 +471,8 @@ async function updateLog(request, env, url) {
         client = ?, start = ?, end = ?, arrival = ?,
         durationMs = ?, decimalHours = ?, notes = ?, parts = ?,
         billableTime = ?, travelMileage = ?, startMileage = ?, arrivalMileage = ?,
-        startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?
+        startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?`
     ).bind(
       logData.client, logData.start, logData.end, logData.arrival || null,
