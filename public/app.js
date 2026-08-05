@@ -1402,6 +1402,7 @@ async function syncToCloud() {
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
+        console.log('syncToCloud: pushing', logs.length, 'logs to server');
         const response = await fetch(`${API_BASE}/api/sync`, {
             method: 'POST',
             headers: getAuthHeaders(),
@@ -1409,12 +1410,14 @@ async function syncToCloud() {
         });
         if (!response.ok) {
             const error = await response.json();
+            console.error('syncToCloud failed:', error);
             return { success: false, error: error.error || 'Sync failed' };
         }
         const result = await response.json();
         setLastSyncTime(result.serverTime);
         return { success: true, upserted: result.upserted, errors: result.errors };
     } catch (error) {
+        console.error('syncToCloud error:', error);
         return { success: false, error: error.message };
     }
 }
@@ -1428,10 +1431,12 @@ async function syncFromCloud() {
         });
         if (!response.ok) {
             const error = await response.json();
+            console.error('syncFromCloud failed:', error);
             return { success: false, error: error.error || 'Fetch failed' };
         }
         const data = await response.json();
         const serverLogs = data.logs || [];
+        console.log('syncFromCloud: received', serverLogs.length, 'logs from server');
         const tx = db.transaction(['logs'], 'readwrite');
         const store = tx.objectStore('logs');
         for (const log of serverLogs) {
@@ -1444,6 +1449,7 @@ async function syncFromCloud() {
         setLastSyncTime(data.serverTime);
         return { success: true, count: serverLogs.length };
     } catch (error) {
+        console.error('syncFromCloud error:', error);
         return { success: false, error: error.message };
     }
 }
@@ -1452,10 +1458,8 @@ async function performSync() {
     if (!isAuthenticated()) return;
     syncStatusEl.style.display = 'block';
     updateSyncStatus('syncing');
-    const uploadResult = await syncToCloud();
-    if (uploadResult.success) {
-        await syncFromCloud();
-    }
+    await syncToCloud();
+    await syncFromCloud();
     checkConnectivity();
     renderLogs();
 }
