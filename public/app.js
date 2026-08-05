@@ -1422,10 +1422,10 @@ async function syncToCloud() {
     }
 }
 
-async function syncFromCloud() {
+async function syncFromCloud(sinceOverride) {
     if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
     try {
-        const since = getLastSyncTime();
+        const since = sinceOverride !== undefined ? sinceOverride : getLastSyncTime();
         const response = await fetch(`${API_BASE}/api/sync?since=${since}`, {
             headers: getAuthHeaders()
         });
@@ -1458,8 +1458,9 @@ async function performSync() {
     if (!isAuthenticated()) return;
     syncStatusEl.style.display = 'block';
     updateSyncStatus('syncing');
+    const since = getLastSyncTime();
     await syncToCloud();
-    await syncFromCloud();
+    await syncFromCloud(since);
     checkConnectivity();
     renderLogs();
 }
