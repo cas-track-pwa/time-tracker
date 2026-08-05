@@ -42,6 +42,7 @@ export default {
       // Serve static assets without requiring auth header.
       // The client-side app.js handles authentication by reading the token
       // from localStorage and including it in API requests.
+      // Unauthenticated users see the app UI but cannot access API endpoints.
       response = await serveStaticAsset(request, env, url);
     }
 

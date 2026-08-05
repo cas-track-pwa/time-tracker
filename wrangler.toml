@@ -8,8 +8,8 @@ compatibility_date = "2024-01-01"
 # For local dev, create a .dev.vars file with: JWT_SECRET="your-secret-here"
 
 # Fallback allowed users for local development
-# Update this with your actual emails
-FALLBACK_ALLOWED_USERS = '["user1@example.com", "user2@example.com"]'
+# Update this with your actual emails, or set the allowed_users KV key in production
+FALLBACK_ALLOWED_USERS = '["your-email@example.com"]'
 
 # CORS: restrict to your production domain in production.
 # Set via: npx wrangler secret put ALLOWED_ORIGIN
@@ -22,24 +22,10 @@ binding = "TIME_TRACKER_KV"
 id = "5fe095687b3e47778649586256073f69"
 
 # Static assets - automatically uploaded by `wrangler deploy`
+# Only files in the public/ directory are uploaded as assets.
 [assets]
-directory = "."
+directory = "./public"
 binding = "ASSETS"
-# Exclude files that shouldn't be served as static assets
-exclude = [
-  "node_modules",
-  ".wrangler",
-  ".dev.vars",
-  ".gitignore",
-  "AGENTS.md",
-  "CLOUDFLARE_MIGRATION.md",
-  "upload-assets.ps1",
-  "package.json",
-  "package-lock.json",
-  "wrangler.toml",
-  "migrations",
-  "manifest.webapp",
-]
 
 # D1 database configuration
 [[d1_databases]]

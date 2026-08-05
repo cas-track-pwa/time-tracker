@@ -16,17 +16,18 @@ A progressive web app (PWA) for time tracking that allows users to:
 ## Architecture
 
 ### Multi-File Application
-- **index.html**: Page structure and modal markup only
-- **app.js**: All application logic (IndexedDB access, timer, modals, CSV, reports, dark mode, service worker registration, cloud sync/auth)
-- **styles.css**: All styling, including `:root` / `.dark` CSS variable themes and print styles
-- **sw.js**: Service worker for offline asset caching
-- **manifest.json**: Web app manifest (Android/desktop install metadata)
-- **manifest.webapp**: Legacy iOS-era manifest format, kept for compatibility but not linked from `index.html`
+- **public/index.html**: Page structure and modal markup only
+- **public/app.js**: All application logic (IndexedDB access, timer, modals, CSV, reports, dark mode, service worker registration, cloud sync/auth)
+- **public/styles.css**: All styling, including `:root` / `.dark` CSS variable themes and print styles
+- **public/sw.js**: Service worker for offline asset caching
+- **public/manifest.json**: Web app manifest (Android/desktop install metadata)
+- **public/manifest.webapp**: Legacy iOS-era manifest format, kept for compatibility but not linked from `index.html`
+- **public/icons/**: All icon assets (PNG, SVG, maskable, Apple touch icons)
 - **worker.js**: Cloudflare Worker (API layer) — handles authentication, CRUD for logs, and offline-first sync
-- **wrangler.toml**: Wrangler configuration (KV namespaces, D1 database binding, dev server)
+- **wrangler.toml**: Wrangler configuration (KV namespaces, D1 database binding, dev server, `[assets]` config pointing to `public/`)
 - **migrations/001_initial.sql**: D1 database schema (users + logs tables)
 - **CLOUDFLARE_MIGRATION.md**: Migration guide for deploying to Cloudflare Workers
-- **upload-assets.ps1**: PowerShell script for bulk-uploading static assets to KV
+- **upload-assets.ps1**: PowerShell script for bulk-uploading static assets to KV (optional, manual use only)
 - Uses IndexedDB (`TimeTrackerDB`, currently version 2) as the local client-side store, with optional cloud backup/sync to Cloudflare D1 + KV
 - No external dependencies or frameworks on the client side; the Worker uses native Web Crypto APIs (PBKDF2, HMAC-SHA256) for auth
 
@@ -204,44 +205,46 @@ Same validation rules as Manual Entry apply to `editModal` before any IndexedDB 
 ## File Structure
 ```
 time-tracker/
-├── index.html                        # Page structure and modal markup
-├── app.js                            # All application logic
-├── styles.css                        # All styling (light/dark themes, print styles)
-├── sw.js                             # Service worker (offline asset caching)
-├── manifest.json                     # Standard web app manifest (Android/desktop)
-├── manifest.webapp                   # Legacy iOS-era manifest (unreferenced, kept for compatibility)
+├── public/                           # Static assets (uploaded by wrangler deploy)
+│   ├── index.html                    # Page structure and modal markup
+│   ├── app.js                        # All application logic
+│   ├── styles.css                    # All styling (light/dark themes, print styles)
+│   ├── sw.js                         # Service worker (offline asset caching)
+│   ├── manifest.json                 # Standard web app manifest (Android/desktop)
+│   ├── manifest.webapp               # Legacy iOS-era manifest (unreferenced, kept for compatibility)
+│   ├── icons/
+│   │   ├── icon.svg                  # SVG app icon
+│   │   ├── icon-16.png               # 16x16 favicon
+│   │   ├── icon-24.png               # 24x24 favicon
+│   │   ├── icon-32.png               # 32x32 favicon
+│   │   ├── icon-48.png               # 48x48 Android icon
+│   │   ├── icon-72.png               # 72x72 Android icon
+│   │   ├── icon-96.png               # 96x96 Android icon
+│   │   ├── icon-128.png              # 128x128 Android icon
+│   │   ├── icon-144.png              # 144x144 Android icon
+│   │   ├── icon-150.png              # 150x150 Windows tile
+│   │   ├── icon-152.png              # 152x152 iOS icon
+│   │   ├── icon-167.png              # 167x167 iOS icon (iPad)
+│   │   ├── icon-180.png              # 180x180 Apple touch icon
+│   │   ├── icon-192.png              # 192x192 Android icon
+│   │   ├── icon-256.png              # 256x256 Android icon
+│   │   ├── icon-384.png              # 384x384 Android icon
+│   │   ├── icon-512.png              # 512x512 Android icon
+│   │   ├── icon-maskable-192.png     # 192x192 maskable (Android adaptive)
+│   │   ├── icon-maskable-512.png     # 512x512 maskable (Android adaptive)
+│   │   ├── apple-touch-icon.png      # Apple touch icon
+│   │   ├── browserconfig.xml         # IE11 tile config
+│   │   ├── mstile-150x150.png        # Windows tile
+│   │   ├── safari-pinned-tab.svg     # Safari pinned tab
+│   │   └── site.webmanifest          # Alternative manifest
 ├── AGENTS.md                         # This file
 ├── worker.js                         # Cloudflare Worker (API layer: auth, CRUD, sync)
-├── wrangler.toml                     # Wrangler configuration (KV, D1, dev server)
+├── wrangler.toml                     # Wrangler configuration (KV, D1, dev server, assets)
 ├── CLOUDFLARE_MIGRATION.md           # Migration guide for Cloudflare deployment
-├── upload-assets.ps1                 # PowerShell script for bulk-uploading static assets to KV
+├── upload-assets.ps1                 # PowerShell script for bulk-uploading static assets to KV (optional)
+├── package.json                      # npm scripts (deploy, dev)
 ├── migrations/
 │   └── 001_initial.sql               # D1 database schema (users + logs tables)
-├── icons/
-│   ├── icon.svg                      # SVG app icon
-│   ├── icon-16.png                   # 16x16 favicon
-│   ├── icon-24.png                   # 24x24 favicon
-│   ├── icon-32.png                   # 32x32 favicon
-│   ├── icon-48.png                   # 48x48 Android icon
-│   ├── icon-72.png                   # 72x72 Android icon
-│   ├── icon-96.png                   # 96x96 Android icon
-│   ├── icon-128.png                  # 128x128 Android icon
-│   ├── icon-144.png                  # 144x144 Android icon
-│   ├── icon-150.png                  # 150x150 Windows tile
-│   ├── icon-152.png                  # 152x152 iOS icon
-│   ├── icon-167.png                  # 167x167 iOS icon (iPad)
-│   ├── icon-180.png                  # 180x180 Apple touch icon
-│   ├── icon-192.png                  # 192x192 Android icon
-│   ├── icon-256.png                  # 256x256 Android icon
-│   ├── icon-384.png                  # 384x384 Android icon
-│   ├── icon-512.png                  # 512x512 Android icon
-│   ├── icon-maskable-192.png         # 192x192 maskable (Android adaptive)
-│   ├── icon-maskable-512.png         # 512x512 maskable (Android adaptive)
-│   ├── apple-touch-icon.png          # Apple touch icon
-│   ├── browserconfig.xml             # IE11 tile config
-│   ├── mstile-150x150.png            # Windows tile
-│   ├── safari-pinned-tab.svg         # Safari pinned tab
-│   └── site.webmanifest              # Alternative manifest
 ```
 
 ## Cloudflare Worker (API Layer)
@@ -257,7 +260,7 @@ The Worker (`worker.js`) is deployed on Cloudflare Workers and provides the auth
 | `JWT_SECRET` | Secret | HMAC-SHA256 signing key for auth tokens (set via `wrangler secret put JWT_SECRET`) |
 | `FALLBACK_ALLOWED_USERS` | Var | Comma-separated JSON array of allowed emails for local dev / allowlist gating |
 | `ALLOWED_ORIGIN` | Secret | CORS allowed origin for production (set via `wrangler secret put ALLOWED_ORIGIN`) |
-| `ASSETS` | Assets Binding | Static asset serving (auto-uploaded by `wrangler deploy` via `[assets]` config) |
+| `ASSETS` | Assets Binding | Static asset serving (auto-uploaded by `wrangler deploy` from `public/` directory via `[assets]` config) |
 
 ### Authentication
 
@@ -314,6 +317,14 @@ npx wrangler secret put JWT_SECRET
 # Set the CORS allowed origin (your production domain)
 npx wrangler secret put ALLOWED_ORIGIN
 
+# Apply D1 schema to the remote database (only needed once)
+npx wrangler d1 execute time-tracker --remote < migrations/001_initial.sql
+
+# Set allowed users (comma-separated JSON array of emails)
+# Option 1: Update FALLBACK_ALLOWED_USERS in wrangler.toml
+# Option 2: Set the allowed_users KV key:
+echo '["your-email@example.com"]' | npx wrangler kv key put allowed_users --binding=TIME_TRACKER_KV
+
 # Deploy (static assets are uploaded automatically)
 npm run deploy  # or: npx wrangler deploy
 ```
@@ -360,11 +371,12 @@ See `CLOUDFLARE_MIGRATION.md` for the full migration guide. Static assets are no
 
 ## Open Items (Not Yet Fixed)
 
-- **Login page is served by the Worker** (`showLoginPage()` in `worker.js`) — unauthenticated requests to `/` return an inline HTML login/register page. The client-side `app.js` does not currently render its own auth UI; it relies on the Worker to gate access. Consider adding an in-app auth modal for a smoother UX.
-- **`API_BASE` in `app.js` is a placeholder** (`https://time-tracker.your-worker-subdomain.workers.dev`) — must be updated to the actual Worker URL before deployment.
+- None at this time.
 
 ## Previously Open Items (Now Fixed)
 
+- **Login page was served by the Worker** (`showLoginPage()` in `worker.js`) — unauthenticated requests to `/` returned an inline HTML login/register page. Replaced with an in-app auth modal (`#authModal`) in `index.html` and `app.js` that appears when the user is not authenticated, allowing login/register without a full page redirect. The Worker now serves static assets for all non-API routes without auth gating; the client-side app.js handles auth state and API token management.
+- **`API_BASE` in `app.js` was a placeholder** — updated to `https://time-tracker.alexs-cas.workers.dev` (the actual deployed Worker URL).
 - **Service worker precache list was missing `app.js` and `styles.css`** — both files are now included in `urlsToCache` in `sw.js`.
 - **Service worker precache paths were root-relative** — all paths in `sw.js` are now relative (`./`, `index.html`, `icons/...`).
 - **Dark mode flash on load** — an inline script in `<head>` of `index.html` now applies the `dark` class before first paint, eliminating the flash.
@@ -372,3 +384,7 @@ See `CLOUDFLARE_MIGRATION.md` for the full migration guide. Static assets are no
 - **`manifest.json` theme/background color was hardcoded dark** — updated to light theme values (`#f3f4f6` / `#2563eb`) to match the default light theme.
 - **CORS was configured with `Access-Control-Allow-Origin: *`** — now uses a configurable `ALLOWED_ORIGIN` env var (set via `wrangler secret put ALLOWED_ORIGIN`), falling back to echoing the request origin for local dev, and `*` only when no origin is present.
 - **Static asset deployment was manual** — replaced the KV namespace `ASSETS` binding with the `[assets]` configuration in `wrangler.toml`, so `wrangler deploy` automatically uploads all static assets. The `upload-assets.ps1` script is now optional for manual uploads only.
+- **Report button had an inline `style` overriding dark mode** — removed the inline `background-color` style from `#btnOpenReport` in `index.html` so it inherits `.btn-export` styling and responds to `.dark` theme changes.
+- **Print report remained visible on screen after closing print dialog** — added `display: none` for `#printArea` in screen CSS (it's only shown inside `@media print`), so the report content is hidden on screen and only appears in the print preview/output.
+- **Sync status badge showed "offline" for unauthenticated users** — `checkConnectivity()` now shows "idle" and hides the badge when not authenticated, and shows "syncing" during sync operations. The badge is hidden by default and only shown when the user is authenticated.
+- **Service worker tried to cache POST requests** — the Cache API doesn't support POST methods, causing `TypeError: Failed to execute 'put' on 'Cache': Request method 'POST' is unsupported`. Added a `event.request.method === 'GET'` check before caching responses in `sw.js`.

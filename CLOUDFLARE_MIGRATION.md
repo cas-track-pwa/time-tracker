@@ -58,7 +58,7 @@ wrangler deploy
 wrangler deploy --zone yourdomain.com
 ```
 
-Static assets (HTML, CSS, JS, icons, manifest) are automatically uploaded to the ASSETS binding during deploy — no manual KV upload step required.
+Static assets (HTML, CSS, JS, icons, manifest) in the `public/` directory are automatically uploaded to the ASSETS binding during deploy — no manual KV upload step required.
 
 ## API Endpoints
 
