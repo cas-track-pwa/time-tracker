@@ -76,11 +76,24 @@ main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5re
 .live-timer.running { color: var(--rose); }
 .active-client-label { font-size: 0.75rem; color: var(--primary); font-weight: 500; margin-top: 0.25rem; height: 1rem; }
 .dark .active-client-label { color: #60a5fa; }
-.action-buttons-container { display: flex; gap: 0.75rem; width: 100%; }
+.action-buttons-container { display: flex; gap: 0.75rem; width: 100%; flex-direction: column; }
+.start-buttons-group { display: flex; gap: 0.5rem; width: 100%; }
+@media (max-width: 480px) {
+    .start-buttons-group { flex-direction: column; }
+}
 .btn-action { flex: 1; width: 100%; border: none; color: white; font-weight: 700; padding: 1rem; border-radius: 0.75rem; font-size: 1.125rem; cursor: pointer; box-shadow: var(--shadow-sm); transition: all 0.15s ease-in-out; }
 .btn-action.start { background-color: var(--emerald); }
 .dark .btn-action.start { background-color: #059669; }
 .btn-action.start:hover { background-color: var(--emerald-hover); }
+.btn-action.start-remote { background-color: #2563eb; font-size: 0.95rem; padding: 0.75rem 0.5rem; }
+.dark .btn-action.start-remote { background-color: #1d4ed8; }
+.btn-action.start-remote:hover { background-color: #1e40af; }
+.btn-action.start-onsite { background-color: #0d9488; font-size: 0.95rem; padding: 0.75rem 0.5rem; }
+.dark .btn-action.start-onsite { background-color: #0f766e; }
+.btn-action.start-onsite:hover { background-color: #115e59; }
+.btn-action.start-travel { background-color: #059669; font-size: 0.95rem; padding: 0.75rem 0.5rem; }
+.dark .btn-action.start-travel { background-color: #047857; }
+.btn-action.start-travel:hover { background-color: #065f46; }
 .btn-action.stop { background-color: var(--rose); }
 .dark .btn-action.stop { background-color: #e11d48; }
 .btn-action.stop:hover { background-color: var(--rose-hover); }

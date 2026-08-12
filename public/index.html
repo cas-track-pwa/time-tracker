@@ -53,19 +53,18 @@
                     <div id="arrivalBadge" class="arrival-badge hidden"></div>
                 </div>
                 <div class="action-buttons-container">
-                        <button id="btnAction" class="btn-action start">Start Timer</button>
-                        <button id="btnMarkArrival" class="btn-action-sec hidden">Mark Arrival</button>
+                    <div id="startButtonsGroup" class="start-buttons-group">
+                        <button id="btnStartRemote" class="btn-action start-remote">Start Remote</button>
+                        <button id="btnStartOnSite" class="btn-action start-onsite">Start On-Site</button>
+                        <button id="btnStartTravel" class="btn-action start-travel">Start Travel</button>
+                    </div>
+                    <button id="btnEndTimer" class="btn-action stop hidden">End Timer</button>
+                    <button id="btnMarkArrival" class="btn-action-sec hidden">Mark Arrival</button>
                 </div>
                 <div class="form-group" style="margin-top: 0.5rem;">
                     <label class="label-title" style="display: flex; align-items: center; gap: 0.5rem;">
                         <input type="checkbox" id="toggleMileage" checked>
-                        <span>Request Mileage</span>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label class="label-title" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" id="toggleRemote">
-                        <span>Remote Work</span>
+                        <span>Request Mileage (Travel Only)</span>
                     </label>
                 </div>
             </div>
@@ -167,10 +166,12 @@
                         <input type="number" id="editMileage" min="0" placeholder="Enter miles" class="input-field">
                     </div>
                     <div class="form-group">
-                        <label class="label-title" style="display: flex; align-items: center; gap: 0.5rem;">
-                            <input type="checkbox" id="editRemote">
-                            <span>Remote Work</span>
-                        </label>
+                        <label class="label-title">Job Type</label>
+                        <div class="billable-options" role="radiogroup" aria-label="Job Type">
+                            <label class="billable-option"><input type="radio" name="editJobType" value="remote" class="billable-input"> Remote</label>
+                            <label class="billable-option"><input type="radio" name="editJobType" value="onsite" class="billable-input"> On-Site</label>
+                            <label class="billable-option"><input type="radio" name="editJobType" value="travel" class="billable-input" checked> Travel</label>
+                        </div>
                     </div>
                     <div class="flex-row-gap">
                         <button id="btnCancelEdit" class="btn-cancel">Cancel</button>
@@ -215,10 +216,12 @@
                         <input type="number" id="addMileage" min="0" placeholder="Enter miles" class="input-field">
                     </div>
                     <div class="form-group">
-                        <label class="label-title" style="display: flex; align-items: center; gap: 0.5rem;">
-                            <input type="checkbox" id="addRemote">
-                            <span>Remote Work</span>
-                        </label>
+                        <label class="label-title">Job Type</label>
+                        <div class="billable-options" role="radiogroup" aria-label="Job Type">
+                            <label class="billable-option"><input type="radio" name="addJobType" value="remote" class="billable-input"> Remote</label>
+                            <label class="billable-option"><input type="radio" name="addJobType" value="onsite" class="billable-input"> On-Site</label>
+                            <label class="billable-option"><input type="radio" name="addJobType" value="travel" class="billable-input" checked> Travel</label>
+                        </div>
                     </div>
                     <div class="flex-row-gap">
                         <button id="btnCancelAdd" class="btn-cancel">Cancel</button>

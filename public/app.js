@@ -8,23 +8,13 @@ dbRequest.onupgradeneeded = (e) => {
     }
     if (!db.objectStoreNames.contains("timerState")) {
         db.createObjectStore("timerState", { keyPath: "id" });
-let db;
-const dbRequest = indexedDB.open("TimeTrackerDB", 2);
-
-dbRequest.onupgradeneeded = (e) => {
-    db = e.target.result;
-    if (!db.objectStoreNames.contains("logs")) {
-        db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
-    }
-    if (!db.objectStoreNames.contains("timerState")) {
-        db.createObjectStore("timerState", { keyPath: "id" });
     }
 };
 
 dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false;
+let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false, currentJobType = 'travel';
 
 // Helper function to robustly check if a log entry is remote work
 function isRemoteLog(log) {
@@ -33,6 +23,13 @@ function isRemoteLog(log) {
     if (val === true || val === 1 || val === '1') return true;
     if (typeof val === 'string' && val.toLowerCase() === 'true') return true;
     return false;
+}
+
+// Helper to format Job Type for active timer label display
+function getJobTypeLabel(type) {
+    if (type === 'remote') return 'Remote Work';
+    if (type === 'onsite') return 'On-Site';
+    return 'Travel';
 }
 
 // Save timer state to IndexedDB
@@ -49,7 +46,8 @@ function saveTimerState() {
         startMileage: startMileage,
         arrivalMileage: arrivalMileage,
         client: clientInput.value.trim(),
-        isRemote: isRemote
+        isRemote: isRemote,
+        jobType: currentJobType
     };
     store.put(state);
 }
@@ -70,20 +68,19 @@ function restoreTimerState() {
         arrivalTime = state.arrivalTime;
         startMileage = state.startMileage;
         arrivalMileage = state.arrivalMileage;
-        isRemote = isRemoteLog(state);
-        toggleRemote.checked = isRemote;
-        toggleRemote.disabled = true;
-        toggleMileage.disabled = isRemote;
+        currentJobType = state.jobType || (isRemoteLog(state) ? 'remote' : 'travel');
+        isRemote = (currentJobType === 'remote');
         isRunning = true;
         clientInput.value = state.client;
         clientInput.disabled = true;
-        activeClientLabel.textContent = "Tracking: " + state.client;
+        activeClientLabel.textContent = "Tracking (" + getJobTypeLabel(currentJobType) + "): " + state.client;
 
-        btnAction.textContent = "End Timer";
-        btnAction.classList.remove('start');
-        btnAction.classList.add('stop');
+        if (startButtonsGroup) startButtonsGroup.classList.add('hidden');
+        if (btnEndTimer) btnEndTimer.classList.remove('hidden');
         liveTimer.classList.add('running');
-        btnMarkArrival.classList.toggle('hidden', isRemote);
+
+        const hasTravel = (currentJobType === 'travel');
+        btnMarkArrival.classList.toggle('hidden', !hasTravel || !!arrivalTime);
         arrivalBadge.classList.add('hidden');
 
         // If arrival time was set, show the badge
@@ -97,19 +94,15 @@ function restoreTimerState() {
 
         timerInterval = setInterval(updateLiveDisplay, 1000);
 
-        // Show appropriate modal based on state - but only if mileage
-        // tracking is currently enabled. Previously this ignored the
-        // "Request Mileage" toggle, so a user who turned mileage
-        // tracking off would still get re-prompted for it on every
-        // reload of an in-progress timer.
-        if (!isRemote && requestMileage && startMileage === null) {
+        if (hasTravel && requestMileage && startMileage === null) {
             startMileageInput.value = '';
             startMileageModal.classList.remove('hidden');
             startMileageInput.focus();
-        } else if (!isRemote && requestMileage && arrivalMileage === null && arrivalTime) {
+        } else if (hasTravel && requestMileage && arrivalMileage === null && arrivalTime) {
             arrivalMileageInput.value = '';
             arrivalMileageModal.classList.remove('hidden');
-            arrivalMileageInput.focus();                        }
+            arrivalMileageInput.focus();
+        }
     };
 }
 
@@ -125,7 +118,11 @@ function clearTimerState() {
 const clientInput = document.getElementById('clientInput');
 const liveTimer = document.getElementById('liveTimer');
 const activeClientLabel = document.getElementById('activeClientLabel');
-const btnAction = document.getElementById('btnAction');
+const startButtonsGroup = document.getElementById('startButtonsGroup');
+const btnStartRemote = document.getElementById('btnStartRemote');
+const btnStartOnSite = document.getElementById('btnStartOnSite');
+const btnStartTravel = document.getElementById('btnStartTravel');
+const btnEndTimer = document.getElementById('btnEndTimer');
 const notesModal = document.getElementById('notesModal');
 const notesInput = document.getElementById('notesInput');
 const btnSaveLog = document.getElementById('btnSaveLog');
@@ -146,7 +143,6 @@ let pendingDeleteId = null;
 const btnMarkArrival = document.getElementById('btnMarkArrival');
 const arrivalBadge = document.getElementById('arrivalBadge');
 const toggleMileage = document.getElementById('toggleMileage');
-const toggleRemote = document.getElementById('toggleRemote');
 
 const btnOpenReport = document.getElementById('btnOpenReport');
 const btnLogout = document.getElementById('btnLogout');
@@ -182,7 +178,7 @@ const editModal = document.getElementById('editModal');
     const editNotes = document.getElementById('editNotes');
     const editParts = document.getElementById('editParts');
     const editMileage = document.getElementById('editMileage');
-        const editRemote = document.getElementById('editRemote');
+    const editJobTypeInputs = document.getElementsByName('editJobType');
     const editBillableTime = document.getElementById('editBillableTime');
     const btnCancelEdit = document.getElementById('btnCancelEdit');
     const btnSaveEdit = document.getElementById('btnSaveEdit');
@@ -196,7 +192,7 @@ const addEntryModal = document.getElementById('addEntryModal');
     const addParts = document.getElementById('addParts');
     const addBillableTime = document.getElementById('addBillableTime');
     const addMileage = document.getElementById('addMileage');
-        const addRemote = document.getElementById('addRemote');
+    const addJobTypeInputs = document.getElementsByName('addJobType');
     const btnCancelAdd = document.getElementById('btnCancelAdd');
     const btnSaveAdd = document.getElementById('btnSaveAdd');
 
@@ -218,10 +214,13 @@ const partsInput = document.getElementById('partsInput');
 const btnSaveParts = document.getElementById('btnSaveParts');
 const btnSkipParts = document.getElementById('btnSkipParts');
 
-btnAction.addEventListener('click', () => {
-if (!isRunning) {
+function startTimer(type) {
     const clientName = clientInput.value.trim();
     if (!clientName) { alert("Please input a Client Name first."); return; }
+
+    currentJobType = type;
+    isRemote = (type === 'remote');
+    const hasTravel = (type === 'travel');
 
     isRunning = true;
     startTime = Date.now();
@@ -229,82 +228,78 @@ if (!isRunning) {
     startMileage = null;
     arrivalMileage = null;
     travelMileage = null;
-    isRemote = !!toggleRemote.checked;
-    toggleRemote.disabled = true;
-    clientInput.disabled = true;
-    activeClientLabel.textContent = "Tracking: " + clientName;
 
-    btnAction.textContent = "End Timer";
-    btnAction.classList.remove('start');
-    btnAction.classList.add('stop');
+    clientInput.disabled = true;
+    activeClientLabel.textContent = "Tracking (" + getJobTypeLabel(type) + "): " + clientName;
+
+    if (startButtonsGroup) startButtonsGroup.classList.add('hidden');
+    if (btnEndTimer) btnEndTimer.classList.remove('hidden');
     liveTimer.classList.add('running');
 
-    btnMarkArrival.classList.toggle('hidden', isRemote);
+    btnMarkArrival.classList.toggle('hidden', !hasTravel);
     arrivalBadge.classList.add('hidden');
 
     timerInterval = setInterval(updateLiveDisplay, 1000);
 
-    // Save timer state for persistence
     saveTimerState();
 
-    // Show start mileage modal if mileage is requested
-    if (!isRemote && requestMileage) {
+    if (hasTravel && requestMileage) {
         startMileageInput.value = '';
         startMileageModal.classList.remove('hidden');
         startMileageInput.focus();
     } else {
         startMileage = null;
     }
-    } else {
+}
+
+if (btnStartRemote) btnStartRemote.addEventListener('click', () => startTimer('remote'));
+if (btnStartOnSite) btnStartOnSite.addEventListener('click', () => startTimer('onsite'));
+if (btnStartTravel) btnStartTravel.addEventListener('click', () => startTimer('travel'));
+
+if (btnEndTimer) {
+    btnEndTimer.addEventListener('click', () => {
         clearInterval(timerInterval);
         isRunning = false;
         clearTimerState();
-        btnAction.textContent = "Start Timer";
-        btnAction.classList.remove('stop');
-        btnAction.classList.add('start');
+        if (startButtonsGroup) startButtonsGroup.classList.remove('hidden');
+        if (btnEndTimer) btnEndTimer.classList.add('hidden');
+        btnMarkArrival.classList.add('hidden');
         liveTimer.classList.remove('running');
         clientInput.disabled = false;
         activeClientLabel.textContent = "";
         notesModal.classList.remove('hidden');
         notesInput.focus();
-        }
     });
+}
 
-      // Mileage toggle
-      toggleMileage.addEventListener('change', () => {
-          requestMileage = toggleMileage.checked;
-          localStorage.setItem('requestMileage', requestMileage.toString());
-      });
+// Mileage toggle
+toggleMileage.addEventListener('change', () => {
+    requestMileage = toggleMileage.checked;
+    localStorage.setItem('requestMileage', requestMileage.toString());
+});
 
-      // Initialize mileage toggle from localStorage
-      toggleMileage.checked = requestMileage;
+// Initialize mileage toggle from localStorage
+toggleMileage.checked = requestMileage;
 
-      toggleRemote.addEventListener('change', () => {
-          // Remote work has no travel leg, so do not ask for mileage.
-          toggleMileage.disabled = toggleRemote.checked;
-      });
+btnMarkArrival.addEventListener('click', () => {
+    if (!isRunning || currentJobType !== 'travel' || arrivalTime) return;
+    arrivalTime = Date.now();
+    btnMarkArrival.classList.add('hidden');
 
-      toggleMileage.disabled = toggleRemote.checked;
+    const travelMs = arrivalTime - startTime;
+    const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
+    arrivalBadge.classList.remove('hidden');
 
-      btnMarkArrival.addEventListener('click', () => {
-          if (!isRunning || isRemote || arrivalTime) return;
-          arrivalTime = Date.now();
-          btnMarkArrival.classList.add('hidden');
-
-          const travelMs = arrivalTime - startTime;
-          const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
-          arrivalBadge.classList.remove('hidden');
-
-          // Show arrival mileage modal if mileage is requested
-          if (requestMileage) {
-              arrivalMileageInput.value = '';
-              arrivalMileageModal.classList.remove('hidden');
-              arrivalMileageInput.focus();
-          } else {
-              arrivalMileage = null;
-          }
-      });
+    // Show arrival mileage modal if mileage is requested
+    if (requestMileage) {
+        arrivalMileageInput.value = '';
+        arrivalMileageModal.classList.remove('hidden');
+        arrivalMileageInput.focus();
+    } else {
+        arrivalMileage = null;
+    }
+});
 
 function updateLiveDisplay() {
     const elapsedMs = Date.now() - startTime;
@@ -375,11 +370,6 @@ function finalizeAndSaveLog(partsText) {
         client: clientInput.value.trim(),
         start: new Date(startTime).toLocaleString(),
         end: new Date(pendingEndTime).toLocaleString(),
-        // Raw epoch-ms values, stored alongside the locale-formatted
-        // display strings above. Re-parsing a toLocaleString() string
-        // with `new Date(...)` is locale/browser dependent and fragile,
-        // so date math (reports, edit-modal prefill, etc.) should use
-        // these ms fields instead of re-parsing the display strings.
         startMs: startTime,
         endMs: pendingEndTime,
         arrivalMs: arrivalTime || null,
@@ -423,9 +413,8 @@ function finalizeAndSaveLog(partsText) {
             input.checked = false;
         }
 
-        btnAction.textContent = "Start Timer";
-        btnAction.classList.remove('stop');
-        btnAction.classList.add('start');
+        if (startButtonsGroup) startButtonsGroup.classList.remove('hidden');
+        if (btnEndTimer) btnEndTimer.classList.add('hidden');
         liveTimer.classList.remove('running');
 
         btnMarkArrival.classList.add('hidden');
@@ -435,9 +424,7 @@ function finalizeAndSaveLog(partsText) {
         arrivalMileage = null;
         travelMileage = null;
         isRemote = false;
-        toggleRemote.checked = false;
-        toggleRemote.disabled = false;
-        toggleMileage.disabled = false;
+        currentJobType = 'travel';
 
         partsModal.classList.add('hidden');
         renderLogs();
@@ -621,6 +608,28 @@ function formatDateTimeLocal(d) {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+function setJobTypeEntryFields(jobType, arrivalInput, mileageInput) {
+    const isTravel = (jobType === 'travel');
+    arrivalInput.disabled = !isTravel;
+    mileageInput.disabled = !isTravel;
+    if (!isTravel) {
+        arrivalInput.value = '';
+        mileageInput.value = '';
+    }
+}
+
+for (const input of editJobTypeInputs) {
+    input.addEventListener('change', () => {
+        setJobTypeEntryFields(input.value, editArrivalTime, editMileage);
+    });
+}
+
+for (const input of addJobTypeInputs) {
+    input.addEventListener('change', () => {
+        setJobTypeEntryFields(input.value, addArrivalTime, addMileage);
+    });
+}
+
 // Edit log function
 window.editLog = function(id) {
     const transaction = db.transaction(["logs"], "readwrite");
@@ -637,15 +646,22 @@ window.editLog = function(id) {
         editNotes.value = log.notes;
         editParts.value = log.parts || '';
         editBillableTime.value = log.billableTime;
-        const remoteVal = isRemoteLog(log);
-        editRemote.checked = remoteVal;
-        editMileage.value = (!remoteVal && log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage : '';
-        setRemoteEntryFields(remoteVal, editArrivalTime, editMileage);
 
-        // Prefer the raw epoch-ms fields when present - they're
-        // unambiguous. Fall back to parsing the locale-formatted
-        // display strings for older entries saved before those
-        // fields existed.
+        const isRemoteVal = isRemoteLog(log);
+        let jobType = 'travel';
+        if (isRemoteVal) {
+            jobType = 'remote';
+        } else if (!log.arrivalTime && (log.travelMileage === null || log.travelMileage === undefined)) {
+            jobType = 'onsite';
+        }
+
+        for (const input of editJobTypeInputs) {
+            input.checked = (input.value === jobType);
+        }
+
+        editMileage.value = (jobType === 'travel' && log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage : '';
+        setJobTypeEntryFields(jobType, editArrivalTime, editMileage);
+
         const startDate = (log.startMs !== null && log.startMs !== undefined)
             ? new Date(log.startMs)
             : parseToDate(log.start);
@@ -654,8 +670,6 @@ window.editLog = function(id) {
         if (log.arrivalMs !== null && log.arrivalMs !== undefined) {
             editArrivalTime.value = formatDateTimeLocal(new Date(log.arrivalMs));
         } else if (log.arrivalTime && log.arrivalTime.trim() !== '') {
-            // Legacy fallback: reconstruct the arrival Date from the
-            // "h:mm AM/PM" display string plus the start date.
             const timeMatch = log.arrivalTime.match(/(\d{1,2}):(\d{2})/);
             if (timeMatch && startDate) {
                 let hours = parseInt(timeMatch[1], 10);
@@ -694,7 +708,7 @@ window.editLog = function(id) {
     };
 };
 
-// Delete log function - opens the custom confirmation modal
+// Delete log function
 window.deleteLog = function(id) {
     pendingDeleteId = id;
     deleteConfirmModal.classList.remove('hidden');
@@ -715,7 +729,6 @@ btnConfirmDelete.addEventListener('click', () => {
     const transaction = db.transaction(["logs"], "readwrite");
     const store = transaction.objectStore("logs");
 
-    // Soft-delete: mark the log with _deleted: true so it gets synced to the server
     const getRequest = store.get(pendingDeleteId);
     getRequest.onsuccess = () => {
         const log = getRequest.result;
@@ -751,20 +764,21 @@ btnConfirmDelete.addEventListener('click', () => {
 btnSaveEdit.addEventListener('click', () => {
     if (!editingLogId) return;
 
-    // Validate required fields and chronological sanity up front,
-    // before touching the database - previously Start/End Time could
-    // be left blank or reversed, which produced NaN durations
-    // ("NaN:NaN:NaN") that were silently saved.
     const clientVal = editClient.value.trim();
     if (!clientVal || !editStartTime.value || !editEndTime.value) {
         alert("Client Name, Start Time, and End Time are required.");
         return;
     }
 
+    let selectedJobType = 'travel';
+    for (const input of editJobTypeInputs) {
+        if (input.checked) { selectedJobType = input.value; break; }
+    }
+
     const start = new Date(editStartTime.value);
     const end = new Date(editEndTime.value);
-    const isRemoteEntry = editRemote.checked;
-    const arrival = !isRemoteEntry && editArrivalTime.value ? new Date(editArrivalTime.value) : null;
+    const isRemoteEntry = (selectedJobType === 'remote');
+    const arrival = (selectedJobType === 'travel' && editArrivalTime.value) ? new Date(editArrivalTime.value) : null;
 
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || (arrival && isNaN(arrival.getTime()))) {
         alert("One of the date/time fields is invalid.");
@@ -795,7 +809,7 @@ btnSaveEdit.addEventListener('click', () => {
         log.notes = editNotes.value.trim() || "No notes provided.";
         log.parts = editParts.value ? editParts.value.trim() : '';
         log.billableTime = selectedBillableTime;
-        log.travelMileage = editMileage.value !== '' ? parseFloat(editMileage.value) : null;
+        log.travelMileage = (selectedJobType === 'travel' && editMileage.value !== '') ? parseFloat(editMileage.value) : null;
         log.isRemote = isRemoteEntry;
 
         log.start = start.toLocaleString();
@@ -803,7 +817,7 @@ btnSaveEdit.addEventListener('click', () => {
         log.startMs = start.getTime();
         log.endMs = end.getTime();
 
-        if (isRemoteEntry) {
+        if (selectedJobType !== 'travel') {
             log.arrivalTime = null;
             log.arrivalMs = null;
             log.travelDurationMs = null;
@@ -852,23 +866,6 @@ btnCancelEdit.addEventListener('click', () => {
     editingLogId = null;
 });
 
-function setRemoteEntryFields(isRemoteEntry, arrivalInput, mileageInput) {
-    arrivalInput.disabled = isRemoteEntry;
-    mileageInput.disabled = isRemoteEntry;
-    if (isRemoteEntry) {
-        arrivalInput.value = '';
-        mileageInput.value = '';
-    }
-}
-
-editRemote.addEventListener('change', () => {
-    setRemoteEntryFields(editRemote.checked, editArrivalTime, editMileage);
-});
-
-addRemote.addEventListener('change', () => {
-    setRemoteEntryFields(addRemote.checked, addArrivalTime, addMileage);
-});
-
 // Add entry modal
 btnAddEntry.addEventListener('click', () => {
     const now = new Date();
@@ -883,8 +880,10 @@ btnAddEntry.addEventListener('click', () => {
     addParts.value = '';
     addBillableTime.value = '';
     addMileage.value = '';
-    addRemote.checked = false;
-    setRemoteEntryFields(false, addArrivalTime, addMileage);
+    for (const input of addJobTypeInputs) {
+        input.checked = (input.value === 'travel');
+    }
+    setJobTypeEntryFields('travel', addArrivalTime, addMileage);
     addEntryModal.classList.remove('hidden');
 });
 
@@ -893,96 +892,102 @@ btnCancelAdd.addEventListener('click', () => {
 });
 
 btnSaveAdd.addEventListener('click', () => {
-const client = addClient.value.trim();
-const startTimeVal = addStartTime.value;
-const endTimeVal = addEndTime.value;
-const arrivalTimeVal = addArrivalTime.value;
-const notes = addNotes.value.trim() || "No notes provided.";
+    const client = addClient.value.trim();
+    const startTimeVal = addStartTime.value;
+    const endTimeVal = addEndTime.value;
+    const arrivalTimeVal = addArrivalTime.value;
+    const notes = addNotes.value.trim() || "No notes provided.";
 
-if (!client || !startTimeVal || !endTimeVal) {
-    alert("Please fill in all required fields.");
-    return;
-}
-
-let selectedBillableTime = addBillableTime.value || '1';
-
-const start = new Date(startTimeVal);
-const end = new Date(endTimeVal);
-const isRemoteEntry = addRemote.checked;
-const arrival = !isRemoteEntry && arrivalTimeVal ? new Date(arrivalTimeVal) : null;
-
-if (isNaN(start.getTime()) || isNaN(end.getTime()) || (arrival && isNaN(arrival.getTime()))) {
-    alert("One of the date/time fields is invalid.");
-    return;
-}
-if (end <= start) {
-    alert("End Time must be after Start Time.");
-    return;
-}
-if (arrival && (arrival < start || arrival > end)) {
-    alert("Arrival Time must be between Start Time and End Time.");
-    return;
-}
-
-const durationMs = end - start;
-
-let formattedArrivalTime = null;
-let travelDurationMs = null;
-let onSiteDurationMs = null;
-
-if (!isRemoteEntry && arrival) {
-    formattedArrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    travelDurationMs = arrival - start;
-    onSiteDurationMs = end - arrival;
-}
-
-let selectedTravelMileage = null;
-if (!isRemoteEntry && addMileage.value.trim() !== '') {
-    const mileageVal = parseFloat(addMileage.value);
-    if (isNaN(mileageVal) || mileageVal < 0) {
-        alert('Travel Miles must be a non-negative number.');
+    if (!client || !startTimeVal || !endTimeVal) {
+        alert("Please fill in all required fields.");
         return;
     }
-    selectedTravelMileage = mileageVal;
-}
 
-const newLog = {
-    client: client,
-    start: start.toLocaleString(),
-    end: end.toLocaleString(),
-    startMs: start.getTime(),
-    endMs: end.getTime(),
-    arrivalMs: arrival ? arrival.getTime() : null,
-    duration: formatDuration(durationMs),
-    durationMs: durationMs,
-    decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
-    notes: notes,
-    parts: addParts.value ? addParts.value.trim() : '',
-    billableTime: selectedBillableTime,
-    arrivalTime: formattedArrivalTime,
-    travelDurationMs: travelDurationMs,
-    onSiteDurationMs: onSiteDurationMs,
-    travelMileage: selectedTravelMileage,
-    isRemote: isRemoteEntry
-};
+    let selectedJobType = 'travel';
+    for (const input of addJobTypeInputs) {
+        if (input.checked) { selectedJobType = input.value; break; }
+    }
 
-btnSaveAdd.disabled = true;
+    let selectedBillableTime = addBillableTime.value || '1';
 
-const transaction = db.transaction(["logs"], "readwrite");
-const store = transaction.objectStore("logs");
-store.add(newLog);
+    const start = new Date(startTimeVal);
+    const end = new Date(endTimeVal);
+    const isRemoteEntry = (selectedJobType === 'remote');
+    const hasTravel = (selectedJobType === 'travel');
+    const arrival = hasTravel && arrivalTimeVal ? new Date(arrivalTimeVal) : null;
 
-transaction.oncomplete = () => {
-    btnSaveAdd.disabled = false;
-    addEntryModal.classList.add('hidden');
-    renderLogs();
-    syncAfterWrite();
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || (arrival && isNaN(arrival.getTime()))) {
+        alert("One of the date/time fields is invalid.");
+        return;
+    }
+    if (end <= start) {
+        alert("End Time must be after Start Time.");
+        return;
+    }
+    if (arrival && (arrival < start || arrival > end)) {
+        alert("Arrival Time must be between Start Time and End Time.");
+        return;
+    }
+
+    const durationMs = end - start;
+
+    let formattedArrivalTime = null;
+    let travelDurationMs = null;
+    let onSiteDurationMs = null;
+
+    if (hasTravel && arrival) {
+        formattedArrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        travelDurationMs = arrival - start;
+        onSiteDurationMs = end - arrival;
+    }
+
+    let selectedTravelMileage = null;
+    if (hasTravel && addMileage.value.trim() !== '') {
+        const mileageVal = parseFloat(addMileage.value);
+        if (isNaN(mileageVal) || mileageVal < 0) {
+            alert('Travel Miles must be a non-negative number.');
+            return;
+        }
+        selectedTravelMileage = mileageVal;
+    }
+
+    const newLog = {
+        client: client,
+        start: start.toLocaleString(),
+        end: end.toLocaleString(),
+        startMs: start.getTime(),
+        endMs: end.getTime(),
+        arrivalMs: arrival ? arrival.getTime() : null,
+        duration: formatDuration(durationMs),
+        durationMs: durationMs,
+        decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
+        notes: notes,
+        parts: addParts.value ? addParts.value.trim() : '',
+        billableTime: selectedBillableTime,
+        arrivalTime: formattedArrivalTime,
+        travelDurationMs: travelDurationMs,
+        onSiteDurationMs: onSiteDurationMs,
+        travelMileage: selectedTravelMileage,
+        isRemote: isRemoteEntry
     };
 
-transaction.onerror = () => {
-    btnSaveAdd.disabled = false;
-    alert('Failed to save the entry. Please try again.');
-};
+    btnSaveAdd.disabled = true;
+
+    const transaction = db.transaction(["logs"], "readwrite");
+    const store = transaction.objectStore("logs");
+    store.add(newLog);
+
+    transaction.oncomplete = () => {
+        btnSaveAdd.disabled = false;
+        addEntryModal.classList.add('hidden');
+        renderLogs();
+        syncAfterWrite();
+    };
+
+    transaction.onerror = () => {
+        btnSaveAdd.disabled = false;
+        alert('Failed to save the entry. Please try again.');
+    };
 });
 
 btnCsv.addEventListener('click', () => {
@@ -1026,7 +1031,6 @@ btnImportCsv.addEventListener('change', (e) => {
 const reader = new FileReader();
 reader.onload = function(e) {
     const content = e.target.result;
-    // Remove BOM if present
     const csvContent = content.replace(/\ufeff/, '');
     const lines = parseCsvLines(csvContent);
 
@@ -1036,9 +1040,6 @@ if (lines.length < 2) {
     return;
 }
 
-// Parse header to verify format. The legacy export had 15 columns;
-// the current export adds 3 trailing ISO-timestamp columns for
-// reliable round-tripping. Accept either so older exports still import.
 const headers = lines[0].split(',');
 const legacyHeaderCount = 15;
 const currentHeaderCount = 19;
@@ -1049,7 +1050,6 @@ if (headers.length !== legacyHeaderCount && headers.length !== currentHeaderCoun
     return;
 }
 
-// Parse data rows
 const newLogs = [];
 for (let i = 1; i < lines.length; i++) {
     const row = parseCsvRow(lines[i]);
@@ -1061,8 +1061,6 @@ for (let i = 1; i < lines.length; i++) {
     const endStr = row[4].replace(/^\"|\"$/g, '');
     const arrivalStr = row[3].replace(/^\"|\"$/g, '') || null;
 
-    // Determine if this is a legacy 15-column CSV or the current 19-column format.
-    // The "Remote" column was inserted at index 13, shifting Notes/Parts/ISO columns.
     const isLegacy = row.length === 15;
     const notesIdx = isLegacy ? 13 : 14;
     const partsIdx = isLegacy ? 14 : 15;
@@ -1071,9 +1069,6 @@ for (let i = 1; i < lines.length; i++) {
     const arrivalIsoIdx = isLegacy ? null : 18;
     const remoteIdx = isLegacy ? null : 13;
 
-    // Prefer the ISO timestamp columns (present in 19-column exports)
-    // for unambiguous parsing; fall back to the locale display
-    // strings for legacy 15-column CSVs.
     const startIso = startIsoIdx !== null && row[startIsoIdx] ? row[startIsoIdx].replace(/^\"|\"$/g, '') : '';
     const endIso = endIsoIdx !== null && row[endIsoIdx] ? row[endIsoIdx].replace(/^\"|\"$/g, '') : '';
     const arrivalIso = arrivalIsoIdx !== null && row[arrivalIsoIdx] ? row[arrivalIsoIdx].replace(/^\"|\"$/g, '') : '';
@@ -1113,7 +1108,6 @@ if (newLogs.length === 0) {
     return;
 }
 
-// Save to database
 const transaction = db.transaction(["logs"], "readwrite");
 const store = transaction.objectStore("logs");
 newLogs.forEach(log => store.add(log));
@@ -1138,7 +1132,6 @@ reader.onerror = () => {
 reader.readAsText(file);
 });
 
-// Helper function to parse CSV text into logical lines (respecting quotes)
 function parseCsvLines(csvText) {
     const lines = [];
     let currentLine = '';
@@ -1167,7 +1160,6 @@ function parseCsvLines(csvText) {
     return lines;
 }
 
-// Helper function to parse CSV row (handles quoted fields)
 function parseCsvRow(row) {
     const result = [];
     let current = '';
@@ -1202,20 +1194,6 @@ btnCloseReport.addEventListener('click', () => {
 
 let originalTitle = document.title;
 
-// Build the printable report into #printArea - a plain, always-static
-// element parented directly under <body>, completely outside the
-// on-screen modal (position:fixed) and flex-layout app shell.
-//
-// iOS Safari's print engine is unreliable at re-paginating content
-// that ever lived inside a fixed-position / flex ancestor: even once
-// @media print flips those ancestors to static/block, it often just
-// renders whatever fit on the first "page" of the pre-print layout
-// and silently drops the rest. Printing from a dedicated
-// static container sidesteps that bug entirely.
-//
-// Splitting into one <table> per page (each with its own <thead>) is
-// also required separately, since iOS Safari ignores
-// display:table-header-group for print header repetition.
 const ROWS_PER_PAGE = 10;
 
 function buildPrintArea() {
@@ -1245,6 +1223,281 @@ function buildPrintArea() {
     const summaryDiv = reportContent.querySelector('.report-summary-container');
     if (summaryDiv) {
         printArea.innerHTML += summaryDiv.outerHTML;
+    }
+}
+
+function setPrintTitle() {
+    originalTitle = document.title;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    document.title = "billing-report-" + todayStr;
+}
+
+function restorePrintTitle() {
+    document.title = originalTitle || "Time Tracker";
+}
+
+window.addEventListener('beforeprint', () => {
+    if (reportModal && !reportModal.classList.contains('hidden')) {
+        setPrintTitle();
+        buildPrintArea();
+    }
+});
+
+window.addEventListener('afterprint', () => {
+    restorePrintTitle();
+    printArea.innerHTML = '';
+});
+
+btnPrintReportAction.addEventListener('click', () => {
+    if (!reportModal.classList.contains('hidden')) {
+        setPrintTitle();
+        buildPrintArea();
+    }
+    setTimeout(() => {
+        window.print();
+    }, 100);
+});
+
+function exportToCSV() {
+    if (!db) return;
+    const store = db.transaction(["logs"], "readonly").objectStore("logs");
+    const request = store.getAll();
+
+    request.onsuccess = function(e) {
+        const logs = e.target.result.filter(log => !log._deleted);
+        if (logs.length === 0) {
+            alert("There is no data recorded to export.");
+            return;
+        }
+
+        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO"];
+        const csvRows = [headers.join(",")];
+
+        const mi = (v) => (v !== null && v !== undefined) ? v : "";
+
+        logs.forEach(log => {
+            const row = [
+                log.id,
+                '"' + log.client.replace(/"/g, '""') + '"',
+                '"' + log.start + '"',
+                '"' + (log.arrivalTime || "") + '"',
+                '"' + log.end + '"',
+                '"' + log.duration + '"',
+                '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
+                '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
+                log.decimalHours,
+                '"' + (log.billableTime || "") + '"',
+                mi(log.startMileage),
+                mi(log.arrivalMileage),
+                mi(log.travelMileage),
+                isRemoteLog(log) ? "true" : "false",
+                formatNotesForCsv(log.notes),
+                formatNotesForCsv(log.parts || ""),
+                (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs).toISOString() : "",
+                (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs).toISOString() : "",
+                (log.arrivalMs !== null && log.arrivalMs !== undefined) ? new Date(log.arrivalMs).toISOString() : ""
+            ];
+            csvRows.push(row.join(","));
+        });
+
+        const csvString = csvRows.join("\r\n");
+        const bom = '\ufeff';
+        const blob = new Blob([bom + csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    request.onerror = () => {
+        alert('Failed to read logs for export.');
+    };
+}
+
+function formatNotesForCsv(notes) {
+    if (!notes || notes.trim() === '') return '""';
+    const sentences = notes.trim().split(/(?<=[.!?])\s+|\r?\n+/).filter(s => s.trim() !== '');
+    if (sentences.length === 0) return '""';
+    const formatted = sentences.map(sentence => sentence.trim()).join("\r\n");
+    return '"' + formatted.replace(/"/g, '""') + '"';
+}
+
+btnCancelReportRange.addEventListener('click', () => {
+    reportRangeModal.classList.add('hidden');
+    for (const input of reportRangeInputs) {
+        input.checked = false;
+    }
+    reportRangeInputs[0].checked = true;
+    customRangeInputs.style.display = 'none';
+    reportStartDate.value = '';
+    reportEndDate.value = '';
+});
+
+for (const input of reportRangeInputs) {
+    input.addEventListener('change', () => {
+        if (input.value === 'custom') {
+            customRangeInputs.style.display = 'flex';
+            const today = new Date().toISOString().split('T')[0];
+            reportStartDate.value = today;
+            reportEndDate.value = today;
+        } else {
+            customRangeInputs.style.display = 'none';
+            reportStartDate.value = '';
+            reportEndDate.value = '';
+        }
+    });
+}
+
+btnGenerateReport.addEventListener('click', () => {
+    let selectedRange = 'day';
+    for (const input of reportRangeInputs) {
+        if (input.checked) {
+            selectedRange = input.value;
+            break;
+        }
+    }
+
+    let startDate = new Date();
+    let endDate = new Date();
+
+    if (selectedRange === 'day') {
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+    } else if (selectedRange === 'week') {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const thisMonday = new Date(today);
+        thisMonday.setDate(today.getDate() - daysSinceMonday);
+        startDate = new Date(thisMonday);
+        startDate.setDate(thisMonday.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 4);
+        endDate.setHours(23, 59, 59, 999);
+    } else if (selectedRange === 'custom') {
+        const startVal = reportStartDate.value;
+        const endVal = reportEndDate.value;
+        if (!startVal || !endVal) {
+            alert('Please select both start and end dates.');
+            return;
+        }
+        startDate = new Date(startVal);
+        endDate = new Date(endVal);
+        endDate.setHours(23, 59, 59, 999);
+        if (startDate > endDate) {
+            alert('Start date cannot be after end date.');
+            return;
+        }
+    }
+
+    generateReportForDateRange(startDate, endDate);
+    reportRangeModal.classList.add('hidden');
+});
+
+function generateReportForDateRange(startDate, endDate) {
+    if (!db) return;
+    const store = db.transaction(["logs"], "readonly").objectStore("logs");
+    const request = store.getAll();
+
+    request.onsuccess = function(e) {
+        const logs = e.target.result.filter(log => !log._deleted);
+
+        const filteredLogs = logs.filter(log => {
+            const logDate = (log.startMs !== null && log.startMs !== undefined)
+                ? new Date(log.startMs)
+                : new Date(log.start);
+            return logDate >= startDate && logDate <= endDate;
+        });
+
+        if (filteredLogs.length === 0) {
+            alert('No data found for the selected date range.');
+            return;
+        }
+
+        let hasMileage = filteredLogs.some(log => !isRemoteLog(log) && log.travelMileage !== null && log.travelMileage !== undefined);
+        let tableHtml = '<table class="report-table">';
+        if (hasMileage) {
+            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 20%;">Client</th><th style="width: 10%;">Remote</th><th style="width: 10%;">Invoice #</th><th style="width: 23%;">Timeline</th><th style="width: 12%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
+        } else {
+            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 10%;">Remote</th><th style="width: 12%;">Invoice #</th><th style="width: 26%;">Timeline</th><th style="width: 12%;">Billable Time</th></tr></thead>';
+        }
+        tableHtml += '<tbody>';
+
+        let totalBillableHours = 0;
+        let totalMileageSum = 0;
+        let totalRemoteCount = 0;
+        const totalEntriesCount = filteredLogs.length;
+
+        filteredLogs.forEach(log => {
+            const startDateObj = (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs) : new Date(log.start);
+            const endDateObj = (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs) : new Date(log.end);
+            const dateOnly = startDateObj.toLocaleDateString();
+            const startTimeStr = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const endTimeStr = endDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const isRemote = isRemoteLog(log);
+            if (isRemote) totalRemoteCount++;
+
+            let timelineHtml = "";
+            let breakdownHtml = "";
+
+            let billableDecimal;
+            if (log.billableTime && log.billableTime !== '1') {
+                billableDecimal = log.billableTime;
+            } else {
+                billableDecimal = formatBillableTime(isRemote ? null : log.travelDurationMs, isRemote ? null : log.onSiteDurationMs, log.durationMs);
+            }
+
+            const parsedVal = parseFloat(billableDecimal);
+            if (!isNaN(parsedVal)) {
+                totalBillableHours += parsedVal;
+            }
+
+            if (!isRemote && log.travelMileage !== null && log.travelMileage !== undefined) {
+                totalMileageSum += log.travelMileage;
+            }
+
+            if (!isRemote && log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
+                timelineHtml = `Start: ${escapeHtml(startTimeStr)}<br>Arrived: ${escapeHtml(log.arrivalTime)}<br>End: ${escapeHtml(endTimeStr)}`;
+                breakdownHtml = `${escapeHtml(billableDecimal)}`;
+            } else {
+                timelineHtml = `Start: ${escapeHtml(startTimeStr)}<br>End: ${escapeHtml(endTimeStr)}`;
+                breakdownHtml = `${escapeHtml(billableDecimal)}`;
+            }
+
+            tableHtml += '<tr>';
+            tableHtml += `<td>${escapeHtml(dateOnly)}</td>`;
+            tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
+            tableHtml += `<td style="font-size: 0.75rem; text-align: center;">${isRemote ? '<span class="remote-badge" style="margin-left: 0;">Remote</span>' : '<span style="color: var(--text-muted);">-</span>'}</td>`;
+            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
+            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
+            tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
+            if (hasMileage) {
+                tableHtml += `<td>${(!isRemote && log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage + ' mi' : '-'}</td>`;
+            }
+            tableHtml += '</tr>';
+        });
+
+        tableHtml += '</tbody></table>';
+
+        let summaryHtml = `<div class="report-summary-container">`;
+        summaryHtml += `<div><strong>Total Jobs:</strong> ${totalEntriesCount} (${totalRemoteCount} Remote)</div>`;
+        summaryHtml += `<div><strong>Total Billable Hours:</strong> ${totalBillableHours.toFixed(2)}h</div>`;
+        if (hasMileage) {
+            summaryHtml += `<div><strong>Total Mileage:</strong> ${totalMileageSum.toFixed(1)} mi</div>`;
+        }
+        summaryHtml += `</div>`;
+
+        reportContent.innerHTML = tableHtml + summaryHtml;
+
+        reportModal.classList.remove('hidden');
+    };
+
+    request.onerror = () => {
         alert('Failed to load logs for the report.');
     };
 }
@@ -1255,8 +1508,6 @@ function escapeHtml(str) {
 
 // --- Cloud Sync (Offline-First Backup) ---
 
-// API base URL — update this to your actual Worker URL before deployment.
-// In production, this should match your deployed Worker URL (e.g. https://time-tracker.your-subdomain.workers.dev)
 const API_BASE = 'https://time-tracker.alexs-cas.workers.dev';
 
 function isAuthenticated() {
@@ -1303,7 +1554,6 @@ async function syncToCloud() {
         const result = await response.json();
         setLastSyncTime(result.serverTime);
 
-        // Clean up locally soft-deleted records that were successfully synced to the server
         const deletedIds = result.upserted
             .filter(u => u.action === 'deleted')
             .map(u => u.id);
@@ -1512,10 +1762,8 @@ btnLogout.addEventListener('click', async () => {
 
 // --- Dark mode toggle ---
 
-// Dark mode toggle
 const btnDarkMode = document.getElementById('btnDarkMode');
 
-// Dark mode already initialized inline in <head>
 const isDarkMode = document.documentElement.classList.contains('dark');
 btnDarkMode.textContent = isDarkMode ? '☀️' : '🌙';
 
@@ -1526,14 +1774,12 @@ btnDarkMode.addEventListener('click', () => {
     btnDarkMode.textContent = isDark ? '☀️' : '🌙';
 });
 
-
 // Service Worker registration
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
             .then(registration => {
                 console.log('SW registered: ', registration);
-                // Notify user if a new service worker is waiting to activate
                 if (registration.waiting) {
                     showUpdateAvailablePrompt();
                 }
@@ -1567,7 +1813,6 @@ function showUpdateAvailablePrompt() {
     banner.appendChild(reloadBtn);
     document.body.appendChild(banner);
 
-    // Auto-dismiss after 10 seconds
     setTimeout(() => {
         if (banner.parentNode) banner.parentNode.removeChild(banner);
     }, 10000);
