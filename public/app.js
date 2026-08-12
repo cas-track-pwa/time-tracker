@@ -1554,6 +1554,7 @@ async function syncToCloud() {
         const result = await response.json();
         setLastSyncTime(result.serverTime);
 
+        // Hard-delete locally any entries the server confirmed as deleted
         const deletedIds = result.upserted
             .filter(u => u.action === 'deleted')
             .map(u => u.id);
@@ -1561,6 +1562,30 @@ async function syncToCloud() {
             const tx = db.transaction(['logs'], 'readwrite');
             const store = tx.objectStore('logs');
             deletedIds.forEach(id => store.delete(id));
+        }
+
+        // Apply server tombstones: entries that were deleted on another device
+        // but still exist locally because this device hadn't synced yet.
+        // Mark them _deleted in IndexedDB so renderLogs() hides them immediately.
+        const tombstones = result.serverTombstones || [];
+        if (tombstones.length > 0 && db) {
+            const tx2 = db.transaction(['logs'], 'readwrite');
+            const store2 = tx2.objectStore('logs');
+            for (const tombstone of tombstones) {
+                await new Promise((resolve) => {
+                    const getReq = store2.get(tombstone.id);
+                    getReq.onsuccess = () => {
+                        const log = getReq.result;
+                        if (log) {
+                            log._deleted = true;
+                            store2.put(log);
+                        }
+                        resolve();
+                    };
+                    getReq.onerror = () => resolve(); // non-fatal
+                });
+            }
+            console.log('syncToCloud: applied', tombstones.length, 'server tombstones locally');
         }
 
         return { success: true, upserted: result.upserted, errors: result.errors };
@@ -1589,9 +1614,25 @@ async function syncFromCloud(sinceOverride) {
         const store = tx.objectStore('logs');
         for (const log of serverLogs) {
             await new Promise((resolve, reject) => {
-                const req = store.put(log);
-                req.onsuccess = () => resolve();
-                req.onerror = () => reject(req.error);
+                if (log.deleted_at) {
+                    // Server has tombstoned this row — soft-delete it locally.
+                    // First fetch the local copy (if any) so we can mark it _deleted
+                    // without losing fields that renderLogs / export may still need.
+                    const getReq = store.get(log.id);
+                    getReq.onsuccess = () => {
+                        const local = getReq.result || log;
+                        local._deleted = true;
+                        const putReq = store.put(local);
+                        putReq.onsuccess = () => resolve();
+                        putReq.onerror = () => reject(putReq.error);
+                    };
+                    getReq.onerror = () => reject(getReq.error);
+                } else {
+                    // Normal live row — upsert into local IndexedDB.
+                    const req = store.put(log);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                }
             });
         }
         setLastSyncTime(data.serverTime);

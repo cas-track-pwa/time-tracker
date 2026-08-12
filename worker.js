@@ -347,8 +347,9 @@ async function getLogs(request, env) {
       }));
     }
 
+    // Exclude tombstoned (soft-deleted) rows from normal listing
     const result = await env.DB.prepare(
-      'SELECT * FROM logs WHERE user_id = ? ORDER BY start DESC'
+      'SELECT * FROM logs WHERE user_id = ? AND deleted_at IS NULL ORDER BY start DESC'
     ).bind(userId).all();
 
     return withCORS(new Response(JSON.stringify(result.results), {
@@ -510,8 +511,9 @@ async function deleteLog(request, env, url) {
 
     const logId = url.pathname.split('/').pop();
 
-    const result = await env.DB.prepare(
-      'DELETE FROM logs WHERE id = ? AND user_id = ?'
+    // Soft-delete via tombstone so other devices can learn about this deletion on sync
+    await env.DB.prepare(
+      'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?'
     ).bind(logId, userId).run();
 
     return withCORS(new Response(JSON.stringify({ success: true }), {
@@ -586,40 +588,59 @@ async function syncLogs(request, env) {
 
     const upserted = [];
     const errors = [];
+    // Tombstones the server knows about that the client needs to apply locally
+    const serverTombstones = [];
 
     for (const log of logs) {
       try {
         if (log._deleted) {
           if (log.id) {
-            await env.DB.prepare('DELETE FROM logs WHERE id = ? AND user_id = ?').bind(log.id, userId).run();
+            // Soft-delete: set tombstone timestamp instead of hard-deleting.
+            // This allows other devices to learn about the deletion via getSyncChanges.
+            await env.DB.prepare(
+              'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?'
+            ).bind(log.id, userId).run();
             upserted.push({ id: log.id, action: 'deleted' });
           }
         } else if (log.id) {
-          await env.DB.prepare(
-            `INSERT INTO logs (id, user_id, client, start, end, arrival,
-              durationMs, decimalHours, notes, parts,
-              billableTime, travelMileage, startMileage, arrivalMileage,
-              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET
-              client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
-              durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
-              parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
-              startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
-              startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
-              duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
-              onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
-              isRemote=excluded.isRemote,
-              updated_at=CURRENT_TIMESTAMP WHERE user_id=?`
-          ).bind(
-            log.id, userId, log.client, log.start, log.end, log.arrival || null,
-            log.durationMs, log.decimalHours, log.notes, log.parts,
-            log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
-            log.startMs || null, log.endMs || null, log.arrivalMs || null,
-            log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-            log.arrivalTime || null, log.isRemote ? 1 : 0, userId
-          ).run();
-          upserted.push({ id: log.id, action: 'updated' });
+          // Check if this row has already been tombstoned on the server.
+          // If so, do NOT overwrite the deletion — "deletion wins".
+          const existing = await env.DB.prepare(
+            'SELECT id, deleted_at FROM logs WHERE id = ? AND user_id = ?'
+          ).bind(log.id, userId).first();
+
+          if (existing && existing.deleted_at) {
+            // Row is tombstoned server-side. Return it so the client can delete locally.
+            serverTombstones.push({ id: log.id, action: 'deleted' });
+          } else {
+            // Safe to upsert — row is not tombstoned.
+            await env.DB.prepare(
+              `INSERT INTO logs (id, user_id, client, start, end, arrival,
+                durationMs, decimalHours, notes, parts,
+                billableTime, travelMileage, startMileage, arrivalMileage,
+                startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
+                durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
+                parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
+                startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
+                startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
+                duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
+                onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
+                isRemote=excluded.isRemote,
+                updated_at=CURRENT_TIMESTAMP
+               WHERE logs.deleted_at IS NULL AND logs.user_id=?`
+            ).bind(
+              log.id, userId, log.client, log.start, log.end, log.arrival || null,
+              log.durationMs, log.decimalHours, log.notes, log.parts,
+              log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
+              log.startMs || null, log.endMs || null, log.arrivalMs || null,
+              log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
+              log.arrivalTime || null, log.isRemote ? 1 : 0, userId
+            ).run();
+            upserted.push({ id: log.id, action: 'updated' });
+          }
         } else {
           const result = await env.DB.prepare(
             `INSERT INTO logs (user_id, client, start, end, arrival,
@@ -649,7 +670,12 @@ async function syncLogs(request, env) {
     }
 
     return withCORS(new Response(JSON.stringify({
-      success: true, upserted, errors, serverTime: Date.now()
+      success: true,
+      upserted,
+      // Tombstones the client needs to apply locally (entries deleted on another device)
+      serverTombstones,
+      errors,
+      serverTime: Date.now()
     }), {
       headers: { 'Content-Type': 'application/json' }
     }));
@@ -660,7 +686,9 @@ async function syncLogs(request, env) {
   }
 }
 
-// Get server-side changes since last sync
+// Get server-side changes since last sync.
+// Includes tombstoned rows (deleted_at IS NOT NULL) so clients can learn about
+// deletions that happened on other devices and apply them locally.
 async function getSyncChanges(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
@@ -674,6 +702,8 @@ async function getSyncChanges(request, env, url) {
     const sinceMs = since ? parseInt(since, 10) : 0;
     const sinceDate = sinceMs > 0 ? new Date(sinceMs).toISOString().replace('T', ' ').replace('Z', '') : '0000-01-01 00:00:00';
 
+    // Return ALL rows updated since last sync — including tombstoned ones.
+    // The client inspects deleted_at to decide whether to upsert or delete locally.
     const result = await env.DB.prepare(
       `SELECT * FROM logs WHERE user_id = ? AND updated_at >= ? ORDER BY start DESC`
     ).bind(userId, sinceDate).all();
