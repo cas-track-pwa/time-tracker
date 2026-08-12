@@ -8,6 +8,16 @@ dbRequest.onupgradeneeded = (e) => {
     }
     if (!db.objectStoreNames.contains("timerState")) {
         db.createObjectStore("timerState", { keyPath: "id" });
+let db;
+const dbRequest = indexedDB.open("TimeTrackerDB", 2);
+
+dbRequest.onupgradeneeded = (e) => {
+    db = e.target.result;
+    if (!db.objectStoreNames.contains("logs")) {
+        db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+    }
+    if (!db.objectStoreNames.contains("timerState")) {
+        db.createObjectStore("timerState", { keyPath: "id" });
     }
 };
 
@@ -15,6 +25,15 @@ dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerS
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
 let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false;
+
+// Helper function to robustly check if a log entry is remote work
+function isRemoteLog(log) {
+    if (!log) return false;
+    const val = log.isRemote;
+    if (val === true || val === 1 || val === '1') return true;
+    if (typeof val === 'string' && val.toLowerCase() === 'true') return true;
+    return false;
+}
 
 // Save timer state to IndexedDB
 function saveTimerState() {
@@ -51,7 +70,10 @@ function restoreTimerState() {
         arrivalTime = state.arrivalTime;
         startMileage = state.startMileage;
         arrivalMileage = state.arrivalMileage;
-        isRemote = state.isRemote || false;
+        isRemote = isRemoteLog(state);
+        toggleRemote.checked = isRemote;
+        toggleRemote.disabled = true;
+        toggleMileage.disabled = isRemote;
         isRunning = true;
         clientInput.value = state.client;
         clientInput.disabled = true;
@@ -61,7 +83,7 @@ function restoreTimerState() {
         btnAction.classList.remove('start');
         btnAction.classList.add('stop');
         liveTimer.classList.add('running');
-        btnMarkArrival.classList.remove('hidden');
+        btnMarkArrival.classList.toggle('hidden', isRemote);
         arrivalBadge.classList.add('hidden');
 
         // If arrival time was set, show the badge
@@ -80,11 +102,11 @@ function restoreTimerState() {
         // "Request Mileage" toggle, so a user who turned mileage
         // tracking off would still get re-prompted for it on every
         // reload of an in-progress timer.
-        if (requestMileage && startMileage === null) {
+        if (!isRemote && requestMileage && startMileage === null) {
             startMileageInput.value = '';
             startMileageModal.classList.remove('hidden');
             startMileageInput.focus();
-        } else if (requestMileage && arrivalMileage === null && arrivalTime) {
+        } else if (!isRemote && requestMileage && arrivalMileage === null && arrivalTime) {
             arrivalMileageInput.value = '';
             arrivalMileageModal.classList.remove('hidden');
             arrivalMileageInput.focus();                        }
@@ -208,6 +230,7 @@ if (!isRunning) {
     arrivalMileage = null;
     travelMileage = null;
     isRemote = !!toggleRemote.checked;
+    toggleRemote.disabled = true;
     clientInput.disabled = true;
     activeClientLabel.textContent = "Tracking: " + clientName;
 
@@ -216,7 +239,7 @@ if (!isRunning) {
     btnAction.classList.add('stop');
     liveTimer.classList.add('running');
 
-    btnMarkArrival.classList.remove('hidden');
+    btnMarkArrival.classList.toggle('hidden', isRemote);
     arrivalBadge.classList.add('hidden');
 
     timerInterval = setInterval(updateLiveDisplay, 1000);
@@ -225,7 +248,7 @@ if (!isRunning) {
     saveTimerState();
 
     // Show start mileage modal if mileage is requested
-    if (requestMileage) {
+    if (!isRemote && requestMileage) {
         startMileageInput.value = '';
         startMileageModal.classList.remove('hidden');
         startMileageInput.focus();
@@ -256,8 +279,15 @@ if (!isRunning) {
       // Initialize mileage toggle from localStorage
       toggleMileage.checked = requestMileage;
 
+      toggleRemote.addEventListener('change', () => {
+          // Remote work has no travel leg, so do not ask for mileage.
+          toggleMileage.disabled = toggleRemote.checked;
+      });
+
+      toggleMileage.disabled = toggleRemote.checked;
+
       btnMarkArrival.addEventListener('click', () => {
-          if (!isRunning || arrivalTime) return;
+          if (!isRunning || isRemote || arrivalTime) return;
           arrivalTime = Date.now();
           btnMarkArrival.classList.add('hidden');
 
@@ -406,6 +436,8 @@ function finalizeAndSaveLog(partsText) {
         travelMileage = null;
         isRemote = false;
         toggleRemote.checked = false;
+        toggleRemote.disabled = false;
+        toggleMileage.disabled = false;
 
         partsModal.classList.add('hidden');
         renderLogs();
@@ -523,17 +555,18 @@ function renderLogs() {
         btnClear.classList.remove('hidden');
         let html = "";
         logs.forEach(log => {
+            const isRemoteEntry = isRemoteLog(log);
             html += '<div class="log-card">';
             html += '<div class="log-card-header">';
             html += '<div><h4 class="log-client-name">' + escapeHtml(log.client) + '</h4>';
-            if (log.isRemote) {
+            if (isRemoteEntry) {
                 html += '<span class="remote-badge">Remote</span>';
             }
             html += '<p class="log-timestamp">' + log.start + '</p></div>';
             html += '<span class="duration-pill">' + log.duration + ' (' + log.decimalHours + 'h)</span>';
             html += '</div>';
 
-            if (log.travelDurationMs && log.onSiteDurationMs) {
+            if (!isRemoteEntry && log.travelDurationMs && log.onSiteDurationMs) {
                 const travelDur = formatDuration(log.travelDurationMs);
                 const onSiteDur = formatDuration(log.onSiteDurationMs);
                 html += '<div class="log-travel-details">';
@@ -542,7 +575,7 @@ function renderLogs() {
                 html += '</div>';
             }
 
-            if (log.travelMileage !== null && log.travelMileage !== undefined) {
+            if (!isRemoteEntry && log.travelMileage !== null && log.travelMileage !== undefined) {
                 html += '<div class="log-travel-details"><span>🚗 Travel Miles: ' + log.travelMileage + ' mi</span></div>';
             }
 
@@ -604,8 +637,10 @@ window.editLog = function(id) {
         editNotes.value = log.notes;
         editParts.value = log.parts || '';
         editBillableTime.value = log.billableTime;
-        editMileage.value = (log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage : '';
-                editRemote.checked = log.isRemote || false;
+        const remoteVal = isRemoteLog(log);
+        editRemote.checked = remoteVal;
+        editMileage.value = (!remoteVal && log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage : '';
+        setRemoteEntryFields(remoteVal, editArrivalTime, editMileage);
 
         // Prefer the raw epoch-ms fields when present - they're
         // unambiguous. Fall back to parsing the locale-formatted
@@ -728,7 +763,8 @@ btnSaveEdit.addEventListener('click', () => {
 
     const start = new Date(editStartTime.value);
     const end = new Date(editEndTime.value);
-    const arrival = editArrivalTime.value ? new Date(editArrivalTime.value) : null;
+    const isRemoteEntry = editRemote.checked;
+    const arrival = !isRemoteEntry && editArrivalTime.value ? new Date(editArrivalTime.value) : null;
 
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || (arrival && isNaN(arrival.getTime()))) {
         alert("One of the date/time fields is invalid.");
@@ -760,14 +796,22 @@ btnSaveEdit.addEventListener('click', () => {
         log.parts = editParts.value ? editParts.value.trim() : '';
         log.billableTime = selectedBillableTime;
         log.travelMileage = editMileage.value !== '' ? parseFloat(editMileage.value) : null;
-                log.isRemote = editRemote.checked;
+        log.isRemote = isRemoteEntry;
 
         log.start = start.toLocaleString();
         log.end = end.toLocaleString();
         log.startMs = start.getTime();
         log.endMs = end.getTime();
 
-        if (arrival) {
+        if (isRemoteEntry) {
+            log.arrivalTime = null;
+            log.arrivalMs = null;
+            log.travelDurationMs = null;
+            log.onSiteDurationMs = null;
+            log.startMileage = null;
+            log.arrivalMileage = null;
+            log.travelMileage = null;
+        } else if (arrival) {
             log.arrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             log.arrivalMs = arrival.getTime();
             log.travelDurationMs = arrival - start;
@@ -808,6 +852,23 @@ btnCancelEdit.addEventListener('click', () => {
     editingLogId = null;
 });
 
+function setRemoteEntryFields(isRemoteEntry, arrivalInput, mileageInput) {
+    arrivalInput.disabled = isRemoteEntry;
+    mileageInput.disabled = isRemoteEntry;
+    if (isRemoteEntry) {
+        arrivalInput.value = '';
+        mileageInput.value = '';
+    }
+}
+
+editRemote.addEventListener('change', () => {
+    setRemoteEntryFields(editRemote.checked, editArrivalTime, editMileage);
+});
+
+addRemote.addEventListener('change', () => {
+    setRemoteEntryFields(addRemote.checked, addArrivalTime, addMileage);
+});
+
 // Add entry modal
 btnAddEntry.addEventListener('click', () => {
     const now = new Date();
@@ -822,6 +883,8 @@ btnAddEntry.addEventListener('click', () => {
     addParts.value = '';
     addBillableTime.value = '';
     addMileage.value = '';
+    addRemote.checked = false;
+    setRemoteEntryFields(false, addArrivalTime, addMileage);
     addEntryModal.classList.remove('hidden');
 });
 
@@ -845,7 +908,8 @@ let selectedBillableTime = addBillableTime.value || '1';
 
 const start = new Date(startTimeVal);
 const end = new Date(endTimeVal);
-const arrival = arrivalTimeVal ? new Date(arrivalTimeVal) : null;
+const isRemoteEntry = addRemote.checked;
+const arrival = !isRemoteEntry && arrivalTimeVal ? new Date(arrivalTimeVal) : null;
 
 if (isNaN(start.getTime()) || isNaN(end.getTime()) || (arrival && isNaN(arrival.getTime()))) {
     alert("One of the date/time fields is invalid.");
@@ -866,14 +930,14 @@ let formattedArrivalTime = null;
 let travelDurationMs = null;
 let onSiteDurationMs = null;
 
-if (arrival) {
+if (!isRemoteEntry && arrival) {
     formattedArrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     travelDurationMs = arrival - start;
     onSiteDurationMs = end - arrival;
 }
 
 let selectedTravelMileage = null;
-if (addMileage.value.trim() !== '') {
+if (!isRemoteEntry && addMileage.value.trim() !== '') {
     const mileageVal = parseFloat(addMileage.value);
     if (isNaN(mileageVal) || mileageVal < 0) {
         alert('Travel Miles must be a non-negative number.');
@@ -899,7 +963,7 @@ const newLog = {
     travelDurationMs: travelDurationMs,
     onSiteDurationMs: onSiteDurationMs,
     travelMileage: selectedTravelMileage,
-    isRemote: addRemote.checked
+    isRemote: isRemoteEntry
 };
 
 btnSaveAdd.disabled = true;
@@ -1178,264 +1242,9 @@ function buildPrintArea() {
     }
 
     printArea.innerHTML = '<div class="print-report-title">Billing Summary</div>' + tablesHtml;
-}
-
-function setPrintTitle() {
-    originalTitle = document.title;
-    const todayStr = new Date().toISOString().slice(0, 10);
-    document.title = "billing-report-" + todayStr;
-}
-
-function restorePrintTitle() {
-    document.title = originalTitle || "Time Tracker";
-}
-
-window.addEventListener('beforeprint', () => {
-    if (reportModal && !reportModal.classList.contains('hidden')) {
-        setPrintTitle();
-        buildPrintArea();
-    }
-});
-
-window.addEventListener('afterprint', () => {
-    restorePrintTitle();
-    printArea.innerHTML = '';
-});
-
-btnPrintReportAction.addEventListener('click', () => {
-    if (!reportModal.classList.contains('hidden')) {
-        setPrintTitle();
-        buildPrintArea();
-    }
-    setTimeout(() => {
-        window.print();
-    }, 100);
-});
-
-function exportToCSV() {
-    if (!db) return;
-    const store = db.transaction(["logs"], "readonly").objectStore("logs");
-    const request = store.getAll();
-
-    request.onsuccess = function(e) {
-        const logs = e.target.result.filter(log => !log._deleted);
-        if (logs.length === 0) {
-            alert("There is no data recorded to export.");
-            return;
-        }
-
-        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO"];
-        const csvRows = [headers.join(",")];
-
-        const mi = (v) => (v !== null && v !== undefined) ? v : "";
-
-        logs.forEach(log => {
-            const row = [
-                log.id,
-                '"' + log.client.replace(/"/g, '""') + '"',
-                '"' + log.start + '"',
-                '"' + (log.arrivalTime || "") + '"',
-                '"' + log.end + '"',
-                '"' + log.duration + '"',
-                '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
-                '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
-                log.decimalHours,
-                '"' + (log.billableTime || "") + '"',
-                mi(log.startMileage),
-                mi(log.arrivalMileage),
-                mi(log.travelMileage),
-                log.isRemote ? "true" : "false",
-                formatNotesForCsv(log.notes),
-                formatNotesForCsv(log.parts || ""),
-                (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs).toISOString() : "",
-                (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs).toISOString() : "",
-                (log.arrivalMs !== null && log.arrivalMs !== undefined) ? new Date(log.arrivalMs).toISOString() : ""
-            ];
-            csvRows.push(row.join(","));
-        });
-
-        const csvString = csvRows.join("\r\n");
-        // Add UTF-8 BOM for Excel compatibility
-        const bom = '\ufeff';
-        const blob = new Blob([bom + csvString], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", "billing_export_" + new Date().toISOString().slice(0,10) + ".csv");
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    request.onerror = () => {
-        alert('Failed to read logs for export.');
-    };
-}
-
-// Helper function to format notes with CRLF between sentences wrapped in quotes
-function formatNotesForCsv(notes) {
-    if (!notes || notes.trim() === '') return '""';
-    const sentences = notes.trim().split(/(?<=[.!?])\s+|\r?\n+/).filter(s => s.trim() !== '');
-    if (sentences.length === 0) return '""';
-    const formatted = sentences.map(sentence => sentence.trim()).join("\r\n");
-    return '"' + formatted.replace(/"/g, '""') + '"';
-}
-
-btnCancelReportRange.addEventListener('click', () => {
-    reportRangeModal.classList.add('hidden');
-    for (const input of reportRangeInputs) {
-        input.checked = false;
-    }
-    reportRangeInputs[0].checked = true;
-    customRangeInputs.style.display = 'none';
-    reportStartDate.value = '';
-    reportEndDate.value = '';
-});
-
-for (const input of reportRangeInputs) {
-    input.addEventListener('change', () => {
-        if (input.value === 'custom') {
-            customRangeInputs.style.display = 'flex';
-            const today = new Date().toISOString().split('T')[0];
-            reportStartDate.value = today;
-            reportEndDate.value = today;
-        } else {
-            customRangeInputs.style.display = 'none';
-            reportStartDate.value = '';
-            reportEndDate.value = '';
-        }
-    });
-}
-
-btnGenerateReport.addEventListener('click', () => {
-    let selectedRange = 'day';
-    for (const input of reportRangeInputs) {
-        if (input.checked) {
-            selectedRange = input.value;
-            break;
-        }
-    }
-
-    let startDate = new Date();
-    let endDate = new Date();
-
-    if (selectedRange === 'day') {
-        startDate.setHours(0, 0, 0, 0);
-        endDate.setHours(23, 59, 59, 999);
-    } else if (selectedRange === 'week') {
-        // Previous week: Monday to Friday
-        const today = new Date();
-        const dayOfWeek = today.getDay();
-        const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        const thisMonday = new Date(today);
-        thisMonday.setDate(today.getDate() - daysSinceMonday);
-        startDate = new Date(thisMonday);
-        startDate.setDate(thisMonday.getDate() - 7);
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 4);
-        endDate.setHours(23, 59, 59, 999);
-    } else if (selectedRange === 'custom') {
-        const startVal = reportStartDate.value;
-        const endVal = reportEndDate.value;
-        if (!startVal || !endVal) {
-            alert('Please select both start and end dates.');
-            return;
-        }
-        startDate = new Date(startVal);
-        endDate = new Date(endVal);
-        endDate.setHours(23, 59, 59, 999);
-        if (startDate > endDate) {
-            alert('Start date cannot be after end date.');
-            return;
-        }
-    }
-
-    generateReportForDateRange(startDate, endDate);
-    reportRangeModal.classList.add('hidden');
-});
-
-function generateReportForDateRange(startDate, endDate) {
-    if (!db) return;
-    const store = db.transaction(["logs"], "readonly").objectStore("logs");
-    const request = store.getAll();
-
-    request.onsuccess = function(e) {
-        const logs = e.target.result.filter(log => !log._deleted);
-
-        // Prefer the raw startMs field (unambiguous, locale-independent).
-        // Fall back to re-parsing the display string for older entries
-        // that predate the startMs field.
-        const filteredLogs = logs.filter(log => {
-            const logDate = (log.startMs !== null && log.startMs !== undefined)
-                ? new Date(log.startMs)
-                : new Date(log.start);
-            return logDate >= startDate && logDate <= endDate;
-        });
-
-        if (filteredLogs.length === 0) {
-            alert('No data found for the selected date range.');
-            return;
-        }
-
-        let hasMileage = filteredLogs.some(log => log.travelMileage !== null && log.travelMileage !== undefined);
-        let tableHtml = '<table class="report-table">';
-        if (hasMileage) {
-            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 20%;">Client</th><th style="width: 8%;">Remote</th><th style="width: 10%;">Invoice #</th><th style="width: 22%;">Timeline</th><th style="width: 12%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
-        } else {
-            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 8%;">Remote</th><th style="width: 12%;">Invoice #</th><th style="width: 27%;">Timeline</th><th style="width: 15%;">Billable Time</th></tr></thead>';
-        }
-        tableHtml += '<tbody>';
-
-        filteredLogs.forEach(log => {
-            const startDateObj = (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs) : new Date(log.start);
-            const endDateObj = (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs) : new Date(log.end);
-            const dateOnly = startDateObj.toLocaleDateString();
-            const startTimeStr = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const endTimeStr = endDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            let timelineHtml = "";
-            let breakdownHtml = "";
-
-            let billableDecimal;
-            if (log.billableTime && log.billableTime !== '1') {
-                billableDecimal = log.billableTime;
-            } else {
-                billableDecimal = formatBillableTime(log.travelDurationMs, log.onSiteDurationMs, log.durationMs);
-            }
-
-            if (log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
-                const travelDecimal = formatDecimalQuarter(log.travelDurationMs);
-                const onSiteDecimal = formatDecimalQuarter(log.onSiteDurationMs);
-                timelineHtml = `Start: ${escapeHtml(startTimeStr)}<br>Arrived: ${escapeHtml(log.arrivalTime)}<br>End: ${escapeHtml(endTimeStr)}`;
-                breakdownHtml = `${escapeHtml(billableDecimal)}`;
-            } else {
-                timelineHtml = `Start: ${escapeHtml(startTimeStr)}<br>End: ${escapeHtml(endTimeStr)}`;
-                breakdownHtml = `${escapeHtml(billableDecimal)}`;
-            }
-
-            tableHtml += '<tr>';
-            tableHtml += `<td>${escapeHtml(dateOnly)}</td>`;
-            tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
-            tableHtml += `<td style="font-size: 0.75rem; text-align: center;">${log.isRemote ? '<span style="color: var(--primary); font-weight: 700;">Yes</span>' : ''}</td>`;
-            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
-            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
-            tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
-            if (hasMileage) {
-                tableHtml += `<td>${(log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage + ' mi' : ''}</td>`;
-            }
-            tableHtml += '</tr>';
-        });
-
-        tableHtml += '</tbody></table>';
-
-        reportContent.innerHTML = tableHtml;
-
-        reportModal.classList.remove('hidden');
-    };
-
-    request.onerror = () => {
+    const summaryDiv = reportContent.querySelector('.report-summary-container');
+    if (summaryDiv) {
+        printArea.innerHTML += summaryDiv.outerHTML;
         alert('Failed to load logs for the report.');
     };
 }
