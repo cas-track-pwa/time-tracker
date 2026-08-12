@@ -54,7 +54,8 @@ Each log entry in the `logs` store contains:
   onSiteDurationMs: number,  // On-site duration in ms (arrival -> end), null if no arrival
   startMileage: number,  // Starting odometer reading
   arrivalMileage: number,// Arrival odometer reading
-  travelMileage: number  // Calculated travel distance (arrivalMileage - startMileage)
+  travelMileage: number,  // Calculated travel distance (arrivalMileage - startMileage)
+  isRemote: boolean       // True if this was a remote work session (no travel)
 }
 ```
 
@@ -82,7 +83,7 @@ Each log entry in the `logs` store contains:
 - `formatBillableTime(travelMs, onSiteMs, durationMs)`: Calculates billable time from durations when no manual override is set
 - `renderLogs()`: Renders all logs from IndexedDB into the log history list
 - `parseToDate(dateVal)` / `formatDateTimeLocal(d)`: Legacy-string-to-Date helpers used only as a fallback when `*Ms` fields are absent
-- `exportToCSV()`: Exports logs to CSV file with UTF-8 BOM (18 columns, see CSV section below)
+- `exportToCSV()`: Exports logs to CSV file with UTF-8 BOM (19 columns, see CSV section below)
 - `generateReportForDateRange(startDate, endDate)`: Generates the billing report for a date range, using `startMs`/`endMs` for filtering
 - `buildPrintArea()`: Builds a paginated, print-only copy of the report table (see Print section)
 - `parseDurationToMs(durationStr)`: Converts "HH:MM:SS" string to milliseconds
@@ -113,6 +114,8 @@ Sync strategy: the client pushes all local logs to the server in a single batch 
 4. User clicks "End Timer" → notes modal appears
 5. User picks billable time and clicks "Next: Parts Used" → parts modal appears
 6. User saves or skips parts → log entry created with all timing data (`finalizeAndSaveLog`)
+
+The "Remote Work" checkbox in the timer card (below "Request Mileage") marks the session as remote. When checked, the "Mark Arrival" button is hidden and mileage prompts are skipped, since remote work doesn't involve travel.
 
 Timer state is persisted to the `timerState` IndexedDB store on every relevant change, so an in-progress timer survives a reload (`saveTimerState` / `restoreTimerState`). Restoring only re-prompts for mileage if "Request Mileage" is currently enabled — it does not force the mileage modal just because a value happens to be unset.
 
@@ -193,7 +196,7 @@ Same validation rules as Manual Entry apply to `editModal` before any IndexedDB 
 
 ### CSV Import/Export
 - Export includes a UTF-8 BOM for Excel compatibility
-- Current header format (18 columns): `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Notes, Parts Used, Start ISO, End ISO, Arrival ISO`
+- Current header format (19 columns): `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Remote, Notes, Parts Used, Start ISO, End ISO, Arrival ISO`
 - The trailing `Start ISO` / `End ISO` / `Arrival ISO` columns hold `toISOString()` values and are what import parsing prefers for populating `startMs`/`endMs`/`arrivalMs` — they're the reliable round-trip path
 - Import also accepts the legacy 15-column format (without the ISO columns) for CSVs exported before this change; in that case `startMs`/`endMs`/`arrivalMs` are derived by re-parsing the display strings, which is best-effort only
 - Import parses duration strings (HH:MM:SS) to milliseconds via `parseDurationToMs`

@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS logs (
     startMileage REAL,
     arrivalMileage REAL,
     travelMileage REAL,
+    isRemote INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

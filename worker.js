@@ -379,8 +379,8 @@ async function createLog(request, env) {
         user_id, client, start, end, arrival,
         durationMs, decimalHours, notes, parts,
         billableTime, travelMileage, startMileage, arrivalMileage,
-        startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id`
     ).bind(
       userId,
@@ -402,7 +402,8 @@ async function createLog(request, env) {
       logData.duration || null,
       logData.travelDurationMs || null,
       logData.onSiteDurationMs || null,
-      logData.arrivalTime || null
+      logData.arrivalTime || null,
+      logData.isRemote ? 1 : 0
     ).run();
 
     return withCORS(new Response(JSON.stringify({
@@ -472,6 +473,7 @@ async function updateLog(request, env, url) {
         durationMs = ?, decimalHours = ?, notes = ?, parts = ?,
         billableTime = ?, travelMileage = ?, startMileage = ?, arrivalMileage = ?,
         startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?,
+        isRemote = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?`
     ).bind(
@@ -481,6 +483,7 @@ async function updateLog(request, env, url) {
       logData.startMs || null, logData.endMs || null, logData.arrivalMs || null,
       logData.duration || null, logData.travelDurationMs || null, logData.onSiteDurationMs || null,
       logData.arrivalTime || null,
+      logData.isRemote ? 1 : 0,
       logId, userId
     ).run();
 
@@ -596,8 +599,8 @@ async function syncLogs(request, env) {
             `INSERT INTO logs (id, user_id, client, start, end, arrival,
               durationMs, decimalHours, notes, parts,
               billableTime, travelMileage, startMileage, arrivalMileage,
-              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
               client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
               durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
@@ -606,6 +609,7 @@ async function syncLogs(request, env) {
               startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
               duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
               onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
+              isRemote=excluded.isRemote,
               updated_at=CURRENT_TIMESTAMP WHERE user_id=?`
           ).bind(
             log.id, userId, log.client, log.start, log.end, log.arrival || null,
@@ -613,7 +617,7 @@ async function syncLogs(request, env) {
             log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
             log.startMs || null, log.endMs || null, log.arrivalMs || null,
             log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-            log.arrivalTime || null, userId
+            log.arrivalTime || null, log.isRemote ? 1 : 0, userId
           ).run();
           upserted.push({ id: log.id, action: 'updated' });
         } else {
@@ -621,8 +625,8 @@ async function syncLogs(request, env) {
             `INSERT INTO logs (user_id, client, start, end, arrival,
               durationMs, decimalHours, notes, parts,
               billableTime, travelMileage, startMileage, arrivalMileage,
-              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              RETURNING id`
           ).bind(
             userId, log.client, log.start, log.end, log.arrival || null,
@@ -630,7 +634,7 @@ async function syncLogs(request, env) {
             log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
             log.startMs || null, log.endMs || null, log.arrivalMs || null,
             log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-            log.arrivalTime || null
+            log.arrivalTime || null, log.isRemote ? 1 : 0
           ).run();
           const newId = result.meta?.id || result.results?.[0]?.id;
           upserted.push({ id: newId, action: 'created', localId: log._localId || null });

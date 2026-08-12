@@ -14,7 +14,7 @@ dbRequest.onupgradeneeded = (e) => {
 dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true';
+let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false;
 
 // Save timer state to IndexedDB
 function saveTimerState() {
@@ -29,7 +29,8 @@ function saveTimerState() {
         arrivalTime: arrivalTime,
         startMileage: startMileage,
         arrivalMileage: arrivalMileage,
-        client: clientInput.value.trim()
+        client: clientInput.value.trim(),
+        isRemote: isRemote
     };
     store.put(state);
 }
@@ -50,6 +51,7 @@ function restoreTimerState() {
         arrivalTime = state.arrivalTime;
         startMileage = state.startMileage;
         arrivalMileage = state.arrivalMileage;
+        isRemote = state.isRemote || false;
         isRunning = true;
         clientInput.value = state.client;
         clientInput.disabled = true;
@@ -122,6 +124,7 @@ let pendingDeleteId = null;
 const btnMarkArrival = document.getElementById('btnMarkArrival');
 const arrivalBadge = document.getElementById('arrivalBadge');
 const toggleMileage = document.getElementById('toggleMileage');
+const toggleRemote = document.getElementById('toggleRemote');
 
 const btnOpenReport = document.getElementById('btnOpenReport');
 const btnLogout = document.getElementById('btnLogout');
@@ -157,6 +160,7 @@ const editModal = document.getElementById('editModal');
     const editNotes = document.getElementById('editNotes');
     const editParts = document.getElementById('editParts');
     const editMileage = document.getElementById('editMileage');
+        const editRemote = document.getElementById('editRemote');
     const editBillableTime = document.getElementById('editBillableTime');
     const btnCancelEdit = document.getElementById('btnCancelEdit');
     const btnSaveEdit = document.getElementById('btnSaveEdit');
@@ -170,6 +174,7 @@ const addEntryModal = document.getElementById('addEntryModal');
     const addParts = document.getElementById('addParts');
     const addBillableTime = document.getElementById('addBillableTime');
     const addMileage = document.getElementById('addMileage');
+        const addRemote = document.getElementById('addRemote');
     const btnCancelAdd = document.getElementById('btnCancelAdd');
     const btnSaveAdd = document.getElementById('btnSaveAdd');
 
@@ -202,6 +207,7 @@ if (!isRunning) {
     startMileage = null;
     arrivalMileage = null;
     travelMileage = null;
+    isRemote = !!toggleRemote.checked;
     clientInput.disabled = true;
     activeClientLabel.textContent = "Tracking: " + clientName;
 
@@ -358,7 +364,8 @@ function finalizeAndSaveLog(partsText) {
         onSiteDurationMs: arrivalTime ? pendingEndTime - arrivalTime : null,
         startMileage: startMileage,
         arrivalMileage: arrivalMileage,
-        travelMileage: travelMileage
+        travelMileage: travelMileage,
+        isRemote: isRemote
     };
 
     btnSaveParts.disabled = true;
@@ -397,6 +404,8 @@ function finalizeAndSaveLog(partsText) {
         startMileage = null;
         arrivalMileage = null;
         travelMileage = null;
+        isRemote = false;
+        toggleRemote.checked = false;
 
         partsModal.classList.add('hidden');
         renderLogs();
@@ -462,13 +471,38 @@ btnConfirmClear.addEventListener('click', () => {
     if (!db) return;
     const transaction = db.transaction(["logs"], "readwrite");
     const store = transaction.objectStore("logs");
-    const request = store.clear();
+    const getAllRequest = store.getAll();
 
-    request.onsuccess = () => {
-        clearConfirmModal.classList.add('hidden');
-        renderLogs();
+    getAllRequest.onsuccess = () => {
+        const logs = getAllRequest.result;
+        let pending = logs.length;
+        if (pending === 0) {
+            clearConfirmModal.classList.add('hidden');
+            renderLogs();
+            return;
+        }
+        logs.forEach(log => {
+            log._deleted = true;
+            const putRequest = store.put(log);
+            putRequest.onsuccess = () => {
+                pending--;
+                if (pending === 0) {
+                    clearConfirmModal.classList.add('hidden');
+                    renderLogs();
+                    syncAfterWrite();
+                }
+            };
+            putRequest.onerror = () => {
+                pending--;
+                if (pending === 0) {
+                    clearConfirmModal.classList.add('hidden');
+                    renderLogs();
+                    syncAfterWrite();
+                }
+            };
+        });
     };
-    request.onerror = () => {
+    getAllRequest.onerror = () => {
         alert("Failed to clear database logs.");
     };
 });
@@ -479,7 +513,7 @@ function renderLogs() {
     const request = store.getAll();
 
     request.onsuccess = () => {
-        const logs = request.result.reverse();
+        const logs = request.result.filter(log => !log._deleted).reverse();
         if (logs.length === 0) {
             logHistory.innerHTML = '<div class="empty-state">No logged hours found.</div>';
             btnClear.classList.add('hidden');
@@ -492,6 +526,9 @@ function renderLogs() {
             html += '<div class="log-card">';
             html += '<div class="log-card-header">';
             html += '<div><h4 class="log-client-name">' + escapeHtml(log.client) + '</h4>';
+            if (log.isRemote) {
+                html += '<span class="remote-badge">Remote</span>';
+            }
             html += '<p class="log-timestamp">' + log.start + '</p></div>';
             html += '<span class="duration-pill">' + log.duration + ' (' + log.decimalHours + 'h)</span>';
             html += '</div>';
@@ -568,6 +605,7 @@ window.editLog = function(id) {
         editParts.value = log.parts || '';
         editBillableTime.value = log.billableTime;
         editMileage.value = (log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage : '';
+                editRemote.checked = log.isRemote || false;
 
         // Prefer the raw epoch-ms fields when present - they're
         // unambiguous. Fall back to parsing the locale-formatted
@@ -641,16 +679,33 @@ btnConfirmDelete.addEventListener('click', () => {
     btnConfirmDelete.disabled = true;
     const transaction = db.transaction(["logs"], "readwrite");
     const store = transaction.objectStore("logs");
-    const request = store.delete(pendingDeleteId);
 
-    request.onsuccess = () => {
-        btnConfirmDelete.disabled = false;
-        pendingDeleteId = null;
-        deleteConfirmModal.classList.add('hidden');
-        renderLogs();
-        syncAfterWrite();
+    // Soft-delete: mark the log with _deleted: true so it gets synced to the server
+    const getRequest = store.get(pendingDeleteId);
+    getRequest.onsuccess = () => {
+        const log = getRequest.result;
+        if (!log) {
+            btnConfirmDelete.disabled = false;
+            pendingDeleteId = null;
+            deleteConfirmModal.classList.add('hidden');
+            return;
+        }
+        log._deleted = true;
+        const putRequest = store.put(log);
+        putRequest.onsuccess = () => {
+            btnConfirmDelete.disabled = false;
+            pendingDeleteId = null;
+            deleteConfirmModal.classList.add('hidden');
+            renderLogs();
+            syncAfterWrite();
+        };
+        putRequest.onerror = () => {
+            btnConfirmDelete.disabled = false;
+            deleteConfirmModal.classList.add('hidden');
+            alert('Failed to delete log entry.');
+        };
     };
-    request.onerror = () => {
+    getRequest.onerror = () => {
         btnConfirmDelete.disabled = false;
         deleteConfirmModal.classList.add('hidden');
         alert('Failed to delete log entry.');
@@ -705,6 +760,7 @@ btnSaveEdit.addEventListener('click', () => {
         log.parts = editParts.value ? editParts.value.trim() : '';
         log.billableTime = selectedBillableTime;
         log.travelMileage = editMileage.value !== '' ? parseFloat(editMileage.value) : null;
+                log.isRemote = editRemote.checked;
 
         log.start = start.toLocaleString();
         log.end = end.toLocaleString();
@@ -842,7 +898,8 @@ const newLog = {
     arrivalTime: formattedArrivalTime,
     travelDurationMs: travelDurationMs,
     onSiteDurationMs: onSiteDurationMs,
-    travelMileage: selectedTravelMileage
+    travelMileage: selectedTravelMileage,
+    isRemote: addRemote.checked
 };
 
 btnSaveAdd.disabled = true;
@@ -920,7 +977,7 @@ if (lines.length < 2) {
 // reliable round-tripping. Accept either so older exports still import.
 const headers = lines[0].split(',');
 const legacyHeaderCount = 15;
-const currentHeaderCount = 18;
+const currentHeaderCount = 19;
 
 if (headers.length !== legacyHeaderCount && headers.length !== currentHeaderCount) {
     alert('Invalid CSV format. Expected ' + legacyHeaderCount + ' or ' + currentHeaderCount + ' columns, found ' + headers.length + '.');
@@ -933,26 +990,36 @@ const newLogs = [];
 for (let i = 1; i < lines.length; i++) {
     const row = parseCsvRow(lines[i]);
     if (row.length >= 14) {
-    const durationStr = row[5].replace(/^"|"$/g, '');
-    const travelDurStr = row[6].replace(/^"|"$/g, '');
-    const onSiteDurStr = row[7].replace(/^"|"$/g, '');
-    const startStr = row[2].replace(/^"|"$/g, '');
-    const endStr = row[4].replace(/^"|"$/g, '');
-    const arrivalStr = row[3].replace(/^"|"$/g, '') || null;
+    const durationStr = row[5].replace(/^\"|\"$/g, '');
+    const travelDurStr = row[6].replace(/^\"|\"$/g, '');
+    const onSiteDurStr = row[7].replace(/^\"|\"$/g, '');
+    const startStr = row[2].replace(/^\"|\"$/g, '');
+    const endStr = row[4].replace(/^\"|\"$/g, '');
+    const arrivalStr = row[3].replace(/^\"|\"$/g, '') || null;
 
-    // Prefer the ISO timestamp columns (present in 18-column exports)
+    // Determine if this is a legacy 15-column CSV or the current 19-column format.
+    // The "Remote" column was inserted at index 13, shifting Notes/Parts/ISO columns.
+    const isLegacy = row.length === 15;
+    const notesIdx = isLegacy ? 13 : 14;
+    const partsIdx = isLegacy ? 14 : 15;
+    const startIsoIdx = isLegacy ? null : 16;
+    const endIsoIdx = isLegacy ? null : 17;
+    const arrivalIsoIdx = isLegacy ? null : 18;
+    const remoteIdx = isLegacy ? null : 13;
+
+    // Prefer the ISO timestamp columns (present in 19-column exports)
     // for unambiguous parsing; fall back to the locale display
     // strings for legacy 15-column CSVs.
-    const startIso = row[15] ? row[15].replace(/^"|"$/g, '') : '';
-    const endIso = row[16] ? row[16].replace(/^"|"$/g, '') : '';
-    const arrivalIso = row[17] ? row[17].replace(/^"|"$/g, '') : '';
+    const startIso = startIsoIdx !== null && row[startIsoIdx] ? row[startIsoIdx].replace(/^\"|\"$/g, '') : '';
+    const endIso = endIsoIdx !== null && row[endIsoIdx] ? row[endIsoIdx].replace(/^\"|\"$/g, '') : '';
+    const arrivalIso = arrivalIsoIdx !== null && row[arrivalIsoIdx] ? row[arrivalIsoIdx].replace(/^\"|\"$/g, '') : '';
 
     const startMs = startIso ? new Date(startIso).getTime() : new Date(startStr).getTime();
     const endMs = endIso ? new Date(endIso).getTime() : new Date(endStr).getTime();
     const arrivalMs = arrivalIso ? new Date(arrivalIso).getTime() : (arrivalStr ? new Date(arrivalStr).getTime() : NaN);
 
     const log = {
-        client: row[1].replace(/^"|"$/g, ''),
+        client: row[1].replace(/^\"|\"$/g, ''),
         start: startStr,
         startMs: isNaN(startMs) ? null : startMs,
         arrivalTime: arrivalStr,
@@ -962,14 +1029,15 @@ for (let i = 1; i < lines.length; i++) {
         duration: durationStr,
         durationMs: parseDurationToMs(durationStr),
         decimalHours: row[8] || '0',
-        notes: row[13].replace(/^"|"$/g, ''),
-        parts: row[14] ? row[14].replace(/^"|"$/g, '') : '',
-        billableTime: row[9].replace(/^"|"$/g, '') || '1',
+        notes: row[notesIdx].replace(/^\"|\"$/g, ''),
+        parts: row[partsIdx] ? row[partsIdx].replace(/^\"|\"$/g, '') : '',
+        billableTime: row[9].replace(/^\"|\"$/g, '') || '1',
         travelDurationMs: parseDurationToMs(travelDurStr),
         onSiteDurationMs: parseDurationToMs(onSiteDurStr),
         startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
         arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
-        travelMileage: row[12] !== '' ? parseFloat(row[12]) : null
+        travelMileage: row[12] !== '' ? parseFloat(row[12]) : null,
+        isRemote: remoteIdx !== null ? (row[remoteIdx].replace(/^\"|\"$/g, '').toLowerCase() === 'true') : false
     };
     newLogs.push(log);
     }
@@ -1150,13 +1218,13 @@ function exportToCSV() {
     const request = store.getAll();
 
     request.onsuccess = function(e) {
-        const logs = e.target.result;
+        const logs = e.target.result.filter(log => !log._deleted);
         if (logs.length === 0) {
             alert("There is no data recorded to export.");
             return;
         }
 
-        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO"];
+        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO"];
         const csvRows = [headers.join(",")];
 
         const mi = (v) => (v !== null && v !== undefined) ? v : "";
@@ -1176,6 +1244,7 @@ function exportToCSV() {
                 mi(log.startMileage),
                 mi(log.arrivalMileage),
                 mi(log.travelMileage),
+                log.isRemote ? "true" : "false",
                 formatNotesForCsv(log.notes),
                 formatNotesForCsv(log.parts || ""),
                 (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs).toISOString() : "",
@@ -1293,7 +1362,7 @@ function generateReportForDateRange(startDate, endDate) {
     const request = store.getAll();
 
     request.onsuccess = function(e) {
-        const logs = e.target.result;
+        const logs = e.target.result.filter(log => !log._deleted);
 
         // Prefer the raw startMs field (unambiguous, locale-independent).
         // Fall back to re-parsing the display string for older entries
@@ -1313,9 +1382,9 @@ function generateReportForDateRange(startDate, endDate) {
         let hasMileage = filteredLogs.some(log => log.travelMileage !== null && log.travelMileage !== undefined);
         let tableHtml = '<table class="report-table">';
         if (hasMileage) {
-            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 25%;">Timeline</th><th style="width: 13%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
+            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 20%;">Client</th><th style="width: 8%;">Remote</th><th style="width: 10%;">Invoice #</th><th style="width: 22%;">Timeline</th><th style="width: 12%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
         } else {
-            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 12%;">Invoice #</th><th style="width: 30%;">Timeline</th><th style="width: 15%;">Billable Time</th></tr></thead>';
+            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 8%;">Remote</th><th style="width: 12%;">Invoice #</th><th style="width: 27%;">Timeline</th><th style="width: 15%;">Billable Time</th></tr></thead>';
         }
         tableHtml += '<tbody>';
 
@@ -1349,6 +1418,7 @@ function generateReportForDateRange(startDate, endDate) {
             tableHtml += '<tr>';
             tableHtml += `<td>${escapeHtml(dateOnly)}</td>`;
             tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
+            tableHtml += `<td style="font-size: 0.75rem; text-align: center;">${log.isRemote ? '<span style="color: var(--primary); font-weight: 700;">Yes</span>' : ''}</td>`;
             tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
             tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
             tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
@@ -1423,6 +1493,17 @@ async function syncToCloud() {
         }
         const result = await response.json();
         setLastSyncTime(result.serverTime);
+
+        // Clean up locally soft-deleted records that were successfully synced to the server
+        const deletedIds = result.upserted
+            .filter(u => u.action === 'deleted')
+            .map(u => u.id);
+        if (deletedIds.length > 0 && db) {
+            const tx = db.transaction(['logs'], 'readwrite');
+            const store = tx.objectStore('logs');
+            deletedIds.forEach(id => store.delete(id));
+        }
+
         return { success: true, upserted: result.upserted, errors: result.errors };
     } catch (error) {
         console.error('syncToCloud error:', error);
@@ -1489,6 +1570,12 @@ function syncAfterWrite() {
 }
 
 const syncStatusEl = document.getElementById('syncStatus');
+
+syncStatusEl.addEventListener('click', () => {
+    if (isAuthenticated()) {
+        performSync();
+    }
+});
 
 function updateSyncStatus(status) {
     const colors = { online: '#10b981', syncing: '#f59e0b', offline: '#ef4444', idle: '#6b7280' };

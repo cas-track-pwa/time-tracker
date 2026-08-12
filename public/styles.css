@@ -62,7 +62,7 @@ header h1 { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.02em; }
 }
 main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; }
 .timer-card { background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 1rem; padding: 1.25rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 1rem; position: relative; }
-.sync-status { position: absolute; top: 0.75rem; right: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; z-index: 5; }
+.sync-status { position: absolute; top: 0.75rem; right: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; z-index: 5; cursor: pointer; }
 .form-group { display: flex; flex-direction: column; gap: 0.25rem; }
 .label-title { display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 .dark .label-title { color: #9ca3af; }
@@ -142,7 +142,9 @@ main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5re
 .log-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.5rem; }
 .dark .log-card { background-color: #1f2937; border-color: #374151; }
 .log-card-header { display: flex; justify-content: space-between; align-items: flex-start; }
-.log-client-name { font-weight: 700; color: var(--text-main); font-size: 1rem; }
+.log-client-name { font-weight: 700; color: var(--text-main); font-size: 1rem; display: inline-block; }
+.remote-badge { background-color: #eff6ff; color: var(--primary-hover); font-size: 0.625rem; font-weight: 700; padding: 0.125rem 0.4rem; border-radius: 0.25rem; margin-left: 0.4rem; vertical-align: middle; }
+.dark .remote-badge { background-color: #1e3a5f; color: #93c5fd; }
 .dark .log-client-name { color: #f3f4f6; }
 .log-timestamp { font-size: 0.75rem; color: var(--text-light); margin-top: 0.125rem; }
 .dark .log-timestamp { color: #9ca3af; }
