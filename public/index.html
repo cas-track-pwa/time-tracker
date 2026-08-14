@@ -52,6 +52,9 @@
                     <div id="activeClientLabel" class="active-client-label"></div>
                     <div id="arrivalBadge" class="arrival-badge hidden"></div>
                 </div>
+                <div class="invoicing-mode-toggle">
+                    <button id="btnInvoicingMode" class="btn-invoicing">Invoice Mode</button>
+                </div>
                 <div class="action-buttons-container">
                     <div id="startButtonsGroup" class="start-buttons-group">
                         <button id="btnStartRemote" class="btn-action start-remote">Start Remote</button>
@@ -160,6 +163,10 @@
                     <div class="form-group">
                         <label class="label-title" for="editBillableTime">Billable Time (decimal hours)</label>
                         <input type="number" id="editBillableTime" step="0.01" min="0" placeholder="e.g., 0.5, 1.25, 2" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title" for="editInvoiceNumber">Invoice Number</label>
+                        <input type="text" id="editInvoiceNumber" class="input-field" placeholder="Enter invoice number">
                     </div>
                     <div class="form-group">
                         <label class="label-title" for="editMileage">Travel Miles</label>
@@ -305,7 +312,29 @@
                 </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div id="invoicingContainer" class="invoicing-container hidden">
+                <div class="invoicing-header">
+                    <h2 class="section-title">Invoicing Mode</h2>
+                    <div class="invoicing-view-options">
+                        <button id="btnExitInvoicing" class="btn-cancel">Exit</button>
+                    </div>
+                </div>
+                <div class="invoicing-grid-wrapper">
+                    <table id="invoicingGrid" class="invoicing-grid">
+                        <thead>
+                            <tr>
+                                <th class="inv-col-client sortable" data-col="client">Client</th>
+                                <th class="inv-col-billable sortable" data-col="billableTime">Billable Hours</th>
+                                <th class="inv-col-notes sortable" data-col="notes">Notes</th>
+                                <th class="inv-col-invoice sortable" data-col="invoiceNumber">Invoice #</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoicingGridBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="recentLogsSection" style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <div class="section-header">
                     <h2 class="section-title">Recent Logs</h2>
                     <button id="btnClear" class="btn-clear-all hidden">Clear All</button>

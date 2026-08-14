@@ -242,3 +242,171 @@ main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5re
 #printArea {
     display: none;
 }
+
+/* ============ INVOICING MODE (DESKTOP ONLY) ============ */
+
+@media (max-width: 767px) {
+    .invoicing-mode-toggle,
+    #invoicingContainer {
+        display: none !important;
+    }
+}
+
+@media (min-width: 768px) {
+    .invoicing-mode-toggle {
+        display: flex;
+        justify-content: center;
+        margin-top: 0.5rem;
+    }
+
+    .btn-invoicing {
+        background-color: var(--primary);
+        color: white;
+        border: none;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+    }
+
+    .dark .btn-invoicing {
+        background-color: #1d4ed8;
+    }
+
+    .btn-invoicing:hover {
+        background-color: var(--primary-hover);
+    }
+
+    .invoicing-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .invoicing-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .invoicing-grid-wrapper {
+        overflow: auto;
+        max-height: calc(100vh - 280px);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        background-color: var(--bg-card);
+    }
+
+    .invoicing-grid {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+        table-layout: fixed;
+    }
+
+    .invoicing-grid th {
+        background-color: var(--bg-secondary);
+        color: var(--text-muted);
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        letter-spacing: 0.05em;
+        padding: 0.625rem 0.5rem;
+        border-bottom: 1.5px solid var(--border-color);
+        text-align: left;
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .dark .invoicing-grid th {
+        background-color: #111827;
+    }
+
+    .invoicing-grid th.sortable:hover {
+        background-color: var(--border-light);
+    }
+
+    .dark .invoicing-grid th.sortable:hover {
+        background-color: #1f2937;
+    }
+
+    .invoicing-grid th.sort-asc::after {
+        content: " \\2191";
+        color: var(--primary);
+        font-size: 0.7rem;
+    }
+
+    .invoicing-grid th.sort-desc::after {
+        content: " \\2193";
+        color: var(--primary);
+        font-size: 0.7rem;
+    }
+
+    .invoicing-grid td {
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+        vertical-align: top;
+        word-break: break-word;
+    }
+
+    .invoicing-grid tbody tr:hover td {
+        background-color: var(--border-light);
+    }
+
+    .dark .invoicing-grid tbody tr:hover td {
+        background-color: #1f2937;
+    }
+
+    /* Column widths — adjusted for desktop real estate */
+    .inv-col-client { width: 20%; }
+    .inv-col-billable { width: 15%; }
+    .inv-col-notes { width: 45%; }
+    .inv-col-invoice { width: 20%; }
+
+    /* Editable cells */
+    td[contenteditable="true"]:focus {
+        outline: 2px solid var(--primary);
+        outline-offset: -2px;
+        background-color: #eff6ff;
+    }
+
+    .dark td[contenteditable="true"]:focus {
+        background-color: #1e3a5f;
+    }
+
+    td[contenteditable="true"]:empty::before {
+        color: var(--text-light);
+        font-style: italic;
+    }
+
+    td.inv-cell-billable {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.85rem;
+    }
+
+    td.inv-cell-notes {
+        font-style: italic;
+        color: var(--text-muted);
+        max-width: 250px;
+    }
+
+    .dark td.inv-cell-notes {
+        color: #9ca3af;
+    }
+
+    .inv-row-saving td {
+        opacity: 0.6;
+    }
+
+    @media print {
+        .invoicing-mode-toggle,
+        #invoicingContainer {
+            display: none !important;
+        }
+    }
+}

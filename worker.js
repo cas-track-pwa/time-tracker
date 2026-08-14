@@ -377,35 +377,37 @@ async function createLog(request, env) {
 
     const result = await env.DB.prepare(
       `INSERT INTO logs (
-        user_id, client, start, end, arrival,
-        durationMs, decimalHours, notes, parts,
-        billableTime, travelMileage, startMileage, arrivalMileage,
-        startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      RETURNING id`
-    ).bind(
-      userId,
-      logData.client,
-      logData.start,
-      logData.end,
-      logData.arrival || null,
-      logData.durationMs,
-      logData.decimalHours,
-      logData.notes,
-      logData.parts,
-      logData.billableTime,
-      logData.travelMileage,
-      logData.startMileage,
-      logData.arrivalMileage,
-      logData.startMs || null,
-      logData.endMs || null,
-      logData.arrivalMs || null,
-      logData.duration || null,
-      logData.travelDurationMs || null,
-      logData.onSiteDurationMs || null,
-      logData.arrivalTime || null,
-      logData.isRemote ? 1 : 0
-    ).run();
+         user_id, client, start, end, arrival,
+         durationMs, decimalHours, notes, parts,
+         billableTime, travelMileage, startMileage, arrivalMileage,
+         startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
+         invoice_number
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id`
+     ).bind(
+       userId,
+       logData.client,
+       logData.start,
+       logData.end,
+       logData.arrival || null,
+       logData.durationMs,
+       logData.decimalHours,
+       logData.notes,
+       logData.parts,
+       logData.billableTime,
+       logData.travelMileage,
+       logData.startMileage,
+       logData.arrivalMileage,
+       logData.startMs || null,
+       logData.endMs || null,
+       logData.arrivalMs || null,
+       logData.duration || null,
+       logData.travelDurationMs || null,
+       logData.onSiteDurationMs || null,
+       logData.arrivalTime || null,
+       logData.isRemote ? 1 : 0,
+       logData.invoiceNumber || null
+     ).run();
 
     return withCORS(new Response(JSON.stringify({
       success: true,
@@ -475,6 +477,7 @@ async function updateLog(request, env, url) {
         billableTime = ?, travelMileage = ?, startMileage = ?, arrivalMileage = ?,
         startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?,
         isRemote = ?,
+        invoice_number = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?`
     ).bind(
@@ -485,6 +488,7 @@ async function updateLog(request, env, url) {
       logData.duration || null, logData.travelDurationMs || null, logData.onSiteDurationMs || null,
       logData.arrivalTime || null,
       logData.isRemote ? 1 : 0,
+      logData.invoiceNumber || null,
       logId, userId
     ).run();
 
@@ -616,46 +620,49 @@ async function syncLogs(request, env) {
             // Safe to upsert — row is not tombstoned.
             await env.DB.prepare(
               `INSERT INTO logs (id, user_id, client, start, end, arrival,
-                durationMs, decimalHours, notes, parts,
-                billableTime, travelMileage, startMileage, arrivalMileage,
-                startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
-                durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
-                parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
-                startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
-                startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
-                duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
-                onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
-                isRemote=excluded.isRemote,
-                updated_at=CURRENT_TIMESTAMP
-               WHERE logs.deleted_at IS NULL AND logs.user_id=?`
+                 durationMs, decimalHours, notes, parts,
+                 billableTime, travelMileage, startMileage, arrivalMileage,
+                 startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
+                 invoice_number)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                 client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
+                 durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
+                 parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
+                 startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
+                 startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
+                 duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
+                 onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
+                 isRemote=excluded.isRemote,
+                 invoice_number=excluded.invoice_number,
+                 updated_at=CURRENT_TIMESTAMP
+                WHERE logs.deleted_at IS NULL AND logs.user_id=?`
             ).bind(
               log.id, userId, log.client, log.start, log.end, log.arrival || null,
               log.durationMs, log.decimalHours, log.notes, log.parts,
               log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
               log.startMs || null, log.endMs || null, log.arrivalMs || null,
               log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-              log.arrivalTime || null, log.isRemote ? 1 : 0, userId
+              log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null, userId
             ).run();
             upserted.push({ id: log.id, action: 'updated' });
           }
         } else {
           const result = await env.DB.prepare(
             `INSERT INTO logs (user_id, client, start, end, arrival,
-              durationMs, decimalHours, notes, parts,
-              billableTime, travelMileage, startMileage, arrivalMileage,
-              startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             RETURNING id`
+               durationMs, decimalHours, notes, parts,
+               billableTime, travelMileage, startMileage, arrivalMileage,
+               startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
+               invoice_number)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              RETURNING id`
           ).bind(
             userId, log.client, log.start, log.end, log.arrival || null,
             log.durationMs, log.decimalHours, log.notes, log.parts,
             log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
             log.startMs || null, log.endMs || null, log.arrivalMs || null,
             log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-            log.arrivalTime || null, log.isRemote ? 1 : 0
+            log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null
           ).run();
           const newId = result.meta?.id || result.results?.[0]?.id;
           upserted.push({ id: newId, action: 'created', localId: log._localId || null });

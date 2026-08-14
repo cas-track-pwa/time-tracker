@@ -1,5 +1,5 @@
 let db;
-const dbRequest = indexedDB.open("TimeTrackerDB", 2);
+const dbRequest = indexedDB.open("TimeTrackerDB", 3);
 
 dbRequest.onupgradeneeded = (e) => {
     db = e.target.result;
@@ -11,7 +11,7 @@ dbRequest.onupgradeneeded = (e) => {
     }
 };
 
-dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } };
+dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } if (localStorage.getItem('invoicingMode') === 'true') { enterInvoicingMode(); } };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
 let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false, currentJobType = 'travel';
@@ -186,6 +186,7 @@ const editModal = document.getElementById('editModal');
     const editMileage = document.getElementById('editMileage');
     const editJobTypeInputs = document.getElementsByName('editJobType');
     const editBillableTime = document.getElementById('editBillableTime');
+    const editInvoiceNumber = document.getElementById('editInvoiceNumber');
     const btnCancelEdit = document.getElementById('btnCancelEdit');
     const btnSaveEdit = document.getElementById('btnSaveEdit');
 
@@ -203,6 +204,15 @@ const addEntryModal = document.getElementById('addEntryModal');
     const btnSaveAdd = document.getElementById('btnSaveAdd');
 
 const btnAddEntry = document.getElementById('btnAddEntry');
+
+// Invoicing mode elements
+const btnInvoicingMode = document.getElementById('btnInvoicingMode');
+const invoicingContainer = document.getElementById('invoicingContainer');
+const invoicingGridBody = document.getElementById('invoicingGridBody');
+const invoicingGrid = document.getElementById('invoicingGrid');
+const btnExitInvoicing = document.getElementById('btnExitInvoicing');
+const recentLogsSection = document.getElementById('recentLogsSection');
+let isInvoicingMode = false;
 
 // Auth modal elements
 const authModal = document.getElementById('authModal');
@@ -414,7 +424,8 @@ function finalizeAndSaveLog(partsText) {
         startMileage: startMileage,
         arrivalMileage: arrivalMileage,
         travelMileage: travelMileage,
-        isRemote: isRemote
+        isRemote: isRemote,
+        invoiceNumber: ""
     };
 
     btnSaveParts.disabled = true;
@@ -566,6 +577,7 @@ function renderLogs() {
         if (logs.length === 0) {
             logHistory.innerHTML = '<div class="empty-state">No logged hours found.</div>';
             btnClear.classList.add('hidden');
+            if (isInvoicingMode) renderInvoicingMode();
             return;
         }
 
@@ -613,6 +625,7 @@ function renderLogs() {
             html += '</div>';
         });
         logHistory.innerHTML = html;
+        if (isInvoicingMode) renderInvoicingMode();
     };
 
     request.onerror = () => {
@@ -676,6 +689,7 @@ window.editLog = function(id) {
         editNotes.value = log.notes;
         editParts.value = log.parts || '';
         editBillableTime.value = log.billableTime;
+        editInvoiceNumber.value = log.invoiceNumber || '';
 
         const isRemoteVal = isRemoteLog(log);
         let jobType = 'travel';
@@ -839,6 +853,7 @@ btnSaveEdit.addEventListener('click', () => {
         log.notes = editNotes.value.trim() || "No notes provided.";
         log.parts = editParts.value ? editParts.value.trim() : '';
         log.billableTime = selectedBillableTime;
+        log.invoiceNumber = editInvoiceNumber.value.trim();
         log.travelMileage = (selectedJobType === 'travel' && editMileage.value !== '') ? parseFloat(editMileage.value) : null;
         log.isRemote = isRemoteEntry;
 
@@ -998,7 +1013,8 @@ btnSaveAdd.addEventListener('click', () => {
         travelDurationMs: travelDurationMs,
         onSiteDurationMs: onSiteDurationMs,
         travelMileage: selectedTravelMileage,
-        isRemote: isRemoteEntry
+        isRemote: isRemoteEntry,
+        invoiceNumber: ""
     };
 
     btnSaveAdd.disabled = true;
@@ -1070,15 +1086,16 @@ if (lines.length < 2) {
     return;
 }
 
-const headers = lines[0].split(',');
-const legacyHeaderCount = 15;
-const currentHeaderCount = 19;
+    const headers = lines[0].split(',');
+    const legacyHeaderCount = 15;
+    const currentHeaderCount = 19;
+    const invoiceHeaderCount = 20;
 
-if (headers.length !== legacyHeaderCount && headers.length !== currentHeaderCount) {
-    alert('Invalid CSV format. Expected ' + legacyHeaderCount + ' or ' + currentHeaderCount + ' columns, found ' + headers.length + '.');
-    btnImportCsv.value = '';
-    return;
-}
+    if (headers.length !== legacyHeaderCount && headers.length !== currentHeaderCount && headers.length !== invoiceHeaderCount) {
+        alert('Invalid CSV format. Expected ' + legacyHeaderCount + ', ' + currentHeaderCount + ', or ' + invoiceHeaderCount + ' columns, found ' + headers.length + '.');
+        btnImportCsv.value = '';
+        return;
+    }
 
 const newLogs = [];
 for (let i = 1; i < lines.length; i++) {
@@ -1092,12 +1109,14 @@ for (let i = 1; i < lines.length; i++) {
     const arrivalStr = row[3].replace(/^\"|\"$/g, '') || null;
 
     const isLegacy = row.length === 15;
+    const hasInvoice = row.length === 20;
     const notesIdx = isLegacy ? 13 : 14;
     const partsIdx = isLegacy ? 14 : 15;
     const startIsoIdx = isLegacy ? null : 16;
     const endIsoIdx = isLegacy ? null : 17;
     const arrivalIsoIdx = isLegacy ? null : 18;
     const remoteIdx = isLegacy ? null : 13;
+    const invoiceIdx = hasInvoice ? 19 : null;
 
     const startIso = startIsoIdx !== null && row[startIsoIdx] ? row[startIsoIdx].replace(/^\"|\"$/g, '') : '';
     const endIso = endIsoIdx !== null && row[endIsoIdx] ? row[endIsoIdx].replace(/^\"|\"$/g, '') : '';
@@ -1126,8 +1145,9 @@ for (let i = 1; i < lines.length; i++) {
         startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
         arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
         travelMileage: row[12] !== '' ? parseFloat(row[12]) : null,
-        isRemote: remoteIdx !== null ? (row[remoteIdx].replace(/^\"|\"$/g, '').toLowerCase() === 'true') : false
-    };
+         isRemote: remoteIdx !== null ? (row[remoteIdx].replace(/^\"|\"$/g, '').toLowerCase() === 'true') : false,
+         invoiceNumber: invoiceIdx !== null ? row[invoiceIdx].replace(/^\"|\"$/g, '') : ""
+     };
     newLogs.push(log);
     }
 }
@@ -1326,7 +1346,7 @@ function exportToCSV() {
             return;
         }
 
-        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO"];
+        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO", "Invoice Number"];
         const csvRows = [headers.join(",")];
 
         const mi = (v) => (v !== null && v !== undefined) ? v : "";
@@ -1351,7 +1371,8 @@ function exportToCSV() {
                 formatNotesForCsv(log.parts || ""),
                 (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs).toISOString() : "",
                 (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs).toISOString() : "",
-                (log.arrivalMs !== null && log.arrivalMs !== undefined) ? new Date(log.arrivalMs).toISOString() : ""
+                (log.arrivalMs !== null && log.arrivalMs !== undefined) ? new Date(log.arrivalMs).toISOString() : "",
+                log.invoiceNumber || ""
             ];
             csvRows.push(row.join(","));
         });
@@ -1494,7 +1515,7 @@ function buildReportTable(logs, hasMileage) {
         tableHtml += '<tr>';
         tableHtml += '<td>' + escapeHtml(dateOnly) + '</td>';
         tableHtml += '<td><strong>' + escapeHtml(log.client) + '</strong></td>';
-        tableHtml += '<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>';
+        tableHtml += '<td style="font-size: 0.8rem; color: var(--text-muted);">' + escapeHtml(log.invoiceNumber || '-') + '</td>';
         tableHtml += '<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">' + timelineHtml + '</td>';
         tableHtml += '<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">' + breakdownHtml + '</td>';
         if (hasMileage) {
@@ -1894,6 +1915,209 @@ btnLogout.addEventListener('click', async () => {
     syncStatusEl.classList.add('hidden');
     showAuthModal();
 });
+
+/* ==================== Invoicing Mode ==================== */
+
+function getBillableDisplay(log) {
+    if (log.billableTime && log.billableTime !== '1') {
+        return log.billableTime;
+    }
+    const isRemote = isRemoteLog(log);
+    return formatBillableTime(
+        isRemote ? null : log.travelDurationMs,
+        isRemote ? null : log.onSiteDurationMs,
+        log.durationMs
+    );
+}
+
+function enterInvoicingMode() {
+    isInvoicingMode = true;
+    localStorage.setItem('invoicingMode', 'true');
+    recentLogsSection.classList.add('hidden');
+    invoicingContainer.classList.remove('hidden');
+    btnInvoicingMode.textContent = 'Exit Invoice Mode';
+    renderInvoicingMode();
+}
+
+function exitInvoicingMode() {
+    isInvoicingMode = false;
+    localStorage.removeItem('invoicingMode');
+    invoicingContainer.classList.add('hidden');
+    recentLogsSection.classList.remove('hidden');
+    btnInvoicingMode.textContent = 'Invoice Mode';
+    renderLogs();
+}
+
+if (btnInvoicingMode) {
+    btnInvoicingMode.addEventListener('click', () => {
+        if (isInvoicingMode) {
+            exitInvoicingMode();
+        } else {
+            enterInvoicingMode();
+        }
+    });
+}
+
+if (btnExitInvoicing) {
+    btnExitInvoicing.addEventListener('click', () => {
+        exitInvoicingMode();
+    });
+}
+
+let invoSortCol = null;
+let invoSortDir = 'asc';
+
+function renderInvoicingMode() {
+    if (!db || !isInvoicingMode) return;
+    const store = db.transaction(["logs"], "readonly").objectStore("logs");
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+        let logs = request.result.filter(log => !log._deleted);
+
+        if (invoSortCol) {
+            logs.sort((a, b) => {
+                const aVal = getInvoSortVal(a, invoSortCol);
+                const bVal = getInvoSortVal(b, invoSortCol);
+                if (aVal < bVal) return invoSortDir === 'asc' ? -1 : 1;
+                if (aVal > bVal) return invoSortDir === 'asc' ? 1 : -1;
+                return 0;
+            });
+        } else {
+            logs.sort((a, b) => {
+                const aTime = (a.startMs != null) ? a.startMs : parseToDate(a.start)?.getTime() || 0;
+                const bTime = (b.startMs != null) ? b.startMs : parseToDate(b.start)?.getTime() || 0;
+                return (bTime || 0) - (aTime || 0);
+            });
+        }
+
+        if (logs.length === 0) {
+            invoicingGridBody.innerHTML = '<tr><td colspan="4" class="empty-state">No logged hours found.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        logs.forEach(log => {
+            const billableDisplay = getBillableDisplay(log);
+            const invoiceVal = log.invoiceNumber || '';
+            html += '<tr class="invoicing-row" data-log-id="' + log.id + '">';
+            html += '<td class="inv-cell-client">' + escapeHtml(log.client) + '</td>';
+            html += '<td class="inv-cell-billable" contenteditable="true" data-field="billableTime" data-id="' + log.id + '" data-original="' + escapeHtml(billableDisplay) + '" title="Click to edit billable hours">' + escapeHtml(billableDisplay) + '</td>';
+            html += '<td class="inv-cell-notes">' + escapeHtml(log.notes || '') + '</td>';
+            html += '<td class="inv-cell-invoice" contenteditable="true" data-field="invoiceNumber" data-id="' + log.id + '" data-original="' + escapeHtml(invoiceVal) + '" title="Click to add invoice number">' + (invoiceVal ? escapeHtml(invoiceVal) : '') + '</td>';
+            html += '</tr>';
+        });
+
+        invoicingGridBody.innerHTML = html;
+        updateInvoSortIndicators();
+    };
+
+    request.onerror = () => {
+        invoicingGridBody.innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load logs.</td></tr>';
+    };
+}
+
+function getInvoSortVal(log, col) {
+    switch (col) {
+        case 'client': return log.client.toLowerCase();
+        case 'billableTime': return parseFloat(getBillableDisplay(log)) || 0;
+        case 'notes': return (log.notes || '').toLowerCase();
+        case 'invoiceNumber': return (log.invoiceNumber || '').toLowerCase();
+        default: return '';
+    }
+}
+
+function updateInvoSortIndicators() {
+    invoicingGrid.querySelectorAll('th[data-col]').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        if (th.getAttribute('data-col') === invoSortCol) {
+            th.classList.add(invoSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+    });
+}
+
+invoicingGrid.querySelectorAll('th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+        const col = th.getAttribute('data-col');
+        if (invoSortCol === col) {
+            invoSortDir = invoSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            invoSortCol = col;
+            invoSortDir = 'asc';
+        }
+        renderInvoicingMode();
+    });
+});
+
+invoicingGridBody.addEventListener('keydown', (e) => {
+    const cell = e.target;
+    if (!cell.hasAttribute('contenteditable')) return;
+
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        cell.blur();
+    }
+
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        const original = cell.getAttribute('data-original') || '';
+        cell.textContent = original;
+        cell.blur();
+    }
+});
+
+invoicingGridBody.addEventListener('blur', function(e) {
+    const cell = e.target;
+    if (!cell.hasAttribute('contenteditable')) return;
+    saveInvoicingCell(cell);
+}, true);
+
+async function saveInvoicingCell(cell) {
+    const field = cell.getAttribute('data-field');
+    const id = parseInt(cell.getAttribute('data-id'));
+    const value = cell.textContent.trim();
+
+    if (!field || isNaN(id)) return;
+
+    cell.setAttribute('data-original', value);
+    cell.classList.add('inv-row-saving');
+
+    try {
+        const tx = db.transaction(['logs'], 'readwrite');
+        const store = tx.objectStore('logs');
+        const log = await new Promise((resolve, reject) => {
+            const getReq = store.get(id);
+            getReq.onsuccess = () => resolve(getReq.result);
+            getReq.onerror = () => reject(getReq.error);
+        });
+
+        if (!log) {
+            cell.classList.remove('inv-row-saving');
+            alert('Log entry not found.');
+            return;
+        }
+
+        if (field === 'invoiceNumber') {
+            log.invoiceNumber = value;
+        } else if (field === 'billableTime') {
+            log.billableTime = (value === 'sales call' || isNaN(parseFloat(value)) || parseFloat(value) <= 0) ? '1' : value;
+        }
+
+        await new Promise((resolve, reject) => {
+            const putReq = store.put(log);
+            putReq.onsuccess = () => resolve();
+            putReq.onerror = () => reject(putReq.error);
+        });
+
+        cell.classList.remove('inv-row-saving');
+        syncAfterWrite();
+    } catch (err) {
+        cell.classList.remove('inv-row-saving');
+        alert('Failed to save: ' + err.message);
+    }
+}
+
+/* ==================== End Invoicing Mode ==================== */
 
 // --- Dark mode toggle ---
 

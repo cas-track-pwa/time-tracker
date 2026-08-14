@@ -28,7 +28,7 @@ A progressive web app (PWA) for time tracking that allows users to:
 - **migrations/001_initial.sql**: D1 database schema (users + logs tables)
 - **CLOUDFLARE_MIGRATION.md**: Migration guide for deploying to Cloudflare Workers
 - **upload-assets.ps1**: PowerShell script for bulk-uploading static assets to KV (optional, manual use only)
-- Uses IndexedDB (`TimeTrackerDB`, currently version 2) as the local client-side store, with optional cloud backup/sync to Cloudflare D1 + KV
+ - Uses IndexedDB (`TimeTrackerDB`, currently version 3) as the local client-side store, with optional cloud backup/sync to Cloudflare D1 + KV
 - No external dependencies or frameworks on the client side; the Worker uses native Web Crypto APIs (PBKDF2, HMAC-SHA256) for auth
 
 ### Data Model
@@ -54,8 +54,9 @@ Each log entry in the `logs` store contains:
   onSiteDurationMs: number,  // On-site duration in ms (arrival -> end), null if no arrival
   startMileage: number,  // Starting odometer reading
   arrivalMileage: number,// Arrival odometer reading
-  travelMileage: number,  // Calculated travel distance (arrivalMileage - startMileage)
-  isRemote: boolean       // True if this was a remote work session (no travel)
+   travelMileage: number,  // Calculated travel distance (arrivalMileage - startMileage)
+   isRemote: boolean,      // True if this was a remote work session (no travel)
+   invoiceNumber: string,  // Optional invoice number (editable in Invoicing Mode, empty string if unset)
 }
 ```
 
@@ -83,12 +84,16 @@ Each log entry in the `logs` store contains:
 - `formatBillableTime(travelMs, onSiteMs, durationMs)`: Calculates billable time from durations when no manual override is set
 - `renderLogs()`: Renders all logs from IndexedDB into the log history list
 - `parseToDate(dateVal)` / `formatDateTimeLocal(d)`: Legacy-string-to-Date helpers used only as a fallback when `*Ms` fields are absent
-- `exportToCSV()`: Exports logs to CSV file with UTF-8 BOM (19 columns, see CSV section below)
-- `generateReportForDateRange(startDate, endDate)`: Generates the billing report for a date range, using `startMs`/`endMs` for filtering
-- `buildPrintArea()`: Builds a paginated, print-only copy of the report table (see Print section)
-- `parseDurationToMs(durationStr)`: Converts "HH:MM:SS" string to milliseconds
-- `parseCsvLines(csvText)` / `parseCsvRow(row)`: CSV parsing helpers that respect quoted fields and embedded newlines
-- `initDarkMode()`: Applies saved/OS-preferred theme and wires the dark mode toggle button
+ - `exportToCSV()`: Exports logs to CSV file with UTF-8 BOM (20 columns, see CSV section below)
+ - `generateReportForDateRange(startDate, endDate)`: Generates the billing report for a date range, using `startMs`/`endMs` for filtering
+ - `buildPrintArea()`: Builds a paginated, print-only copy of the report table (see Print section)
+ - `parseDurationToMs(durationStr)`: Converts "HH:MM:SS" string to milliseconds
+ - `parseCsvLines(csvText)` / `parseCsvRow(row)`: CSV parsing helpers that respect quoted fields and embedded newlines
+ - `initDarkMode()`: Applies saved/OS-preferred theme and wires the dark mode toggle button
+ - `renderInvoicingMode()`: Renders all logs as a spreadsheet-style table (Client, Billable Hours, Notes, Invoice #) with contenteditable cells for desktop-only invoicing; columns are sortable by clicking headers
+ - `enterInvoicingMode()` / `exitInvoicingMode()`: Toggle between the normal log list and invoicing mode; persists preference in `localStorage` under `invoicingMode`
+ - `saveInvoicingCell(cell)`: Saves an inline-edited cell (Invoice Number or Billable Hours) to IndexedDB and triggers `syncAfterWrite()`
+ - `getBillableDisplay(log)`: Returns the effective billable hours for display — uses `log.billableTime` if overridden, otherwise calculates via `formatBillableTime()`
 
 ### Cloud Sync (Offline-First Backup)
 
@@ -196,9 +201,9 @@ Same validation rules as Manual Entry apply to `editModal` before any IndexedDB 
 
 ### CSV Import/Export
 - Export includes a UTF-8 BOM for Excel compatibility
-- Current header format (19 columns): `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Remote, Notes, Parts Used, Start ISO, End ISO, Arrival ISO`
+- Current header format (20 columns): `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Remote, Notes, Parts Used, Start ISO, End ISO, Arrival ISO, Invoice Number`
 - The trailing `Start ISO` / `End ISO` / `Arrival ISO` columns hold `toISOString()` values and are what import parsing prefers for populating `startMs`/`endMs`/`arrivalMs` — they're the reliable round-trip path
-- Import also accepts the legacy 15-column format (without the ISO columns) for CSVs exported before this change; in that case `startMs`/`endMs`/`arrivalMs` are derived by re-parsing the display strings, which is best-effort only
+- Import accepts three formats: legacy 15-column (no ISO columns), current 19-column (with ISO columns), and 20-column (with ISO + Invoice Number). The `invoiceNumber` field defaults to empty string when not present in the imported CSV.
 - Import parses duration strings (HH:MM:SS) to milliseconds via `parseDurationToMs`
 
 ### Printing Reports
@@ -247,7 +252,10 @@ time-tracker/
 ├── upload-assets.ps1                 # PowerShell script for bulk-uploading static assets to KV (optional)
 ├── package.json                      # npm scripts (deploy, dev)
 ├── migrations/
-│   └── 001_initial.sql               # D1 database schema (users + logs tables)
+│   ├── 001_initial.sql               # D1 database schema (users + logs tables)
+│   ├── 002_add_is_remote.sql         # Adds isRemote column
+│   ├── 003_soft_delete.sql           # Adds deleted_at tombstone column
+│   └── 004_add_invoice_number.sql    # Adds invoice_number column
 ```
 
 ## Cloudflare Worker (API Layer)
