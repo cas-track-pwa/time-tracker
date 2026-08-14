@@ -75,12 +75,19 @@ function restoreTimerState() {
         clientInput.disabled = true;
         activeClientLabel.textContent = "Tracking (" + getJobTypeLabel(currentJobType) + "): " + state.client;
 
-        if (startButtonsGroup) startButtonsGroup.classList.add('hidden');
-        if (btnEndTimer) btnEndTimer.classList.remove('hidden');
+        const hasTravel = (currentJobType === 'travel');
+
+        if (hasTravel) {
+            if (arrivalTime) {
+                updateTimerButtons('travel-arrived');
+            } else {
+                updateTimerButtons('travel-need-arrival');
+            }
+        } else {
+            updateTimerButtons('running-onsite');
+        }
         liveTimer.classList.add('running');
 
-        const hasTravel = (currentJobType === 'travel');
-        btnMarkArrival.classList.toggle('hidden', !hasTravel || !!arrivalTime);
         arrivalBadge.classList.add('hidden');
 
         // If arrival time was set, show the badge
@@ -89,7 +96,6 @@ function restoreTimerState() {
             const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
             arrivalBadge.classList.remove('hidden');
-            btnMarkArrival.classList.add('hidden');
         }
 
         timerInterval = setInterval(updateLiveDisplay, 1000);
@@ -214,6 +220,28 @@ const partsInput = document.getElementById('partsInput');
 const btnSaveParts = document.getElementById('btnSaveParts');
 const btnSkipParts = document.getElementById('btnSkipParts');
 
+function updateTimerButtons(state) {
+    if (state === 'idle') {
+        if (startButtonsGroup) startButtonsGroup.classList.remove('hidden');
+        if (btnEndTimer) btnEndTimer.classList.add('hidden');
+        btnMarkArrival.classList.add('hidden');
+        arrivalBadge.classList.add('hidden');
+    } else if (state === 'running-onsite') {
+        if (startButtonsGroup) startButtonsGroup.classList.add('hidden');
+        if (btnEndTimer) btnEndTimer.classList.remove('hidden');
+        btnMarkArrival.classList.add('hidden');
+    } else if (state === 'travel-need-arrival') {
+        if (startButtonsGroup) startButtonsGroup.classList.add('hidden');
+        if (btnEndTimer) btnEndTimer.classList.add('hidden');
+        btnMarkArrival.classList.remove('hidden');
+        arrivalBadge.classList.add('hidden');
+    } else if (state === 'travel-arrived') {
+        if (startButtonsGroup) startButtonsGroup.classList.add('hidden');
+        if (btnEndTimer) btnEndTimer.classList.remove('hidden');
+        btnMarkArrival.classList.add('hidden');
+    }
+}
+
 function startTimer(type) {
     const clientName = clientInput.value.trim();
     if (!clientName) { alert("Please input a Client Name first."); return; }
@@ -232,12 +260,12 @@ function startTimer(type) {
     clientInput.disabled = true;
     activeClientLabel.textContent = "Tracking (" + getJobTypeLabel(type) + "): " + clientName;
 
-    if (startButtonsGroup) startButtonsGroup.classList.add('hidden');
-    if (btnEndTimer) btnEndTimer.classList.remove('hidden');
+    if (hasTravel) {
+        updateTimerButtons('travel-need-arrival');
+    } else {
+        updateTimerButtons('running-onsite');
+    }
     liveTimer.classList.add('running');
-
-    btnMarkArrival.classList.toggle('hidden', !hasTravel);
-    arrivalBadge.classList.add('hidden');
 
     timerInterval = setInterval(updateLiveDisplay, 1000);
 
@@ -261,9 +289,7 @@ if (btnEndTimer) {
         clearInterval(timerInterval);
         isRunning = false;
         clearTimerState();
-        if (startButtonsGroup) startButtonsGroup.classList.remove('hidden');
-        if (btnEndTimer) btnEndTimer.classList.add('hidden');
-        btnMarkArrival.classList.add('hidden');
+        updateTimerButtons('idle');
         liveTimer.classList.remove('running');
         clientInput.disabled = false;
         activeClientLabel.textContent = "";
@@ -290,6 +316,9 @@ btnMarkArrival.addEventListener('click', () => {
     const timeString = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     arrivalBadge.textContent = "✓ Arrived at " + timeString + " (Travel: " + formatDuration(travelMs) + ")";
     arrivalBadge.classList.remove('hidden');
+
+    // After arrival, show the End Timer button
+    if (btnEndTimer) btnEndTimer.classList.remove('hidden');
 
     // Show arrival mileage modal if mileage is requested
     if (requestMileage) {
@@ -413,12 +442,9 @@ function finalizeAndSaveLog(partsText) {
             input.checked = false;
         }
 
-        if (startButtonsGroup) startButtonsGroup.classList.remove('hidden');
-        if (btnEndTimer) btnEndTimer.classList.add('hidden');
+        updateTimerButtons('idle');
         liveTimer.classList.remove('running');
 
-        btnMarkArrival.classList.add('hidden');
-        arrivalBadge.classList.add('hidden');
         arrivalTime = null;
         startMileage = null;
         arrivalMileage = null;
@@ -532,7 +558,11 @@ function renderLogs() {
     const request = store.getAll();
 
     request.onsuccess = () => {
-        const logs = request.result.filter(log => !log._deleted).reverse();
+        const logs = request.result.filter(log => !log._deleted).sort((a, b) => {
+            const aTime = (a.startMs != null) ? a.startMs : parseToDate(a.start)?.getTime();
+            const bTime = (b.startMs != null) ? b.startMs : parseToDate(b.start)?.getTime();
+            return (bTime || 0) - (aTime || 0);
+        });
         if (logs.length === 0) {
             logHistory.innerHTML = '<div class="empty-state">No logged hours found.</div>';
             btnClear.classList.add('hidden');
