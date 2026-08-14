@@ -1225,7 +1225,7 @@ btnCloseReport.addEventListener('click', () => {
 let originalTitle = document.title;
 
 const ROWS_PER_PAGE = 10;
-const ROWS_PER_PAGE_ONSITE = 12;
+const ROWS_PER_PAGE_ONSTIE = 12;
 const ROWS_PER_PAGE_REMOTE = 16;
 
 function buildPrintArea() {
@@ -1274,11 +1274,8 @@ function buildPrintArea() {
         const rows = Array.from(section.querySelectorAll('table.report-table tbody tr'));
         if (rows.length === 0) return;
 
-        const isRemoteSection = section.classList.contains('report-section-remote');
-        const rowsPerPage = isRemoteSection ? ROWS_PER_PAGE_REMOTE : ROWS_PER_PAGE_ONSITE;
-
-        for (let i = 0; i < rows.length; i += rowsPerPage) {
-            const chunk = rows.slice(i, i + rowsPerPage);
+        for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
+            const chunk = rows.slice(i, i + ROWS_PER_PAGE);
 
             // Add title before the first page of each section
             if (i === 0 && titleHtml) {
