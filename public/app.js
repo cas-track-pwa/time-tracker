@@ -1225,29 +1225,77 @@ btnCloseReport.addEventListener('click', () => {
 let originalTitle = document.title;
 
 const ROWS_PER_PAGE = 10;
+const ROWS_PER_PAGE_ONSITE = 12;
+const ROWS_PER_PAGE_REMOTE = 16;
 
 function buildPrintArea() {
-    const table = reportContent.querySelector('table.report-table');
-    if (!table) {
-        printArea.innerHTML = '';
+    const sections = reportContent.querySelectorAll('.report-section');
+    if (sections.length === 0) {
+        const table = reportContent.querySelector('table.report-table');
+        if (!table) {
+            printArea.innerHTML = '';
+            return;
+        }
+        const thead = table.querySelector('thead');
+        const theadHtml = thead ? thead.outerHTML : '';
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        let tablesHtml = '';
+        for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
+            const chunk = rows.slice(i, i + ROWS_PER_PAGE);
+            const pageBreak = i > 0 ? ' report-page-break' : '';
+            tablesHtml += '<table class="report-table' + pageBreak + '">';
+            tablesHtml += theadHtml + '<tbody>';
+            chunk.forEach(row => { tablesHtml += row.outerHTML; });
+            tablesHtml += '</tbody></table>';
+        }
+        printArea.innerHTML = '<div class="print-report-title">Billing Summary</div>' + tablesHtml;
+        const summaryDiv = reportContent.querySelector('.report-summary-container');
+        if (summaryDiv) {
+            printArea.innerHTML += summaryDiv.outerHTML;
+        }
         return;
     }
 
-    const thead = table.querySelector('thead');
+    // Multi-section approach: each section has a title and a table
+    const firstTable = sections[0].querySelector('table.report-table');
+    if (!firstTable) {
+        printArea.innerHTML = '';
+        return;
+    }
+    const thead = firstTable.querySelector('thead');
     const theadHtml = thead ? thead.outerHTML : '';
-    const colgroup = table.querySelector('colgroup');
-    const colgroupHtml = colgroup ? colgroup.outerHTML : '';
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
 
     let tablesHtml = '';
-    for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
-        const chunk = rows.slice(i, i + ROWS_PER_PAGE);
-        const pageBreak = i > 0 ? ' report-page-break' : '';
-        tablesHtml += '<table class="report-table' + pageBreak + '">';
-        tablesHtml += colgroupHtml + theadHtml + '<tbody>';
-        chunk.forEach(row => { tablesHtml += row.outerHTML; });
-        tablesHtml += '</tbody></table>';
-    }
+    let isFirstSection = true;
+
+    sections.forEach((section) => {
+        const titleEl = section.querySelector('.report-section-title');
+        const titleHtml = titleEl ? titleEl.outerHTML : '';
+        const rows = Array.from(section.querySelectorAll('table.report-table tbody tr'));
+        if (rows.length === 0) return;
+
+        const isRemoteSection = section.classList.contains('report-section-remote');
+        const rowsPerPage = isRemoteSection ? ROWS_PER_PAGE_REMOTE : ROWS_PER_PAGE_ONSITE;
+
+        for (let i = 0; i < rows.length; i += rowsPerPage) {
+            const chunk = rows.slice(i, i + rowsPerPage);
+
+            // Add title before the first page of each section
+            if (i === 0 && titleHtml) {
+                if (!isFirstSection) {
+                    tablesHtml += '<div class="report-page-break"></div>';
+                }
+                tablesHtml += titleHtml;
+                isFirstSection = false;
+            }
+
+            const pageBreak = i > 0 ? ' report-page-break' : '';
+            tablesHtml += '<table class="report-table' + pageBreak + '">';
+            tablesHtml += theadHtml + '<tbody>';
+            chunk.forEach(row => { tablesHtml += row.outerHTML; });
+            tablesHtml += '</tbody></table>';
+        }
+    });
 
     printArea.innerHTML = '<div class="print-report-title">Billing Summary</div>' + tablesHtml;
     const summaryDiv = reportContent.querySelector('.report-summary-container');
@@ -1429,6 +1477,58 @@ btnGenerateReport.addEventListener('click', () => {
     reportRangeModal.classList.add('hidden');
 });
 
+// Helper function to build a report table for a set of logs (no Remote column)
+function buildReportTable(logs, hasMileage) {
+    let tableHtml = '<table class="report-table">';
+    if (hasMileage) {
+        tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 20%;">Client</th><th style="width: 15%;">Invoice #</th><th style="width: 28%;">Timeline</th><th style="width: 12%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
+    } else {
+        tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 30%;">Client</th><th style="width: 15%;">Invoice #</th><th style="width: 28%;">Timeline</th><th style="width: 12%;">Billable Time</th></tr></thead>';
+    }
+    tableHtml += '<tbody>';
+
+    logs.forEach(log => {
+        const startDateObj = (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs) : new Date(log.start);
+        const endDateObj = (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs) : new Date(log.end);
+        const dateOnly = startDateObj.toLocaleDateString();
+        const startTimeStr = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const endTimeStr = endDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isRemote = isRemoteLog(log);
+
+        let timelineHtml = "";
+        let breakdownHtml = "";
+
+        let billableDecimal;
+        if (log.billableTime && log.billableTime !== '1') {
+            billableDecimal = log.billableTime;
+        } else {
+            billableDecimal = formatBillableTime(isRemote ? null : log.travelDurationMs, isRemote ? null : log.onSiteDurationMs, log.durationMs);
+        }
+
+        if (!isRemote && log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
+            timelineHtml = 'Start: ' + escapeHtml(startTimeStr) + '<br>Arrived: ' + escapeHtml(log.arrivalTime) + '<br>End: ' + escapeHtml(endTimeStr);
+            breakdownHtml = escapeHtml(billableDecimal);
+        } else {
+            timelineHtml = 'Start: ' + escapeHtml(startTimeStr) + '<br>End: ' + escapeHtml(endTimeStr);
+            breakdownHtml = escapeHtml(billableDecimal);
+        }
+
+        tableHtml += '<tr>';
+        tableHtml += '<td>' + escapeHtml(dateOnly) + '</td>';
+        tableHtml += '<td><strong>' + escapeHtml(log.client) + '</strong></td>';
+        tableHtml += '<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>';
+        tableHtml += '<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">' + timelineHtml + '</td>';
+        tableHtml += '<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">' + breakdownHtml + '</td>';
+        if (hasMileage) {
+            tableHtml += '<td>' + ((log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage + ' mi' : '-') + '</td>';
+        }
+        tableHtml += '</tr>';
+    });
+
+    tableHtml += '</tbody></table>';
+    return tableHtml;
+}
+
 function generateReportForDateRange(startDate, endDate) {
     if (!db) return;
     const store = db.transaction(["logs"], "readonly").objectStore("logs");
@@ -1449,31 +1549,20 @@ function generateReportForDateRange(startDate, endDate) {
             return;
         }
 
-        let hasMileage = filteredLogs.some(log => !isRemoteLog(log) && log.travelMileage !== null && log.travelMileage !== undefined);
-        let tableHtml = '<table class="report-table">';
-        if (hasMileage) {
-            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 20%;">Client</th><th style="width: 10%;">Remote</th><th style="width: 10%;">Invoice #</th><th style="width: 23%;">Timeline</th><th style="width: 12%;">Billable Time</th><th style="width: 10%;">Mileage</th></tr></thead>';
-        } else {
-            tableHtml += '<thead><tr><th style="width: 15%;">Date</th><th style="width: 25%;">Client</th><th style="width: 10%;">Remote</th><th style="width: 12%;">Invoice #</th><th style="width: 26%;">Timeline</th><th style="width: 12%;">Billable Time</th></tr></thead>';
-        }
-        tableHtml += '<tbody>';
+        // Split into on-site/travel and remote groups
+        const onSiteLogs = filteredLogs.filter(log => !isRemoteLog(log));
+        const remoteLogs = filteredLogs.filter(log => isRemoteLog(log));
+
+        // Determine if any non-remote log has mileage (shared column structure)
+        const hasMileage = onSiteLogs.some(log => log.travelMileage !== null && log.travelMileage !== undefined);
 
         let totalBillableHours = 0;
         let totalMileageSum = 0;
-        let totalRemoteCount = 0;
         const totalEntriesCount = filteredLogs.length;
+        const totalRemoteCount = remoteLogs.length;
 
         filteredLogs.forEach(log => {
-            const startDateObj = (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs) : new Date(log.start);
-            const endDateObj = (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs) : new Date(log.end);
-            const dateOnly = startDateObj.toLocaleDateString();
-            const startTimeStr = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const endTimeStr = endDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const isRemote = isRemoteLog(log);
-            if (isRemote) totalRemoteCount++;
-
-            let timelineHtml = "";
-            let breakdownHtml = "";
 
             let billableDecimal;
             if (log.billableTime && log.billableTime !== '1') {
@@ -1490,39 +1579,36 @@ function generateReportForDateRange(startDate, endDate) {
             if (!isRemote && log.travelMileage !== null && log.travelMileage !== undefined) {
                 totalMileageSum += log.travelMileage;
             }
-
-            if (!isRemote && log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
-                timelineHtml = `Start: ${escapeHtml(startTimeStr)}<br>Arrived: ${escapeHtml(log.arrivalTime)}<br>End: ${escapeHtml(endTimeStr)}`;
-                breakdownHtml = `${escapeHtml(billableDecimal)}`;
-            } else {
-                timelineHtml = `Start: ${escapeHtml(startTimeStr)}<br>End: ${escapeHtml(endTimeStr)}`;
-                breakdownHtml = `${escapeHtml(billableDecimal)}`;
-            }
-
-            tableHtml += '<tr>';
-            tableHtml += `<td>${escapeHtml(dateOnly)}</td>`;
-            tableHtml += `<td><strong>${escapeHtml(log.client)}</strong></td>`;
-            tableHtml += `<td style="font-size: 0.75rem; text-align: center;">${isRemote ? '<span class="remote-badge" style="margin-left: 0;">Remote</span>' : '<span style="color: var(--text-muted);">-</span>'}</td>`;
-            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted);">-</td>`;
-            tableHtml += `<td style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.3;">${timelineHtml}</td>`;
-            tableHtml += `<td style="font-family: monospace; font-size: 0.85rem; line-height: 1.3;">${breakdownHtml}</td>`;
-            if (hasMileage) {
-                tableHtml += `<td>${(!isRemote && log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage + ' mi' : '-'}</td>`;
-            }
-            tableHtml += '</tr>';
         });
 
-        tableHtml += '</tbody></table>';
+        let reportHtml = '';
 
-        let summaryHtml = `<div class="report-summary-container">`;
-        summaryHtml += `<div><strong>Total Jobs:</strong> ${totalEntriesCount} (${totalRemoteCount} Remote)</div>`;
-        summaryHtml += `<div><strong>Total Billable Hours:</strong> ${totalBillableHours.toFixed(2)}h</div>`;
-        if (hasMileage) {
-            summaryHtml += `<div><strong>Total Mileage:</strong> ${totalMileageSum.toFixed(1)} mi</div>`;
+        // On-Site Jobs section
+        if (onSiteLogs.length > 0) {
+            reportHtml += '<div class="report-section">';
+            reportHtml += '<h3 class="report-section-title">On-Site Jobs (' + onSiteLogs.length + ')</h3>';
+            reportHtml += buildReportTable(onSiteLogs, hasMileage);
+            reportHtml += '</div>';
         }
-        summaryHtml += `</div>`;
 
-        reportContent.innerHTML = tableHtml + summaryHtml;
+        // Remote Jobs section (starts on a new page in print)
+        if (remoteLogs.length > 0) {
+            reportHtml += '<div class="report-section report-section-remote">';
+            reportHtml += '<h3 class="report-section-title">Remote Jobs (' + remoteLogs.length + ')</h3>';
+            reportHtml += buildReportTable(remoteLogs, hasMileage);
+            reportHtml += '</div>';
+        }
+
+        // Combined summary
+        let summaryHtml = '<div class="report-summary-container">';
+        summaryHtml += '<div><strong>Total Jobs:</strong> ' + totalEntriesCount + ' (' + totalRemoteCount + ' Remote)</div>';
+        summaryHtml += '<div><strong>Total Billable Hours:</strong> ' + totalBillableHours.toFixed(2) + 'h</div>';
+        if (hasMileage) {
+            summaryHtml += '<div><strong>Total Mileage:</strong> ' + totalMileageSum.toFixed(1) + ' mi</div>';
+        }
+        summaryHtml += '</div>';
+
+        reportContent.innerHTML = reportHtml + summaryHtml;
 
         reportModal.classList.remove('hidden');
     };
