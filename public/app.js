@@ -1224,35 +1224,13 @@ btnCloseReport.addEventListener('click', () => {
 
 let originalTitle = document.title;
 
-const ROWS_PER_PAGE = 10;
-const ROWS_PER_PAGE_ONSTIE = 12;
+const ROWS_PER_PAGE_ONSITE = 12;
 const ROWS_PER_PAGE_REMOTE = 16;
 
 function buildPrintArea() {
     const sections = reportContent.querySelectorAll('.report-section');
     if (sections.length === 0) {
-        const table = reportContent.querySelector('table.report-table');
-        if (!table) {
-            printArea.innerHTML = '';
-            return;
-        }
-        const thead = table.querySelector('thead');
-        const theadHtml = thead ? thead.outerHTML : '';
-        const rows = Array.from(table.querySelectorAll('tbody tr'));
-        let tablesHtml = '';
-        for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
-            const chunk = rows.slice(i, i + ROWS_PER_PAGE);
-            const pageBreak = i > 0 ? ' report-page-break' : '';
-            tablesHtml += '<table class="report-table' + pageBreak + '">';
-            tablesHtml += theadHtml + '<tbody>';
-            chunk.forEach(row => { tablesHtml += row.outerHTML; });
-            tablesHtml += '</tbody></table>';
-        }
-        printArea.innerHTML = '<div class="print-report-title">Billing Summary</div>' + tablesHtml;
-        const summaryDiv = reportContent.querySelector('.report-summary-container');
-        if (summaryDiv) {
-            printArea.innerHTML += summaryDiv.outerHTML;
-        }
+        printArea.innerHTML = '';
         return;
     }
 
@@ -1274,8 +1252,11 @@ function buildPrintArea() {
         const rows = Array.from(section.querySelectorAll('table.report-table tbody tr'));
         if (rows.length === 0) return;
 
-        for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) {
-            const chunk = rows.slice(i, i + ROWS_PER_PAGE);
+        const isRemoteSection = section.classList.contains('report-section-remote');
+        const rowsPerPage = isRemoteSection ? ROWS_PER_PAGE_REMOTE : ROWS_PER_PAGE_ONSITE;
+
+        for (let i = 0; i < rows.length; i += rowsPerPage) {
+            const chunk = rows.slice(i, i + rowsPerPage);
 
             // Add title before the first page of each section
             if (i === 0 && titleHtml) {
