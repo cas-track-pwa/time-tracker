@@ -11,7 +11,7 @@ dbRequest.onupgradeneeded = (e) => {
     }
 };
 
-dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } if (localStorage.getItem('invoicingMode') === 'true') { enterInvoicingMode(); } };
+dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); } };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
 let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false, currentJobType = 'travel';
@@ -1933,6 +1933,7 @@ function getBillableDisplay(log) {
 function enterInvoicingMode() {
     isInvoicingMode = true;
     localStorage.setItem('invoicingMode', 'true');
+    document.body.classList.add('invoicing-active');
     recentLogsSection.classList.add('hidden');
     invoicingContainer.classList.remove('hidden');
     btnInvoicingMode.textContent = 'Exit Invoice Mode';
@@ -1942,6 +1943,7 @@ function enterInvoicingMode() {
 function exitInvoicingMode() {
     isInvoicingMode = false;
     localStorage.removeItem('invoicingMode');
+    document.body.classList.remove('invoicing-active');
     invoicingContainer.classList.add('hidden');
     recentLogsSection.classList.remove('hidden');
     btnInvoicingMode.textContent = 'Invoice Mode';

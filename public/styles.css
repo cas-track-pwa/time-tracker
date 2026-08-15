@@ -250,9 +250,27 @@ main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5re
     #invoicingContainer {
         display: none !important;
     }
+    /* Ensure recent logs are visible on mobile even if invoicing mode was active on desktop */
+    #recentLogsSection.hidden {
+        display: flex !important;
+    }
 }
 
 @media (min-width: 768px) {
+    body.invoicing-active .timer-card {
+        display: none !important;
+    }
+
+    body.invoicing-active .app-container {
+        max-width: 100%;
+        width: 100%;
+        box-shadow: none;
+    }
+
+    body.invoicing-active main {
+        padding: 1rem 0.5rem;
+    }
+
     .invoicing-mode-toggle {
         display: flex;
         justify-content: center;
