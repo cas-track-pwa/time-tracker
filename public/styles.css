@@ -411,6 +411,8 @@ main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5re
         font-style: italic;
         color: var(--text-muted);
         max-width: 250px;
+        white-space: normal;
+        line-height: 1.5;
     }
 
     .dark td.inv-cell-notes {

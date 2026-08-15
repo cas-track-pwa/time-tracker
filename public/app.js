@@ -1403,6 +1403,13 @@ function formatNotesForCsv(notes) {
     return '"' + formatted.replace(/"/g, '""') + '"';
 }
 
+function formatNotesDisplay(notes) {
+    if (!notes || notes.trim() === '') return '&mdash;';
+    const sentences = notes.trim().split(/(?<=[.!?])\s+|\r?\n+/).filter(s => s.trim() !== '');
+    if (sentences.length === 0) return '&mdash;';
+    return sentences.map(s => escapeHtml(s.trim())).join('<br>');
+}
+
 btnCancelReportRange.addEventListener('click', () => {
     reportRangeModal.classList.add('hidden');
     for (const input of reportRangeInputs) {
@@ -2005,7 +2012,7 @@ function renderInvoicingMode() {
             html += '<tr class="invoicing-row" data-log-id="' + log.id + '">';
             html += '<td class="inv-cell-client">' + escapeHtml(log.client) + '</td>';
             html += '<td class="inv-cell-billable" contenteditable="true" data-field="billableTime" data-id="' + log.id + '" data-original="' + escapeHtml(billableDisplay) + '" title="Click to edit billable hours">' + escapeHtml(billableDisplay) + '</td>';
-            html += '<td class="inv-cell-notes">' + escapeHtml(log.notes || '') + '</td>';
+            html += '<td class="inv-cell-notes">' + formatNotesDisplay(log.notes) + '</td>';
             html += '<td class="inv-cell-invoice" contenteditable="true" data-field="invoiceNumber" data-id="' + log.id + '" data-original="' + escapeHtml(invoiceVal) + '" title="Click to add invoice number">' + (invoiceVal ? escapeHtml(invoiceVal) : '') + '</td>';
             html += '</tr>';
         });
