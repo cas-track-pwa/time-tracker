@@ -2001,7 +2001,7 @@ function renderInvoicingMode() {
         }
 
         if (logs.length === 0) {
-            invoicingGridBody.innerHTML = '<tr><td colspan="4" class="empty-state">No logged hours found.</td></tr>';
+            invoicingGridBody.innerHTML = '<tr><td colspan="6" class="empty-state">No logged hours found.</td></tr>';
             return;
         }
 
@@ -2009,7 +2009,11 @@ function renderInvoicingMode() {
         logs.forEach(log => {
             const billableDisplay = getBillableDisplay(log);
             const invoiceVal = log.invoiceNumber || '';
+            const logDate = (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs) : new Date(log.start);
+            const dateStr = logDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
             html += '<tr class="invoicing-row" data-log-id="' + log.id + '">';
+            html += '<td class="inv-cell-remote">' + (log.isRemote ? '<span class="remote-badge">Yes</span>' : '<span class="remote-badge" style="background-color:var(--bg-secondary, #f3f4f6); color:var(--text-muted, #6b7280);">No</span>') + '</td>';
+            html += '<td class="inv-cell-date">' + dateStr + '</td>';
             html += '<td class="inv-cell-client">' + escapeHtml(log.client) + '</td>';
             html += '<td class="inv-cell-billable" contenteditable="true" data-field="billableTime" data-id="' + log.id + '" data-original="' + escapeHtml(billableDisplay) + '" title="Click to edit billable hours">' + escapeHtml(billableDisplay) + '</td>';
             html += '<td class="inv-cell-notes">' + formatNotesDisplay(log.notes) + '</td>';
@@ -2022,7 +2026,7 @@ function renderInvoicingMode() {
     };
 
     request.onerror = () => {
-        invoicingGridBody.innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load logs.</td></tr>';
+        invoicingGridBody.innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load logs.</td></tr>';
     };
 }
 
@@ -2032,6 +2036,8 @@ function getInvoSortVal(log, col) {
         case 'billableTime': return parseFloat(getBillableDisplay(log)) || 0;
         case 'notes': return (log.notes || '').toLowerCase();
         case 'invoiceNumber': return (log.invoiceNumber || '').toLowerCase();
+        case 'isRemote': return log.isRemote ? '1' : '0';
+        case 'date': return (log.startMs !== null && log.startMs !== undefined) ? log.startMs : (parseToDate(log.start)?.getTime() || 0);
         default: return '';
     }
 }

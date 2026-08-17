@@ -381,10 +381,37 @@ main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1.5re
     }
 
     /* Column widths — adjusted for desktop real estate */
-    .inv-col-client { width: 20%; }
+    .inv-col-remote { width: 7%; }
+    .inv-col-date { width: 10%; }
+    .inv-col-client { width: 16%; }
     .inv-col-billable { width: 15%; }
-    .inv-col-notes { width: 45%; }
-    .inv-col-invoice { width: 20%; }
+    .inv-col-notes { width: 37%; }
+    .inv-col-invoice { width: 15%; }
+
+    .inv-cell-remote {
+        text-align: center;
+        padding: 0.5rem;
+    }
+    .inv-cell-date {
+        text-align: center;
+        padding: 0.5rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.8rem;
+    }
+    .inv-cell-remote .remote-badge {
+        display: inline-block;
+        padding: 0.125rem 0.4rem;
+        border-radius: 0.2rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        background-color: var(--badge-remote-bg, #e0e7ff);
+        color: var(--badge-remote-text, #3730a3);
+        white-space: nowrap;
+    }
+    .dark .inv-cell-remote .remote-badge {
+        background-color: var(--badge-remote-bg-dark, #3730a3);
+        color: var(--badge-remote-text-dark, #c7d2fe);
+    }
 
     /* Editable cells */
     td[contenteditable="true"]:focus {
