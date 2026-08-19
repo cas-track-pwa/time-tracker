@@ -1674,6 +1674,12 @@ async function syncToCloud() {
             return { success: false, error: error.error || 'Sync failed' };
         }
         const result = await response.json();
+        if (result.errors && result.errors.length > 0) {
+            console.error('syncToCloud: server reported errors:', result.errors);
+            updateSyncStatus('error');
+            syncStatusEl.title = 'Sync errors: ' + result.errors.map(e => e.error || e).join('; ');
+            return { success: false, error: result.errors, upserted: result.upserted };
+        }
         setLastSyncTime(result.serverTime);
 
         // Hard-delete locally any entries the server confirmed as deleted
@@ -1770,8 +1776,17 @@ async function performSync() {
     syncStatusEl.classList.remove('hidden');
     updateSyncStatus('syncing');
     const since = getLastSyncTime();
-    await syncToCloud();
-    await syncFromCloud(since);
+    const upResult = await syncToCloud();
+    const downResult = await syncFromCloud(since);
+    if (!upResult.success || !downResult.success) {
+        const upErr = upResult.success ? '' : (upResult.error || 'upload failed');
+        const downErr = downResult.success ? '' : (downResult.error || 'fetch failed');
+        syncStatusEl.title = [upErr, downErr].filter(Boolean).join('; ');
+        updateSyncStatus('error');
+    } else {
+        syncStatusEl.title = '';
+        setLastSyncTime(Math.max(getLastSyncTime(), Date.now()));
+    }
     checkConnectivity();
     renderLogs();
 }
@@ -1783,9 +1798,12 @@ function syncAfterWrite() {
         setTimeout(() => {
             syncToCloud().then(result => {
                 if (!result.success) {
-                    console.log('Background sync failed:', result.error);
+                    syncStatusEl.title = result.error || 'Background sync failed';
+                    updateSyncStatus('error');
+                } else {
+                    syncStatusEl.title = '';
+                    checkConnectivity();
                 }
-                checkConnectivity();
             });
         }, 1000);
     }
@@ -1800,8 +1818,8 @@ syncStatusEl.addEventListener('click', () => {
 });
 
 function updateSyncStatus(status) {
-    const colors = { online: '#10b981', syncing: '#f59e0b', offline: '#ef4444', idle: '#6b7280' };
-    syncStatusEl.textContent = status;
+    const colors = { online: '#10b981', syncing: '#f59e0b', offline: '#ef4444', idle: '#6b7280', error: '#ef4444' };
+    syncStatusEl.textContent = status === 'error' ? 'sync failed' : status;
     syncStatusEl.style.background = colors[status] + '20';
     syncStatusEl.style.color = colors[status];
 }
@@ -2001,7 +2019,7 @@ function renderInvoicingMode() {
         }
 
         if (logs.length === 0) {
-            invoicingGridBody.innerHTML = '<tr><td colspan="6" class="empty-state">No logged hours found.</td></tr>';
+            invoicingGridBody.innerHTML = '<tr><td colspan="7" class="empty-state">No logged hours found.</td></tr>';
             return;
         }
 
@@ -2017,6 +2035,7 @@ function renderInvoicingMode() {
             html += '<td class="inv-cell-client">' + escapeHtml(log.client) + '</td>';
             html += '<td class="inv-cell-billable" contenteditable="true" data-field="billableTime" data-id="' + log.id + '" data-original="' + escapeHtml(billableDisplay) + '" title="Click to edit billable hours">' + escapeHtml(billableDisplay) + '</td>';
             html += '<td class="inv-cell-notes">' + formatNotesDisplay(log.notes) + '</td>';
+            html += '<td class="inv-cell-parts">' + (log.parts ? escapeHtml(log.parts) : '') + '</td>';
             html += '<td class="inv-cell-invoice" contenteditable="true" data-field="invoiceNumber" data-id="' + log.id + '" data-original="' + escapeHtml(invoiceVal) + '" title="Click to add invoice number">' + (invoiceVal ? escapeHtml(invoiceVal) : '') + '</td>';
             html += '</tr>';
         });
@@ -2026,7 +2045,7 @@ function renderInvoicingMode() {
     };
 
     request.onerror = () => {
-        invoicingGridBody.innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load logs.</td></tr>';
+        invoicingGridBody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load logs.</td></tr>';
     };
 }
 
@@ -2035,6 +2054,7 @@ function getInvoSortVal(log, col) {
         case 'client': return log.client.toLowerCase();
         case 'billableTime': return parseFloat(getBillableDisplay(log)) || 0;
         case 'notes': return (log.notes || '').toLowerCase();
+        case 'parts': return (log.parts || '').toLowerCase();
         case 'invoiceNumber': return (log.invoiceNumber || '').toLowerCase();
         case 'isRemote': return log.isRemote ? '1' : '0';
         case 'date': return (log.startMs !== null && log.startMs !== undefined) ? log.startMs : (parseToDate(log.start)?.getTime() || 0);

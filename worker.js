@@ -624,7 +624,7 @@ async function syncLogs(request, env) {
                  billableTime, travelMileage, startMileage, arrivalMileage,
                  startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
                  invoice_number)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                  client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
                  durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
@@ -707,7 +707,11 @@ async function getSyncChanges(request, env, url) {
 
     const since = url.searchParams.get('since');
     const sinceMs = since ? parseInt(since, 10) : 0;
-    const sinceDate = sinceMs > 0 ? new Date(sinceMs).toISOString().replace('T', ' ').replace('Z', '') : '0000-01-01 00:00:00';
+    // Format as 'YYYY-MM-DD HH:MM:SS.SSS' to match D1's CURRENT_TIMESTAMP storage format.
+    // The client sends `since` as a Unix epoch millis timestamp.
+    const sinceDate = sinceMs > 0
+      ? new Date(sinceMs).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000')
+      : '0000-01-01 00:00:00';
 
     // Return ALL rows updated since last sync — including tombstoned ones.
     // The client inspects deleted_at to decide whether to upsert or delete locally.
