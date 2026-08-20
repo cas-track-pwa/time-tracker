@@ -151,7 +151,11 @@ const arrivalBadge = document.getElementById('arrivalBadge');
 const toggleMileage = document.getElementById('toggleMileage');
 
 const btnOpenReport = document.getElementById('btnOpenReport');
-const btnLogout = document.getElementById('btnLogout');
+const btnUserMenu = document.getElementById('btnUserMenu');
+const userDropdown = document.getElementById('userDropdown');
+const btnChangePasswordDropdown = document.getElementById('btnChangePasswordDropdown');
+const btnLogoutDropdown = document.getElementById('btnLogoutDropdown');
+const userMenuWrapper = document.getElementById('userMenuWrapper');
 const reportModal = document.getElementById('reportModal');
 const btnCloseReport = document.getElementById('btnCloseReport');
 const reportContent = document.getElementById('reportContent');
@@ -222,6 +226,14 @@ const authBtn = document.getElementById('authBtn');
 const authError = document.getElementById('authError');
 const tabLoginAuth = document.getElementById('tabLoginAuth');
 const tabRegisterAuth = document.getElementById('tabRegisterAuth');
+const tabChangePasswordAuth = document.getElementById('tabChangePasswordAuth');
+const changePasswordSection = document.getElementById('changePasswordSection');
+const changeCurrentPassword = document.getElementById('changeCurrentPassword');
+const changeNewPassword = document.getElementById('changeNewPassword');
+const changeConfirmPassword = document.getElementById('changeConfirmPassword');
+const changePasswordBtn = document.getElementById('changePasswordBtn');
+const changePasswordError = document.getElementById('changePasswordError');
+const changePasswordSuccess = document.getElementById('changePasswordSuccess');
 const btnCloseAuth = document.getElementById('btnCloseAuth');
 let isLoginMode = true;
 
@@ -1851,6 +1863,9 @@ function showAuthModal() {
     isLoginMode = true;
     tabLoginAuth.classList.add('active');
     tabRegisterAuth.classList.remove('active');
+    tabChangePasswordAuth.classList.remove('active');
+    tabChangePasswordAuth.style.display = 'none';
+    changePasswordSection.style.display = 'none';
     authBtn.textContent = 'Login';
 }
 
@@ -1862,7 +1877,10 @@ tabLoginAuth.addEventListener('click', () => {
     isLoginMode = true;
     tabLoginAuth.classList.add('active');
     tabRegisterAuth.classList.remove('active');
+    tabChangePasswordAuth.classList.remove('active');
+    tabChangePasswordAuth.style.display = 'inline-flex';
     authBtn.textContent = 'Login';
+    changePasswordSection.style.display = 'none';
     authError.style.display = 'none';
 });
 
@@ -1870,8 +1888,21 @@ tabRegisterAuth.addEventListener('click', () => {
     isLoginMode = false;
     tabRegisterAuth.classList.add('active');
     tabLoginAuth.classList.remove('active');
+    tabChangePasswordAuth.classList.remove('active');
+    tabChangePasswordAuth.style.display = 'inline-flex';
     authBtn.textContent = 'Register';
+    changePasswordSection.style.display = 'none';
     authError.style.display = 'none';
+});
+
+tabChangePasswordAuth.addEventListener('click', () => {
+    tabChangePasswordAuth.classList.add('active');
+    tabLoginAuth.classList.remove('active');
+    tabRegisterAuth.classList.remove('active');
+    changePasswordSection.style.display = 'block';
+    authError.style.display = 'none';
+    changePasswordError.style.display = 'none';
+    changePasswordSuccess.style.display = 'none';
 });
 
 btnCloseAuth.addEventListener('click', hideAuthModal);
@@ -1917,14 +1948,103 @@ authPassword.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') authBtn.click();
 });
 
+changePasswordBtn.addEventListener('click', async () => {
+    const currentPassword = changeCurrentPassword.value;
+    const newPassword = changeNewPassword.value;
+    const confirmPassword = changeConfirmPassword.value;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        changePasswordError.textContent = 'Please fill in all fields';
+        changePasswordError.style.display = 'block';
+        changePasswordSuccess.style.display = 'none';
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        changePasswordError.textContent = 'New passwords do not match';
+        changePasswordError.style.display = 'block';
+        changePasswordSuccess.style.display = 'none';
+        return;
+    }
+
+    if (newPassword.length < 8) {
+        changePasswordError.textContent = 'New password must be at least 8 characters';
+        changePasswordError.style.display = 'block';
+        changePasswordSuccess.style.display = 'none';
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/auth/password`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ currentPassword, newPassword })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            changePasswordSuccess.textContent = 'Password updated successfully!';
+            changePasswordSuccess.style.display = 'block';
+            changePasswordError.style.display = 'none';
+            changeCurrentPassword.value = '';
+            changeNewPassword.value = '';
+            changeConfirmPassword.value = '';
+        } else {
+            changePasswordError.textContent = data.error || 'Failed to update password';
+            changePasswordError.style.display = 'block';
+            changePasswordSuccess.style.display = 'none';
+        }
+    } catch (e) {
+        changePasswordError.textContent = 'Network error';
+        changePasswordError.style.display = 'block';
+        changePasswordSuccess.style.display = 'none';
+    }
+});
+
 // Show auth modal on page load if not authenticated
 if (!isAuthenticated()) {
     showAuthModal();
 }
 
-// Logout handler
-btnLogout.addEventListener('click', async () => {
+// User menu dropdown toggle
+btnUserMenu.addEventListener('click', () => {
+    userDropdown.classList.toggle('hidden');
+});
+
+// Hide dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!userMenuWrapper.contains(e.target)) {
+        userDropdown.classList.add('hidden');
+    }
+});
+
+// Change Password handler
+btnChangePasswordDropdown.addEventListener('click', () => {
     if (!isAuthenticated()) return;
+    userDropdown.classList.add('hidden');
+    authModal.classList.remove('hidden');
+    authError.style.display = 'none';
+    authError.textContent = '';
+    // Switch to the change password tab
+    tabLoginAuth.classList.remove('active');
+    tabRegisterAuth.classList.remove('active');
+    tabChangePasswordAuth.classList.add('active');
+    tabChangePasswordAuth.style.display = 'inline-flex';
+    changePasswordSection.style.display = 'block';
+    changePasswordError.style.display = 'none';
+    changePasswordError.textContent = '';
+    changePasswordSuccess.style.display = 'none';
+    changePasswordSuccess.textContent = '';
+    changeCurrentPassword.value = '';
+    changeNewPassword.value = '';
+    changeConfirmPassword.value = '';
+});
+
+// Logout handler
+btnLogoutDropdown.addEventListener('click', async () => {
+    if (!isAuthenticated()) return;
+    userDropdown.classList.add('hidden');
     try {
         await fetch(`${API_BASE}/api/auth/logout`, {
             method: 'POST',
@@ -2019,7 +2139,7 @@ function renderInvoicingMode() {
         }
 
         if (logs.length === 0) {
-            invoicingGridBody.innerHTML = '<tr><td colspan="7" class="empty-state">No logged hours found.</td></tr>';
+            invoicingGridBody.innerHTML = '<tr><td colspan="8" class="empty-state">No logged hours found.</td></tr>';
             return;
         }
 
@@ -2034,9 +2154,10 @@ function renderInvoicingMode() {
             html += '<td class="inv-cell-date">' + dateStr + '</td>';
             html += '<td class="inv-cell-client">' + escapeHtml(log.client) + '</td>';
             html += '<td class="inv-cell-billable" contenteditable="true" data-field="billableTime" data-id="' + log.id + '" data-original="' + escapeHtml(billableDisplay) + '" title="Click to edit billable hours">' + escapeHtml(billableDisplay) + '</td>';
-            html += '<td class="inv-cell-notes">' + formatNotesDisplay(log.notes) + '</td>';
+            html += '<td class="inv-cell-notes" contenteditable="true" data-field="notes" data-id="' + log.id + '" data-original="' + escapeHtml(log.notes || '') + '" title="Click to edit notes">' + (log.notes && log.notes.trim() ? formatNotesDisplay(log.notes) : '<em style="color:var(--text-muted, #9ca3af);">No notes</em>') + '</td>';
             html += '<td class="inv-cell-parts">' + (log.parts ? escapeHtml(log.parts) : '') + '</td>';
             html += '<td class="inv-cell-invoice" contenteditable="true" data-field="invoiceNumber" data-id="' + log.id + '" data-original="' + escapeHtml(invoiceVal) + '" title="Click to add invoice number">' + (invoiceVal ? escapeHtml(invoiceVal) : '') + '</td>';
+            html += '<td class="inv-cell-actions"><button class="btn-inv-edit" onclick="editLog(' + log.id + ')">Edit</button></td>';
             html += '</tr>';
         });
 
@@ -2045,7 +2166,7 @@ function renderInvoicingMode() {
     };
 
     request.onerror = () => {
-        invoicingGridBody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load logs.</td></tr>';
+        invoicingGridBody.innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load logs.</td></tr>';
     };
 }
 
@@ -2136,6 +2257,8 @@ async function saveInvoicingCell(cell) {
             log.invoiceNumber = value;
         } else if (field === 'billableTime') {
             log.billableTime = (value === 'sales call' || isNaN(parseFloat(value)) || parseFloat(value) <= 0) ? '1' : value;
+        } else if (field === 'notes') {
+            log.notes = value;
         }
 
         await new Promise((resolve, reject) => {

@@ -162,9 +162,12 @@ async function handleAPI(request, env, url) {
   if (path === '/api/auth/login' && method === 'POST') {
     return loginUser(request, env);
   }
-  if (path === '/api/auth/logout' && method === 'POST') {
-    return logoutUser(request, env);
-  }
+   if (path === '/api/auth/logout' && method === 'POST') {
+     return logoutUser(request, env);
+   }
+   if (path === '/api/auth/password' && method === 'PUT') {
+     return changePassword(request, env);
+   }
 
   // Logs endpoints
   if (path === '/api/logs' && method === 'GET') {
@@ -311,6 +314,71 @@ async function loginUser(request, env) {
     }));
   }
 }
+
+async function changePassword(request, env) {
+  try {
+    const userId = await getUserIdFromToken(request, env);
+    if (!userId) {
+      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    const { currentPassword, newPassword } = await request.json();
+
+    if (!currentPassword || !newPassword) {
+      return withCORS(new Response(JSON.stringify({ error: 'Current password and new password are required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    if (newPassword.length < 8) {
+      return withCORS(new Response(JSON.stringify({ error: 'New password must be at least 8 characters' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    // Get user's current password hash
+    const user = await env.DB.prepare(
+      'SELECT password_hash FROM users WHERE id = ?'
+    ).bind(userId).first();
+
+    if (!user) {
+      return withCORS(new Response(JSON.stringify({ error: 'User not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    // Verify current password
+    const passwordValid = await verifyPassword(currentPassword, user.password_hash);
+    if (!passwordValid) {
+      return withCORS(new Response(JSON.stringify({ error: 'Current password is incorrect' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    // Hash and update the new password
+    const newPasswordHash = await hashPassword(newPassword);
+    await env.DB.prepare(
+      'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(newPasswordHash, userId).run();
+
+    return withCORS(new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  } catch (error) {
+    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    }));
+  }
+}
+
 
 async function logoutUser(request, env) {
   try {

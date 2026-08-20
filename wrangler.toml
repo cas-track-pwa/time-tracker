@@ -3,13 +3,10 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [vars]
-# JWT_SECRET is required for signing auth tokens.
-# Set it via: npx wrangler secret put JWT_SECRET
-# For local dev, create a .dev.vars file with: JWT_SECRET="your-secret-here"
-
 # Fallback allowed users for local development
-# Update this with your actual emails, or set the allowed_users KV key in production
-FALLBACK_ALLOWED_USERS = '["your-email@example.com"]'
+# In production, the allowed_users KV key is used. For local dev without KV access,
+# temporarily set FALLBACK_ALLOWED_USERS here:
+# FALLBACK_ALLOWED_USERS = '["your-email@example.com"]'
 
 # CORS: restrict to your production domain in production.
 # Set via: npx wrangler secret put ALLOWED_ORIGIN

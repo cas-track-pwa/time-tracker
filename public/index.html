@@ -29,11 +29,17 @@
 <body>
     <div class="app-container">
         <header>
-            <div class="flex-row-gap">
+            <div class="flex-row-gap" style="position: relative;">
                 <button id="btnAddEntry" class="btn-export">Add Entry</button>
                 <button id="btnCsv" class="btn-export">CSV</button>
                 <button id="btnOpenReport" class="btn-export">Report</button>
-                <button id="btnLogout" class="btn-export">Logout</button>
+                <div id="userMenuWrapper" style="position: relative; display: inline-flex; align-items: center; margin: 0; padding: 0;">
+                    <button id="btnUserMenu" class="btn-export">User</button>
+                    <div id="userDropdown" class="user-dropdown hidden">
+                        <button id="btnChangePasswordDropdown" class="dropdown-item">Change Password</button>
+                        <button id="btnLogoutDropdown" class="dropdown-item">Logout</button>
+                    </div>
+                </div>
                 <button id="btnDarkMode" class="btn-export btn-dark-mode">🌙</button>
             </div>
         </header>
@@ -330,6 +336,7 @@
                                 <th class="inv-col-notes sortable" data-col="notes">Notes</th>
                                 <th class="inv-col-parts" data-col="parts">Parts Used</th>
                                 <th class="inv-col-invoice sortable" data-col="invoiceNumber">Invoice #</th>
+                                <th class="inv-col-actions" data-col="actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="invoicingGridBody"></tbody>
@@ -365,6 +372,7 @@
                 <div class="auth-tabs">
                     <button id="tabLoginAuth" class="auth-tab active">Login</button>
                     <button id="tabRegisterAuth" class="auth-tab">Register</button>
+                    <button id="tabChangePasswordAuth" class="auth-tab">Change Password</button>
                 </div>
                 <div class="form-group">
                     <label class="label-title" for="authEmail">Email</label>
@@ -376,6 +384,23 @@
                 </div>
                 <button id="authBtn" class="btn-primary" style="width: 100%; margin-top: 0.5rem;">Login</button>
                 <p id="authError" style="color: #ef4444; display: none; margin-top: 0.5rem; font-size: 0.875rem;"></p>
+                <div id="changePasswordSection" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <div class="form-group">
+                        <label class="label-title" for="changeCurrentPassword">Current Password</label>
+                        <input type="password" id="changeCurrentPassword" class="form-input" placeholder="Current password">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title" for="changeNewPassword">New Password</label>
+                        <input type="password" id="changeNewPassword" class="form-input" placeholder="New password">
+                    </div>
+                    <div class="form-group">
+                        <label class="label-title" for="changeConfirmPassword">Confirm New Password</label>
+                        <input type="password" id="changeConfirmPassword" class="form-input" placeholder="Confirm new password">
+                    </div>
+                    <button id="changePasswordBtn" class="btn-primary" style="width: 100%; margin-top: 0.5rem;">Update Password</button>
+                    <p id="changePasswordError" style="color: #ef4444; display: none; margin-top: 0.5rem; font-size: 0.875rem;"></p>
+                    <p id="changePasswordSuccess" style="color: #10b981; display: none; margin-top: 0.5rem; font-size: 0.875rem;"></p>
+                </div>
             </div>
         </div>
     </div>
