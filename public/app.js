@@ -1683,6 +1683,15 @@ async function syncToCloud() {
         if (!response.ok) {
             const error = await response.json();
             console.error('syncToCloud failed:', error);
+            if (response.status === 401) {
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('userId');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('lastSyncTime');
+                syncStatusEl.classList.add('hidden');
+                alert('Your session has expired. Please log in again.');
+                showAuthModal();
+            }
             return { success: false, error: error.error || 'Sync failed' };
         }
         const result = await response.json();
@@ -1745,6 +1754,15 @@ async function syncFromCloud(sinceOverride) {
         if (!response.ok) {
             const error = await response.json();
             console.error('syncFromCloud failed:', error);
+            if (response.status === 401) {
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('userId');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('lastSyncTime');
+                syncStatusEl.classList.add('hidden');
+                alert('Your session has expired. Please log in again.');
+                showAuthModal();
+            }
             return { success: false, error: error.error || 'Fetch failed' };
         }
         const data = await response.json();
@@ -1798,8 +1816,8 @@ async function performSync() {
     } else {
         syncStatusEl.title = '';
         setLastSyncTime(Math.max(getLastSyncTime(), Date.now()));
+        checkConnectivity();
     }
-    checkConnectivity();
     renderLogs();
 }
 
