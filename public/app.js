@@ -315,6 +315,9 @@ if (btnEndTimer) {
         liveTimer.classList.remove('running');
         clientInput.disabled = false;
         activeClientLabel.textContent = "";
+        for (const input of billableInputs) {
+            input.checked = (input.value === '1');
+        }
         notesModal.classList.remove('hidden');
         notesInput.focus();
     });
@@ -462,7 +465,7 @@ function finalizeAndSaveLog(partsText) {
         partsInput.value = "";
 
         for (const input of billableInputs) {
-            input.checked = false;
+            input.checked = (input.value === '1');
         }
 
         updateTimerButtons('idle');
