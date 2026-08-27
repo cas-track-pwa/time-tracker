@@ -407,9 +407,14 @@ btnSaveLog.addEventListener('click', () => {
     pendingBillableTime = selectedBillableTime;
 
     notesModal.classList.add('hidden');
-    partsInput.value = '';
-    partsModal.classList.remove('hidden');
-    partsInput.focus();
+
+    if (isRemote) {
+        finalizeAndSaveLog("");
+    } else {
+        partsInput.value = '';
+        partsModal.classList.remove('hidden');
+        partsInput.focus();
+    }
 });
 
 function finalizeAndSaveLog(partsText) {
@@ -1847,6 +1852,13 @@ async function syncFromCloud(sinceOverride) {
                     getReq.onerror = () => reject(getReq.error);
                 } else {
                     // Normal live row — upsert into local IndexedDB.
+                    // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
+                    // string) to a Unix epoch ms number so the next push doesn't
+                    // re-parse it as local time and produce a different UTC value.
+                    if (log.updated_at && (typeof log.updatedAt !== 'number' || log.updatedAt !== new Date(log.updated_at).getTime())) {
+                        log.updatedAt = new Date(log.updated_at).getTime();
+                    }
+                    delete log.updated_at;
                     const req = store.put(log);
                     req.onsuccess = () => resolve();
                     req.onerror = () => reject(req.error);
@@ -2338,6 +2350,8 @@ async function saveInvoicingCell(cell) {
         } else if (field === 'notes') {
             log.notes = value;
         }
+
+        log.updatedAt = Date.now();
 
         await new Promise((resolve, reject) => {
             const putReq = store.put(log);

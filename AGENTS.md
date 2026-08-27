@@ -380,6 +380,10 @@ See `CLOUDFLARE_MIGRATION.md` for the full migration guide. Static assets are no
 - **Cause**: Deleting a log entry used the browser's native `confirm()`, inconsistent with the custom "Clear All" modal
 - **Fix**: Added `deleteConfirmModal` following the same pattern as `clearConfirmModal`
 
+### Invoicing-Mode Edits Silently Dropped by Last-Write-Wins *(fixed)*
+- **Cause**: `saveInvoicingCell()` updated `notes` / `billableTime` / `invoiceNumber` but never bumped `log.updatedAt`. When a device pushed those edits, the Worker's `syncLogs` compared `clientUpdatedAt > server_updated_at` using the *original* creation timestamp and treated the push as a conflict, silently skipping the upsert. Other edit paths (`btnSaveEdit`, `btnSaveAdd`, `finalizeAndSaveLog`) all set `updatedAt` correctly — only Invoicing Mode was broken
+- **Fix**: `saveInvoicingCell()` now sets `log.updatedAt = Date.now()` before `store.put`, matching every other write path. Also hardened `syncFromCloud()` to normalize the server's `updated_at` string into a Unix epoch ms number on the local copy and drop the redundant `updated_at` field, so subsequent pushes don't round-trip a UTC string through a local-time parse
+
 ## Open Items (Not Yet Fixed)
 
 - None at this time.

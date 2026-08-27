@@ -1,5 +1,5 @@
 // Service Worker for Time Tracker PWA — iOS offline support
-const CACHE_NAME = 'time-tracker-v22';
+const CACHE_NAME = 'time-tracker-v24';
 const urlsToCache = [
   './',
   'index.html',
