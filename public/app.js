@@ -447,7 +447,8 @@ function finalizeAndSaveLog(partsText) {
         travelMileage: travelMileage,
         isRemote: isRemote,
         invoiceNumber: "",
-        updatedAt: now
+        updatedAt: now,
+        lastSyncedUpdatedAt: null
     };
 
     btnSaveParts.disabled = true;
@@ -1041,7 +1042,8 @@ btnSaveAdd.addEventListener('click', () => {
         travelMileage: selectedTravelMileage,
         isRemote: isRemoteEntry,
         invoiceNumber: "",
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        lastSyncedUpdatedAt: null
     };
 
     btnSaveAdd.disabled = true;
@@ -1179,7 +1181,8 @@ const log = {
         travelMileage: row[12] !== '' ? parseFloat(row[12]) : null,
          isRemote: remoteIdx !== null ? (row[remoteIdx].replace(/^\"|\"$/g, '').toLowerCase() === 'true') : false,
          invoiceNumber: invoiceIdx !== null ? row[invoiceIdx].replace(/^\"|\"$/g, '') : "",
-         updatedAt: isNaN(updatedAtMs) ? null : updatedAtMs
+         updatedAt: isNaN(updatedAtMs) ? null : updatedAtMs,
+         lastSyncedUpdatedAt: null
     };
     newLogs.push(log);
     }
@@ -1692,33 +1695,65 @@ async function syncToCloud() {
     try {
         const store = db.transaction(['logs'], 'readonly').objectStore('logs');
         const request = store.getAll();
-        const logs = await new Promise((resolve, reject) => {
+        const allLogs = await new Promise((resolve, reject) => {
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
 
-        // Backfill updatedAt for existing entries that don't have it
-        // Use startMs as the fallback since that's when the entry was created
+        // Backfill updatedAt / lastSyncedUpdatedAt for legacy entries.
+        // - updatedAt: use startMs as the fallback since that's when the entry was created
+        // - lastSyncedUpdatedAt: null means "never confirmed by server" — include in push
         const now = Date.now();
         let needsBackfill = false;
-        logs.forEach(log => {
+        for (const log of allLogs) {
             if (log.updatedAt === null || log.updatedAt === undefined) {
                 log.updatedAt = log.startMs || now;
                 needsBackfill = true;
             }
-        });
+            if (log.lastSyncedUpdatedAt === undefined) {
+                log.lastSyncedUpdatedAt = null;
+                needsBackfill = true;
+            }
+        }
         if (needsBackfill && db) {
             const tx = db.transaction(['logs'], 'readwrite');
             const store2 = tx.objectStore('logs');
-            logs.forEach(log => store2.put(log));
+            allLogs.forEach(log => store2.put(log));
             await new Promise(resolve => { tx.oncomplete = resolve; });
         }
 
-        console.log('syncToCloud: pushing', logs.length, 'logs to server');
+        // Snapshot per-log updatedAt at the moment we read the logs to push. This is the
+        // value the push payload actually contained; we'll write the server-confirmed
+        // updatedAt into lastSyncedUpdatedAt after the ack, but only if the local value
+        // hasn't changed in the meantime. Otherwise a concurrent local edit would be
+        // silently marked as already-synced.
+        const pushedUpdatedAtById = new Map();
+        for (const log of allLogs) {
+            if (log.id !== undefined && log.id !== null) {
+                pushedUpdatedAtById.set(log.id, log.updatedAt);
+            }
+        }
+
+        // Only push rows whose local updatedAt is strictly newer than what the server
+        // last confirmed. This skips the no-op re-pushes that previously caused the
+        // "server had newer data" log on every sync.
+        const logsToPush = allLogs.filter(log => {
+            if (log._deleted) return true;
+            if (log.id === undefined || log.id === null) return true;
+            if (log.lastSyncedUpdatedAt === null || log.lastSyncedUpdatedAt === undefined) return true;
+            return log.updatedAt > log.lastSyncedUpdatedAt;
+        });
+
+        if (logsToPush.length === 0) {
+            setLastSyncTime(Date.now());
+            return { success: true, upserted: [], errors: [] };
+        }
+
+        console.log('syncToCloud: pushing', logsToPush.length, 'of', allLogs.length, 'logs to server');
         const response = await fetch(`${API_BASE}/api/sync`, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ logs })
+            body: JSON.stringify({ logs: logsToPush })
         });
         if (!response.ok) {
             const error = await response.json();
@@ -1743,26 +1778,51 @@ async function syncToCloud() {
         }
         setLastSyncTime(result.serverTime);
 
-        // Update local logs with server's updatedAt timestamps for conflict resolution
-        const upsertedWithTimestamp = result.upserted.filter(u => u.updatedAt);
-        if (upsertedWithTimestamp.length > 0 && db) {
+        // Update local logs with server's confirmed updatedAt and record it as the
+        // lastSyncedUpdatedAt so the next sync skips re-pushing these rows. We only
+        // touch rows that the server actually wrote (action 'updated' or 'created' or
+        // 'deleted'); rows the server rejected (action 'conflict') keep their existing
+        // lastSyncedUpdatedAt so a future local edit will still be pushed.
+        //
+        // Race protection: only update lastSyncedUpdatedAt if the local updatedAt is
+        // still the value we pushed (stored in pushedUpdatedAtById). If a concurrent
+        // local edit happened during the round-trip, local updatedAt is now greater
+        // than what we pushed, and we must NOT mark it as synced.
+        const upsertedConfirmed = result.upserted.filter(u => u.updatedAt && (u.action === 'updated' || u.action === 'created' || u.action === 'deleted'));
+        if (upsertedConfirmed.length > 0 && db) {
             const tx = db.transaction(['logs'], 'readwrite');
             const store = tx.objectStore('logs');
-            for (const u of upsertedWithTimestamp) {
+            for (const u of upsertedConfirmed) {
                 const getReq = store.get(u.id);
                 getReq.onsuccess = () => {
                     const log = getReq.result;
-                    if (log) {
-                        // Convert server's updated_at (ISO string) to Unix epoch ms for local storage
-                        const serverUpdatedAtMs = new Date(u.updatedAt).getTime();
-                        log.updatedAt = serverUpdatedAtMs;
-                        store.put(log);
+                    if (!log) return;
+                    // Skip tombstones that have already been hard-deleted locally.
+                    if (u.action === 'deleted' && !log._deleted) {
+                        // Server confirmed a delete we didn't request. This shouldn't
+                        // happen via /api/sync POST — server tombstones come back in
+                        // serverTombstones. Treat defensively: do nothing.
+                        return;
                     }
+                    const serverUpdatedAtMs = new Date(u.updatedAt).getTime();
+                    // Only adopt the server timestamp if no concurrent local edit
+                    // landed during the round-trip.
+                    const pushedAt = pushedUpdatedAtById.get(u.id);
+                    if (pushedAt !== undefined && log.updatedAt !== pushedAt) {
+                        // Local edited during the push. Do not mark as synced; the next
+                        // sync will pick it up because updatedAt > lastSyncedUpdatedAt.
+                        return;
+                    }
+                    if (u.action !== 'deleted') {
+                        log.updatedAt = serverUpdatedAtMs;
+                    }
+                    log.lastSyncedUpdatedAt = serverUpdatedAtMs;
+                    store.put(log);
                 };
             }
         }
 
-        // Hard-delete locally any entries the server confirmed as deleted
+        // Hard-delete locally any entries the server confirmed as deleted via our push.
         const deletedIds = result.upserted
             .filter(u => u.action === 'deleted')
             .map(u => u.id);
@@ -1855,13 +1915,43 @@ async function syncFromCloud(sinceOverride) {
                     // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
                     // string) to a Unix epoch ms number so the next push doesn't
                     // re-parse it as local time and produce a different UTC value.
-                    if (log.updated_at && (typeof log.updatedAt !== 'number' || log.updatedAt !== new Date(log.updated_at).getTime())) {
-                        log.updatedAt = new Date(log.updated_at).getTime();
+                    if (log.updated_at) {
+                        const serverUpdatedAtMs = new Date(log.updated_at).getTime();
+                        if (typeof log.updatedAt !== 'number' || log.updatedAt !== serverUpdatedAtMs) {
+                            log.updatedAt = serverUpdatedAtMs;
+                        }
                     }
                     delete log.updated_at;
-                    const req = store.put(log);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => reject(req.error);
+                    // Record the server's confirmed updatedAt as lastSyncedUpdatedAt so
+                    // the next syncToCloud treats this row as already in sync. If a
+                    // concurrent local edit landed with a newer updatedAt AND a
+                    // lastSyncedUpdatedAt that already exceeds the server's value, do
+                    // NOT overwrite lastSyncedUpdatedAt with the older server value.
+                    const getLocalReq = store.get(log.id);
+                    getLocalReq.onsuccess = () => {
+                        const local = getLocalReq.result;
+                        if (local && typeof local.lastSyncedUpdatedAt === 'number' &&
+                            local.lastSyncedUpdatedAt > log.updatedAt) {
+                            // Local has already pushed a newer value to the server
+                            // (or has a pending in-flight push). Keep the local
+                            // updatedAt and lastSyncedUpdatedAt; the next push will
+                            // upload the local change.
+                            log.updatedAt = local.updatedAt;
+                            log.lastSyncedUpdatedAt = local.lastSyncedUpdatedAt;
+                        } else {
+                            log.lastSyncedUpdatedAt = log.updatedAt;
+                        }
+                        const req = store.put(log);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(req.error);
+                    };
+                    getLocalReq.onerror = () => {
+                        // No local copy to compare against — safe to mark as synced.
+                        log.lastSyncedUpdatedAt = log.updatedAt;
+                        const req = store.put(log);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(req.error);
+                    };
                 }
             });
         }

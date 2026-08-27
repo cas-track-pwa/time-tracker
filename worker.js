@@ -713,10 +713,11 @@ async function syncLogs(request, env) {
           if (log.id) {
             // Soft-delete: set tombstone timestamp instead of hard-deleting.
             // This allows other devices to learn about the deletion via getSyncChanges.
-            await env.DB.prepare(
-              'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?'
+            const result = await env.DB.prepare(
+              'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? RETURNING updated_at'
             ).bind(log.id, userId).run();
-            upserted.push({ id: log.id, action: 'deleted' });
+            const serverUpdatedAt = result.results?.[0]?.updated_at || null;
+            upserted.push({ id: log.id, action: 'deleted', updatedAt: serverUpdatedAt });
           }
         } else if (log.id) {
           // Check if this row has already been tombstoned on the server.

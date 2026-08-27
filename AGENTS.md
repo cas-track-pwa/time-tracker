@@ -57,6 +57,8 @@ Each log entry in the `logs` store contains:
    travelMileage: number,  // Calculated travel distance (arrivalMileage - startMileage)
    isRemote: boolean,      // True if this was a remote work session (no travel)
    invoiceNumber: string,  // Optional invoice number (editable in Invoicing Mode, empty string if unset)
+   updatedAt: number,      // Unix epoch ms of the last local mutation (push trigger)
+   lastSyncedUpdatedAt: number | null,  // Unix epoch ms the server last confirmed via push ack; null = never confirmed
 }
 ```
 
@@ -109,7 +111,7 @@ The app uses an offline-first sync model: all data is stored locally in IndexedD
 - `syncAfterWrite()`: Debounced background sync triggered after any local write (1s delay)
 - `checkConnectivity()` / `updateSyncStatus(status)`: Updates the `#syncStatus` badge (online / syncing / offline / idle)
 
-Sync strategy: the client pushes all local logs to the server in a single batch (upsert by `id`, delete by `_deleted` flag). The server returns `serverTime` which the client stores as `lastSyncTime`. On the next pull, the server returns all logs with `updated_at >= since` for that user. Local IDs are preserved; new server-generated IDs are returned in the `upserted` array with `localId` mapping.
+Sync strategy: the client pushes local logs to the server in a single batch (upsert by `id`, soft-delete by `_deleted` flag). Pushes only include rows whose `updatedAt` is strictly newer than `lastSyncedUpdatedAt`, so no-op re-pushes are filtered out. The server returns `serverTime` and per-row confirmed `updatedAt` values, which the client records as `lastSyncedUpdatedAt` so subsequent syncs skip those rows. On the next pull, the server returns all logs with `updated_at >= since` for that user. Local IDs are preserved; new server-generated IDs are returned in the `upserted` array with `localId` mapping.
 
 ### Timer Flow
 
@@ -383,6 +385,10 @@ See `CLOUDFLARE_MIGRATION.md` for the full migration guide. Static assets are no
 ### Invoicing-Mode Edits Silently Dropped by Last-Write-Wins *(fixed)*
 - **Cause**: `saveInvoicingCell()` updated `notes` / `billableTime` / `invoiceNumber` but never bumped `log.updatedAt`. When a device pushed those edits, the Worker's `syncLogs` compared `clientUpdatedAt > server_updated_at` using the *original* creation timestamp and treated the push as a conflict, silently skipping the upsert. Other edit paths (`btnSaveEdit`, `btnSaveAdd`, `finalizeAndSaveLog`) all set `updatedAt` correctly — only Invoicing Mode was broken
 - **Fix**: `saveInvoicingCell()` now sets `log.updatedAt = Date.now()` before `store.put`, matching every other write path. Also hardened `syncFromCloud()` to normalize the server's `updated_at` string into a Unix epoch ms number on the local copy and drop the redundant `updated_at` field, so subsequent pushes don't round-trip a UTC string through a local-time parse
+
+### "Server Had Newer Data" Logged on Every No-Op Sync *(fixed)*
+- **Cause**: `performSync` always does pull-then-push. The pull overwrites the local `updatedAt` with the server's `updated_at`, and the subsequent push re-sends that same value. The server's strict `>` conflict check rejects the push and reports it as a conflict, even though nothing actually changed. The push is a complete no-op on D1, but the log line masks real conflicts and wastes bandwidth
+- **Fix**: Each log now tracks `lastSyncedUpdatedAt` — the server's confirmed `updated_at` from the most recent successful push ack (or pull, if the row was never locally edited). `syncToCloud` filters out rows where `updatedAt <= lastSyncedUpdatedAt` so the payload only contains genuine local changes. The server's delete branch (`worker.js:712-720`) now `RETURN`s `updated_at` and includes it in the `upserted` response, so tombstones go through the same ack path. `syncFromCloud` also sets `lastSyncedUpdatedAt` from the server's `updated_at` so a freshly-pulled row is treated as already in sync. Race protection: `syncToCloud` snapshots each row's `updatedAt` at read time, and only updates `lastSyncedUpdatedAt` on the ack if the local value is still what was pushed — so a concurrent local edit during the round-trip is never silently marked as synced
 
 ## Open Items (Not Yet Fixed)
 
