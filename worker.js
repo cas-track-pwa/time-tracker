@@ -441,7 +441,9 @@ async function createLog(request, env) {
       }));
     }
 
-    const logData = await request.json();
+const logData = await request.json();
+
+    const clientUpdatedAt = logData.updatedAt ? new Date(logData.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
 
     const result = await env.DB.prepare(
       `INSERT INTO logs (
@@ -449,37 +451,40 @@ async function createLog(request, env) {
          durationMs, decimalHours, notes, parts,
          billableTime, travelMileage, startMileage, arrivalMileage,
          startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
-         invoice_number
+         invoice_number, updated_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       RETURNING id`
-     ).bind(
-       userId,
-       logData.client,
-       logData.start,
-       logData.end,
-       logData.arrival || null,
-       logData.durationMs,
-       logData.decimalHours,
-       logData.notes,
-       logData.parts,
-       logData.billableTime,
-       logData.travelMileage,
-       logData.startMileage,
-       logData.arrivalMileage,
-       logData.startMs || null,
-       logData.endMs || null,
-       logData.arrivalMs || null,
-       logData.duration || null,
-       logData.travelDurationMs || null,
-       logData.onSiteDurationMs || null,
-       logData.arrivalTime || null,
-       logData.isRemote ? 1 : 0,
-       logData.invoiceNumber || null
-     ).run();
+       RETURNING id, updated_at`
+    ).bind(
+      userId,
+      logData.client,
+      logData.start,
+      logData.end,
+      logData.arrival || null,
+      logData.durationMs,
+      logData.decimalHours,
+      logData.notes,
+      logData.parts,
+      logData.billableTime,
+      logData.travelMileage,
+      logData.startMileage,
+      logData.arrivalMileage,
+      logData.startMs || null,
+      logData.endMs || null,
+      logData.arrivalMs || null,
+      logData.duration || null,
+      logData.travelDurationMs || null,
+      logData.onSiteDurationMs || null,
+      logData.arrivalTime || null,
+      logData.isRemote ? 1 : 0,
+      logData.invoiceNumber || null,
+      clientUpdatedAt
+).run();
+    const serverUpdatedAt = result.results?.[0]?.updated_at || clientUpdatedAt;
 
     return withCORS(new Response(JSON.stringify({
       success: true,
-      id: result.meta?.id || result.results?.[0]?.id
+      id: result.meta?.id || result.results?.[0]?.id,
+      updatedAt: serverUpdatedAt
     }), {
       headers: { 'Content-Type': 'application/json' }
     }));
@@ -538,6 +543,38 @@ async function updateLog(request, env, url) {
     const logId = url.pathname.split('/').pop();
     const logData = await request.json();
 
+    // Conflict resolution: only update if client's updatedAt is newer than server's updated_at
+    const existing = await env.DB.prepare(
+      'SELECT id, updated_at FROM logs WHERE id = ? AND user_id = ?'
+    ).bind(logId, userId).first();
+
+    if (!existing) {
+      return withCORS(new Response(JSON.stringify({ error: 'Log not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    if (existing.deleted_at) {
+      return withCORS(new Response(JSON.stringify({ error: 'Log has been deleted' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    const clientUpdatedAt = logData.updatedAt ? new Date(logData.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
+    const serverUpdatedAt = existing.updated_at || '0000-01-01 00:00:00';
+
+    if (clientUpdatedAt && clientUpdatedAt <= serverUpdatedAt) {
+      // Client's version is older - return conflict
+      return withCORS(new Response(JSON.stringify({ error: 'Conflict: log was modified on another device', conflict: true, serverUpdatedAt }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+
+    const newUpdatedAt = clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000');
+
     const result = await env.DB.prepare(
       `UPDATE logs SET
         client = ?, start = ?, end = ?, arrival = ?,
@@ -546,7 +583,7 @@ async function updateLog(request, env, url) {
         startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?,
         isRemote = ?,
         invoice_number = ?,
-        updated_at = CURRENT_TIMESTAMP
+        updated_at = ?
       WHERE id = ? AND user_id = ?`
     ).bind(
       logData.client, logData.start, logData.end, logData.arrival || null,
@@ -557,10 +594,17 @@ async function updateLog(request, env, url) {
       logData.arrivalTime || null,
       logData.isRemote ? 1 : 0,
       logData.invoiceNumber || null,
+      newUpdatedAt,
       logId, userId
     ).run();
 
-    return withCORS(new Response(JSON.stringify({ success: true }), {
+    // Fetch the updated row to get the actual updated_at
+    const updated = await env.DB.prepare(
+      'SELECT updated_at FROM logs WHERE id = ? AND user_id = ?'
+    ).bind(logId, userId).first();
+    const serverUpdatedAtResult = updated?.updated_at || newUpdatedAt;
+
+    return withCORS(new Response(JSON.stringify({ success: true, updatedAt: serverUpdatedAtResult }), {
       headers: { 'Content-Type': 'application/json' }
     }));
   } catch (error) {
@@ -678,62 +722,81 @@ async function syncLogs(request, env) {
           // Check if this row has already been tombstoned on the server.
           // If so, do NOT overwrite the deletion — "deletion wins".
           const existing = await env.DB.prepare(
-            'SELECT id, deleted_at FROM logs WHERE id = ? AND user_id = ?'
+            'SELECT id, deleted_at, updated_at FROM logs WHERE id = ? AND user_id = ?'
           ).bind(log.id, userId).first();
 
           if (existing && existing.deleted_at) {
             // Row is tombstoned server-side. Return it so the client can delete locally.
             serverTombstones.push({ id: log.id, action: 'deleted' });
           } else {
-            // Safe to upsert — row is not tombstoned.
-            await env.DB.prepare(
-              `INSERT INTO logs (id, user_id, client, start, end, arrival,
-                 durationMs, decimalHours, notes, parts,
-                 billableTime, travelMileage, startMileage, arrivalMileage,
-                 startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
-                 invoice_number)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                 client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
-                 durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
-                 parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
-                 startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
-                 startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
-                 duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
-                 onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
-                 isRemote=excluded.isRemote,
-                 invoice_number=excluded.invoice_number,
-                 updated_at=CURRENT_TIMESTAMP
-                WHERE logs.deleted_at IS NULL AND logs.user_id=?`
-            ).bind(
-              log.id, userId, log.client, log.start, log.end, log.arrival || null,
-              log.durationMs, log.decimalHours, log.notes, log.parts,
-              log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
-              log.startMs || null, log.endMs || null, log.arrivalMs || null,
-              log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-              log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null, userId
-            ).run();
-            upserted.push({ id: log.id, action: 'updated' });
+            // Conflict resolution: only update if client's updatedAt is newer than server's updated_at
+            // Convert client's updatedAt (Unix epoch ms) to ISO string for comparison
+            const clientUpdatedAt = log.updatedAt ? new Date(log.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
+            const serverUpdatedAt = existing?.updated_at || '0000-01-01 00:00:00';
+
+            // Only proceed with upsert if client has newer data or this is a new entry (no existing row)
+            if (!existing || !clientUpdatedAt || clientUpdatedAt > serverUpdatedAt) {
+              await env.DB.prepare(
+                `INSERT INTO logs (id, user_id, client, start, end, arrival,
+                   durationMs, decimalHours, notes, parts,
+                   billableTime, travelMileage, startMileage, arrivalMileage,
+                   startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
+                   invoice_number, updated_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET
+                   client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
+                   durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
+                   parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
+                   startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
+                   startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
+                   duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
+                   onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
+                   isRemote=excluded.isRemote,
+                   invoice_number=excluded.invoice_number,
+                   updated_at=excluded.updated_at
+                  WHERE logs.deleted_at IS NULL AND logs.user_id=?`
+              ).bind(
+                log.id, userId, log.client, log.start, log.end, log.arrival || null,
+                log.durationMs, log.decimalHours, log.notes, log.parts,
+                log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
+                log.startMs || null, log.endMs || null, log.arrivalMs || null,
+                log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
+                log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null,
+                clientUpdatedAt, userId
+              ).run();
+              // Fetch the server's updated_at after upsert
+              const updated = await env.DB.prepare(
+                'SELECT updated_at FROM logs WHERE id = ? AND user_id = ?'
+              ).bind(log.id, userId).first();
+              const serverUpdatedAt = updated?.updated_at || clientUpdatedAt;
+              upserted.push({ id: log.id, action: 'updated', updatedAt: serverUpdatedAt });
+            } else {
+              // Client's version is older - don't overwrite, but return server's current updated_at
+              upserted.push({ id: log.id, action: 'conflict', serverUpdatedAt: serverUpdatedAt });
+            }
           }
         } else {
+          const clientUpdatedAt = log.updatedAt ? new Date(log.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000');
           const result = await env.DB.prepare(
             `INSERT INTO logs (user_id, client, start, end, arrival,
                durationMs, decimalHours, notes, parts,
                billableTime, travelMileage, startMileage, arrivalMileage,
                startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
-               invoice_number)
+               invoice_number, updated_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              RETURNING id`
+              RETURNING id, updated_at`
           ).bind(
             userId, log.client, log.start, log.end, log.arrival || null,
             log.durationMs, log.decimalHours, log.notes, log.parts,
             log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
             log.startMs || null, log.endMs || null, log.arrivalMs || null,
             log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-            log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null
+            log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null,
+            clientUpdatedAt
           ).run();
           const newId = result.meta?.id || result.results?.[0]?.id;
-          upserted.push({ id: newId, action: 'created', localId: log._localId || null });
+          const serverUpdatedAt = result.results?.[0]?.updated_at || clientUpdatedAt;
+          upserted.push({ id: newId, action: 'created', localId: log._localId || null, updatedAt: serverUpdatedAt });
         }
       } catch (logError) {
         errors.push({ id: log.id || log._localId, error: logError.message });

@@ -420,6 +420,7 @@ function finalizeAndSaveLog(partsText) {
         formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
+    const now = Date.now();
     const newLog = {
         client: clientInput.value.trim(),
         start: new Date(startTime).toLocaleString(),
@@ -440,7 +441,8 @@ function finalizeAndSaveLog(partsText) {
         arrivalMileage: arrivalMileage,
         travelMileage: travelMileage,
         isRemote: isRemote,
-        invoiceNumber: ""
+        invoiceNumber: "",
+        updatedAt: now
     };
 
     btnSaveParts.disabled = true;
@@ -668,10 +670,13 @@ function formatDateTimeLocal(d) {
 
 function setJobTypeEntryFields(jobType, arrivalInput, mileageInput) {
     const isTravel = (jobType === 'travel');
-    arrivalInput.disabled = !isTravel;
+    const isRemote = (jobType === 'remote');
+    arrivalInput.disabled = isRemote;
     mileageInput.disabled = !isTravel;
-    if (!isTravel) {
+    if (isRemote) {
         arrivalInput.value = '';
+        mileageInput.value = '';
+    } else if (!isTravel) {
         mileageInput.value = '';
     }
 }
@@ -837,7 +842,7 @@ btnSaveEdit.addEventListener('click', () => {
     const start = new Date(editStartTime.value);
     const end = new Date(editEndTime.value);
     const isRemoteEntry = (selectedJobType === 'remote');
-    const arrival = (selectedJobType === 'travel' && editArrivalTime.value) ? new Date(editArrivalTime.value) : null;
+    const arrival = editArrivalTime.value ? new Date(editArrivalTime.value) : null;
 
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || (arrival && isNaN(arrival.getTime()))) {
         alert("One of the date/time fields is invalid.");
@@ -877,7 +882,7 @@ btnSaveEdit.addEventListener('click', () => {
         log.startMs = start.getTime();
         log.endMs = end.getTime();
 
-        if (selectedJobType !== 'travel') {
+        if (selectedJobType === 'remote') {
             log.arrivalTime = null;
             log.arrivalMs = null;
             log.travelDurationMs = null;
@@ -900,6 +905,7 @@ btnSaveEdit.addEventListener('click', () => {
         log.durationMs = end - start;
         log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
         log.duration = formatDuration(log.durationMs);
+        log.updatedAt = Date.now();
 
         const putRequest = store.put(log);
         putRequest.onsuccess = () => {
@@ -1029,7 +1035,8 @@ btnSaveAdd.addEventListener('click', () => {
         onSiteDurationMs: onSiteDurationMs,
         travelMileage: selectedTravelMileage,
         isRemote: isRemoteEntry,
-        invoiceNumber: ""
+        invoiceNumber: "",
+        updatedAt: Date.now()
     };
 
     btnSaveAdd.disabled = true;
@@ -1105,9 +1112,10 @@ if (lines.length < 2) {
     const legacyHeaderCount = 15;
     const currentHeaderCount = 19;
     const invoiceHeaderCount = 20;
+    const updatedAtHeaderCount = 21;
 
-    if (headers.length !== legacyHeaderCount && headers.length !== currentHeaderCount && headers.length !== invoiceHeaderCount) {
-        alert('Invalid CSV format. Expected ' + legacyHeaderCount + ', ' + currentHeaderCount + ', or ' + invoiceHeaderCount + ' columns, found ' + headers.length + '.');
+    if (headers.length !== legacyHeaderCount && headers.length !== currentHeaderCount && headers.length !== invoiceHeaderCount && headers.length !== updatedAtHeaderCount) {
+        alert('Invalid CSV format. Expected ' + legacyHeaderCount + ', ' + currentHeaderCount + ', ' + invoiceHeaderCount + ', or ' + updatedAtHeaderCount + ' columns, found ' + headers.length + '.');
         btnImportCsv.value = '';
         return;
     }
@@ -1125,6 +1133,7 @@ for (let i = 1; i < lines.length; i++) {
 
     const isLegacy = row.length === 15;
     const hasInvoice = row.length === 20;
+    const hasUpdatedAt = row.length === 21;
     const notesIdx = isLegacy ? 13 : 14;
     const partsIdx = isLegacy ? 14 : 15;
     const startIsoIdx = isLegacy ? null : 16;
@@ -1132,16 +1141,19 @@ for (let i = 1; i < lines.length; i++) {
     const arrivalIsoIdx = isLegacy ? null : 18;
     const remoteIdx = isLegacy ? null : 13;
     const invoiceIdx = hasInvoice ? 19 : null;
+    const updatedAtIdx = hasUpdatedAt ? 20 : null;
 
     const startIso = startIsoIdx !== null && row[startIsoIdx] ? row[startIsoIdx].replace(/^\"|\"$/g, '') : '';
     const endIso = endIsoIdx !== null && row[endIsoIdx] ? row[endIsoIdx].replace(/^\"|\"$/g, '') : '';
     const arrivalIso = arrivalIsoIdx !== null && row[arrivalIsoIdx] ? row[arrivalIsoIdx].replace(/^\"|\"$/g, '') : '';
+    const updatedAtIso = updatedAtIdx !== null && row[updatedAtIdx] ? row[updatedAtIdx].replace(/^\"|\"$/g, '') : '';
 
     const startMs = startIso ? new Date(startIso).getTime() : new Date(startStr).getTime();
     const endMs = endIso ? new Date(endIso).getTime() : new Date(endStr).getTime();
     const arrivalMs = arrivalIso ? new Date(arrivalIso).getTime() : (arrivalStr ? new Date(arrivalStr).getTime() : NaN);
+    const updatedAtMs = updatedAtIso ? new Date(updatedAtIso).getTime() : NaN;
 
-    const log = {
+const log = {
         client: row[1].replace(/^\"|\"$/g, ''),
         start: startStr,
         startMs: isNaN(startMs) ? null : startMs,
@@ -1161,8 +1173,9 @@ for (let i = 1; i < lines.length; i++) {
         arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
         travelMileage: row[12] !== '' ? parseFloat(row[12]) : null,
          isRemote: remoteIdx !== null ? (row[remoteIdx].replace(/^\"|\"$/g, '').toLowerCase() === 'true') : false,
-         invoiceNumber: invoiceIdx !== null ? row[invoiceIdx].replace(/^\"|\"$/g, '') : ""
-     };
+         invoiceNumber: invoiceIdx !== null ? row[invoiceIdx].replace(/^\"|\"$/g, '') : "",
+         updatedAt: isNaN(updatedAtMs) ? null : updatedAtMs
+    };
     newLogs.push(log);
     }
 }
@@ -1361,7 +1374,7 @@ function exportToCSV() {
             return;
         }
 
-        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO", "Invoice Number"];
+        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO", "Invoice Number", "Updated At"];
         const csvRows = [headers.join(",")];
 
         const mi = (v) => (v !== null && v !== undefined) ? v : "";
@@ -1387,7 +1400,8 @@ function exportToCSV() {
                 (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs).toISOString() : "",
                 (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs).toISOString() : "",
                 (log.arrivalMs !== null && log.arrivalMs !== undefined) ? new Date(log.arrivalMs).toISOString() : "",
-                log.invoiceNumber || ""
+                log.invoiceNumber || "",
+                (log.updatedAt !== null && log.updatedAt !== undefined) ? new Date(log.updatedAt).toISOString() : ""
             ];
             csvRows.push(row.join(","));
         });
@@ -1677,6 +1691,24 @@ async function syncToCloud() {
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
+
+        // Backfill updatedAt for existing entries that don't have it
+        // Use startMs as the fallback since that's when the entry was created
+        const now = Date.now();
+        let needsBackfill = false;
+        logs.forEach(log => {
+            if (log.updatedAt === null || log.updatedAt === undefined) {
+                log.updatedAt = log.startMs || now;
+                needsBackfill = true;
+            }
+        });
+        if (needsBackfill && db) {
+            const tx = db.transaction(['logs'], 'readwrite');
+            const store2 = tx.objectStore('logs');
+            logs.forEach(log => store2.put(log));
+            await new Promise(resolve => { tx.oncomplete = resolve; });
+        }
+
         console.log('syncToCloud: pushing', logs.length, 'logs to server');
         const response = await fetch(`${API_BASE}/api/sync`, {
             method: 'POST',
@@ -1705,6 +1737,25 @@ async function syncToCloud() {
             return { success: false, error: result.errors, upserted: result.upserted };
         }
         setLastSyncTime(result.serverTime);
+
+        // Update local logs with server's updatedAt timestamps for conflict resolution
+        const upsertedWithTimestamp = result.upserted.filter(u => u.updatedAt);
+        if (upsertedWithTimestamp.length > 0 && db) {
+            const tx = db.transaction(['logs'], 'readwrite');
+            const store = tx.objectStore('logs');
+            for (const u of upsertedWithTimestamp) {
+                const getReq = store.get(u.id);
+                getReq.onsuccess = () => {
+                    const log = getReq.result;
+                    if (log) {
+                        // Convert server's updated_at (ISO string) to Unix epoch ms for local storage
+                        const serverUpdatedAtMs = new Date(u.updatedAt).getTime();
+                        log.updatedAt = serverUpdatedAtMs;
+                        store.put(log);
+                    }
+                };
+            }
+        }
 
         // Hard-delete locally any entries the server confirmed as deleted
         const deletedIds = result.upserted
@@ -1738,6 +1789,12 @@ async function syncToCloud() {
                 });
             }
             console.log('syncToCloud: applied', tombstones.length, 'server tombstones locally');
+        }
+
+        // Handle conflicts - log entries where server had newer data
+        const conflicts = result.upserted.filter(u => u.action === 'conflict');
+        if (conflicts.length > 0) {
+            console.log('syncToCloud: server had newer data for', conflicts.length, 'entries (conflicts)');
         }
 
         return { success: true, upserted: result.upserted, errors: result.errors };
@@ -1809,8 +1866,8 @@ async function performSync() {
     syncStatusEl.classList.remove('hidden');
     updateSyncStatus('syncing');
     const since = getLastSyncTime();
-    const upResult = await syncToCloud();
     const downResult = await syncFromCloud(since);
+    const upResult = await syncToCloud();
     if (!upResult.success || !downResult.success) {
         const upErr = upResult.success ? '' : (upResult.error || 'upload failed');
         const downErr = downResult.success ? '' : (downResult.error || 'fetch failed');
