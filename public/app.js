@@ -1690,6 +1690,17 @@ function setLastSyncTime(ts) {
     localStorage.setItem('lastSyncTime', ts.toString());
 }
 
+// Schema-version flag. Bumped whenever a change to the local log schema requires a
+// one-time full pull to repopulate per-row sync state. On the first sync after the
+// bump, the client passes since=0 to syncFromCloud, then clears the flag.
+const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 1;
+function needsFullPullForSchemaUpgrade() {
+    return parseInt(localStorage.getItem('lastSyncedUpdatedAtSchemaVersion') || '0', 10) < LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION;
+}
+function markSchemaUpgradeComplete() {
+    localStorage.setItem('lastSyncedUpdatedAtSchemaVersion', LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION.toString());
+}
+
 async function syncToCloud() {
     if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
     try {
@@ -1967,9 +1978,17 @@ async function performSync() {
     if (!isAuthenticated()) return;
     syncStatusEl.classList.remove('hidden');
     updateSyncStatus('syncing');
-    const since = getLastSyncTime();
+    // On the first sync after a schema upgrade, force a full pull so every server
+    // row gets a chance to populate lastSyncedUpdatedAt. Without this, legacy rows
+    // whose server-side updated_at is older than the current lastSyncTime would
+    // never come back in the incremental pull, leaving lastSyncedUpdatedAt=null and
+    // causing every push to be reported as a conflict.
+    const since = needsFullPullForSchemaUpgrade() ? 0 : getLastSyncTime();
     const downResult = await syncFromCloud(since);
     const upResult = await syncToCloud();
+    if (needsFullPullForSchemaUpgrade()) {
+        markSchemaUpgradeComplete();
+    }
     if (!upResult.success || !downResult.success) {
         const upErr = upResult.success ? '' : (upResult.error || 'upload failed');
         const downErr = downResult.success ? '' : (downResult.error || 'fetch failed');
