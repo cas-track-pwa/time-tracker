@@ -565,7 +565,7 @@ async function updateLog(request, env, url) {
     const clientUpdatedAt = logData.updatedAt ? new Date(logData.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
     const serverUpdatedAt = existing.updated_at || '0000-01-01 00:00:00';
 
-    if (clientUpdatedAt && clientUpdatedAt <= serverUpdatedAt) {
+    if (clientUpdatedAt && clientUpdatedAt < serverUpdatedAt) {
       // Client's version is older - return conflict
       return withCORS(new Response(JSON.stringify({ error: 'Conflict: log was modified on another device', conflict: true, serverUpdatedAt }), {
         status: 409,
@@ -735,8 +735,15 @@ async function syncLogs(request, env) {
             const clientUpdatedAt = log.updatedAt ? new Date(log.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
             const serverUpdatedAt = existing?.updated_at || '0000-01-01 00:00:00';
 
-            // Only proceed with upsert if client has newer data or this is a new entry (no existing row)
-            if (!existing || !clientUpdatedAt || clientUpdatedAt > serverUpdatedAt) {
+            // Only proceed with upsert if the row is new, the client didn't send a
+            // timestamp, or the client's updatedAt is at least as new as the server's.
+            // The client uses per-row lastSyncedUpdatedAt to suppress no-op re-pushes,
+            // so the only time an equal-timestamp upsert reaches the server is for
+            // legacy rows (where the client never tracked lastSyncedUpdatedAt) or for
+            // rows that genuinely have the same updatedAt on both sides. Either way,
+            // accepting the upsert is a no-op on D1 and lets the client record the
+            // server's confirmed updated_at as lastSyncedUpdatedAt for subsequent syncs.
+            if (!existing || !clientUpdatedAt || clientUpdatedAt >= serverUpdatedAt) {
               await env.DB.prepare(
                 `INSERT INTO logs (id, user_id, client, start, end, arrival,
                    durationMs, decimalHours, notes, parts,
