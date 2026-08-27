@@ -854,8 +854,12 @@ async function getSyncChanges(request, env, url) {
 
     // Return ALL rows updated since last sync — including tombstoned ones.
     // The client inspects deleted_at to decide whether to upsert or delete locally.
+    // Strict > (not >=) so rows whose updated_at equals since are not re-included
+    // on the next pull. The client sets lastSyncTime = serverTime, which is
+    // generated after the query snapshot completes, so any row with
+    // updated_at < serverTime is correctly excluded from the next pull.
     const result = await env.DB.prepare(
-      `SELECT * FROM logs WHERE user_id = ? AND updated_at >= ? ORDER BY start DESC`
+      `SELECT * FROM logs WHERE user_id = ? AND updated_at > ? ORDER BY start DESC`
     ).bind(userId, sinceDate).all();
 
     return withCORS(new Response(JSON.stringify({

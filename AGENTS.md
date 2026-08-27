@@ -96,6 +96,7 @@ Each log entry in the `logs` store contains:
  - `enterInvoicingMode()` / `exitInvoicingMode()`: Toggle between the normal log list and invoicing mode; persists preference in `localStorage` under `invoicingMode`
  - `saveInvoicingCell(cell)`: Saves an inline-edited cell (Invoice Number or Billable Hours) to IndexedDB and triggers `syncAfterWrite()`
  - `getBillableDisplay(log)`: Returns the effective billable hours for display — uses `log.billableTime` if overridden, otherwise calculates via `formatBillableTime()`
+- `resumeTimer(id)` / `mergeResumeIntoLog()`: Start a new remote timer against an existing log entry; on End Timer the new session's duration is merged into the existing entry's `endMs` / `durationMs` (and the new session's notes are appended to the existing notes) instead of creating a separate log. Only available on remote entries; the Resume button is disabled while a timer is already running
 
 ### Cloud Sync (Offline-First Backup)
 
@@ -111,7 +112,7 @@ The app uses an offline-first sync model: all data is stored locally in IndexedD
 - `syncAfterWrite()`: Debounced background sync triggered after any local write (1s delay)
 - `checkConnectivity()` / `updateSyncStatus(status)`: Updates the `#syncStatus` badge (online / syncing / offline / idle)
 
-Sync strategy: the client pushes local logs to the server in a single batch (upsert by `id`, soft-delete by `_deleted` flag). Pushes only include rows whose `updatedAt` is strictly newer than `lastSyncedUpdatedAt`, so no-op re-pushes are filtered out. The server returns `serverTime` and per-row confirmed `updatedAt` values, which the client records as `lastSyncedUpdatedAt` so subsequent syncs skip those rows. On the next pull, the server returns all logs with `updated_at >= since` for that user. Local IDs are preserved; new server-generated IDs are returned in the `upserted` array with `localId` mapping.
+Sync strategy: the client pushes local logs to the server in a single batch (upsert by `id`, soft-delete by `_deleted` flag). Pushes only include rows whose `updatedAt` is strictly newer than `lastSyncedUpdatedAt`, so no-op re-pushes are filtered out. The server returns `serverTime` and per-row confirmed `updatedAt` values, which the client records as `lastSyncedUpdatedAt` so subsequent syncs skip those rows. On the next pull, the server returns all logs with `updated_at > since` (strictly greater, so rows already received are not re-included) for that user. Local IDs are preserved; new server-generated IDs are returned in the `upserted` array with `localId` mapping.
 
 ### Timer Flow
 

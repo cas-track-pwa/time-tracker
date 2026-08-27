@@ -14,7 +14,7 @@ dbRequest.onupgradeneeded = (e) => {
 dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); } };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
-let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false, currentJobType = 'travel';
+let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, pendingResumeLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false, currentJobType = 'travel';
 
 // Helper function to robustly check if a log entry is remote work
 function isRemoteLog(log) {
@@ -47,7 +47,8 @@ function saveTimerState() {
         arrivalMileage: arrivalMileage,
         client: clientInput.value.trim(),
         isRemote: isRemote,
-        jobType: currentJobType
+        jobType: currentJobType,
+        resumeLogId: pendingResumeLogId
     };
     store.put(state);
 }
@@ -70,6 +71,7 @@ function restoreTimerState() {
         arrivalMileage = state.arrivalMileage;
         currentJobType = state.jobType || (isRemoteLog(state) ? 'remote' : 'travel');
         isRemote = (currentJobType === 'remote');
+        pendingResumeLogId = (state.resumeLogId !== null && state.resumeLogId !== undefined) ? state.resumeLogId : null;
         isRunning = true;
         clientInput.value = state.client;
         clientInput.disabled = true;
@@ -306,6 +308,42 @@ if (btnStartRemote) btnStartRemote.addEventListener('click', () => startTimer('r
 if (btnStartOnSite) btnStartOnSite.addEventListener('click', () => startTimer('onsite'));
 if (btnStartTravel) btnStartTravel.addEventListener('click', () => startTimer('travel'));
 
+// Resume timer against an existing log (remote entries only).
+// Loads the existing entry, starts a new remote session, and on End Timer
+// merges the new session's duration into the existing entry instead of
+// creating a separate log.
+window.resumeTimer = function(id) {
+    if (isRunning) {
+        alert('A timer is already running. End the current timer before starting another.');
+        return;
+    }
+    if (!db) return;
+
+    const transaction = db.transaction(["logs"], "readonly");
+    const store = transaction.objectStore("logs");
+    const request = store.get(id);
+
+    request.onsuccess = () => {
+        const log = request.result;
+        if (!log) {
+            alert('Could not find that log entry.');
+            return;
+        }
+        if (!isRemoteLog(log)) {
+            alert('Only remote entries can be resumed.');
+            return;
+        }
+
+        pendingResumeLogId = id;
+        clientInput.value = log.client;
+        startTimer('remote');
+    };
+
+    request.onerror = () => {
+        alert('Failed to load the log entry to resume.');
+    };
+};
+
 if (btnEndTimer) {
     btnEndTimer.addEventListener('click', () => {
         clearInterval(timerInterval);
@@ -409,7 +447,11 @@ btnSaveLog.addEventListener('click', () => {
     notesModal.classList.add('hidden');
 
     if (isRemote) {
-        finalizeAndSaveLog("");
+        if (pendingResumeLogId !== null) {
+            mergeResumeIntoLog();
+        } else {
+            finalizeAndSaveLog("");
+        }
     } else {
         partsInput.value = '';
         partsModal.classList.remove('hidden');
@@ -495,6 +537,110 @@ function finalizeAndSaveLog(partsText) {
         btnSaveParts.disabled = false;
         btnSkipParts.disabled = false;
         alert('Failed to save the time log. Please try again.');
+    };
+}
+
+// Merge a resumed remote session's timing into the existing log entry
+// instead of creating a new one. Extends endMs / durationMs by the new
+// session length and appends the new session's notes.
+function mergeResumeIntoLog() {
+    if (pendingResumeLogId === null || !db) return;
+
+    const resumeId = pendingResumeLogId;
+    const sessionDurationMs = pendingEndTime - startTime;
+
+    btnSaveLog.disabled = true;
+
+    const transaction = db.transaction(["logs"], "readwrite");
+    const store = transaction.objectStore("logs");
+    const request = store.get(resumeId);
+
+    request.onsuccess = () => {
+        const log = request.result;
+        if (!log) {
+            btnSaveLog.disabled = false;
+            pendingResumeLogId = null;
+            alert('Could not find the original log entry to merge into.');
+            return;
+        }
+
+        const newEnd = pendingEndTime;
+        const newDurationMs = (log.durationMs || 0) + sessionDurationMs;
+
+        log.end = new Date(newEnd).toLocaleString();
+        log.endMs = newEnd;
+        log.durationMs = newDurationMs;
+        log.duration = formatDuration(newDurationMs);
+        log.decimalHours = (newDurationMs / (1000 * 60 * 60)).toFixed(2);
+
+        const sessionNote = pendingNotes;
+        if (sessionNote && sessionNote !== 'No notes provided.') {
+            const existing = (log.notes && log.notes !== 'No notes provided.') ? log.notes : '';
+            log.notes = existing ? (existing + ' | ' + sessionNote) : sessionNote;
+        }
+
+        if (pendingBillableTime && pendingBillableTime !== '1') {
+            const existingBillable = parseFloat(log.billableTime);
+            const newBillable = parseFloat(pendingBillableTime);
+            if (!isNaN(existingBillable) && !isNaN(newBillable)) {
+                const combined = (existingBillable + newBillable).toFixed(2);
+                log.billableTime = combined.replace(/\.00$/, '');
+            } else {
+                log.billableTime = pendingBillableTime;
+            }
+        }
+
+        log.updatedAt = Date.now();
+
+        const putRequest = store.put(log);
+        putRequest.onerror = () => {
+            btnSaveLog.disabled = false;
+            pendingResumeLogId = null;
+            alert('Failed to merge the resumed session into the log entry.');
+        };
+    };
+
+    request.onerror = () => {
+        btnSaveLog.disabled = false;
+        pendingResumeLogId = null;
+        alert('Failed to load the log entry to merge into.');
+    };
+
+    transaction.oncomplete = () => {
+        btnSaveLog.disabled = false;
+        pendingResumeLogId = null;
+
+        isRunning = false;
+        clearInterval(timerInterval);
+        clearTimerState();
+        liveTimer.textContent = "00:00:00";
+        activeClientLabel.textContent = "";
+        clientInput.value = "";
+        clientInput.disabled = false;
+        notesInput.value = "";
+
+        for (const input of billableInputs) {
+            input.checked = (input.value === '1');
+        }
+
+        updateTimerButtons('idle');
+        liveTimer.classList.remove('running');
+
+        arrivalTime = null;
+        startMileage = null;
+        arrivalMileage = null;
+        travelMileage = null;
+        isRemote = false;
+        currentJobType = 'travel';
+
+        renderLogs();
+        syncAfterWrite();
+    };
+
+    transaction.onerror = () => {
+        btnSaveLog.disabled = false;
+        pendingResumeLogId = null;
+        alert('Failed to merge the resumed session into the log entry.');
     };
 }
 
@@ -642,6 +788,11 @@ function renderLogs() {
                 html += '<p class="log-notes" style="margin-top: 0.25rem;"><strong>Parts Used:</strong> ' + escapeHtml(log.parts) + '</p>';
             }
             html += '<div class="flex-row-gap" style="margin-top: 0.5rem;">';
+            if (isRemoteEntry) {
+                const disabledAttr = isRunning ? ' disabled' : '';
+                const disabledTitle = isRunning ? ' title="A timer is already running"' : '';
+                html += '<button class="btn-action start-remote" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="resumeTimer(' + log.id + ')"' + disabledAttr + disabledTitle + '>Resume</button>';
+            }
             html += '<button class="btn-action start" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="editLog(' + log.id + ')">Edit</button>';
             html += '<button class="btn-action stop" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;" onclick="deleteLog(' + log.id + ')">Delete</button>';
             html += '</div>';
