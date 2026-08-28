@@ -444,6 +444,7 @@ async function createLog(request, env) {
 const logData = await request.json();
 
     const clientUpdatedAt = logData.updatedAt ? new Date(logData.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
+    const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt);
 
     const result = await env.DB.prepare(
       `INSERT INTO logs (
@@ -477,9 +478,9 @@ const logData = await request.json();
       logData.arrivalTime || null,
       logData.isRemote ? 1 : 0,
       logData.invoiceNumber || null,
-      clientUpdatedAt
+      storedUpdatedAt
 ).run();
-    const serverUpdatedAt = result.results?.[0]?.updated_at || clientUpdatedAt;
+    const serverUpdatedAt = result.results?.[0]?.updated_at || storedUpdatedAt;
 
     return withCORS(new Response(JSON.stringify({
       success: true,
@@ -573,7 +574,7 @@ async function updateLog(request, env, url) {
       }));
     }
 
-    const newUpdatedAt = clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000');
+    const newUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000'));
 
     const result = await env.DB.prepare(
       `UPDATE logs SET
@@ -685,6 +686,25 @@ async function isUserAllowed(email, env) {
 
 // --- Sync (Offline-First Backup) ---
 
+// Tolerable client-clock drift for timestamps the client authorizes.
+// Genuine NTP skew between a browser and Cloudflare is seconds, never hours.
+const MAX_CLIENT_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+// Clamp client-provided updated_at timestamps that are unreasonably far in the
+// future (a fast client clock, or corrupted legacy values). Without this, an
+// edited row can carry an updated_at that is permanently ahead of every
+// incremental pull cursor (which tracks real time), so the server's
+// `updated_at > since` filter re-serves that row on every sync forever.
+function sanitizeClientTimestamp(clientIso) {
+  if (!clientIso) return clientIso;
+  const clientMs = new Date(clientIso).getTime();
+  if (Number.isNaN(clientMs)) return clientIso;
+  if (clientMs > Date.now() + MAX_CLIENT_CLOCK_SKEW_MS) {
+    return new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000');
+  }
+  return clientIso;
+}
+
 async function syncLogs(request, env) {
   try {
     const userId = await getUserIdFromToken(request, env);
@@ -744,6 +764,10 @@ async function syncLogs(request, env) {
             // accepting the upsert is a no-op on D1 and lets the client record the
             // server's confirmed updated_at as lastSyncedUpdatedAt for subsequent syncs.
             if (!existing || !clientUpdatedAt || clientUpdatedAt >= serverUpdatedAt) {
+              // Accept the write based on the client's raw timestamp (a future-skewed
+              // edit legitimately represents a newer version), but store a sanitized
+              // timestamp so D1 updated_at can never drift hours ahead of real time.
+              const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt);
               await env.DB.prepare(
                 `INSERT INTO logs (id, user_id, client, start, end, arrival,
                    durationMs, decimalHours, notes, parts,
@@ -770,13 +794,13 @@ async function syncLogs(request, env) {
                 log.startMs || null, log.endMs || null, log.arrivalMs || null,
                 log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
                 log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null,
-                clientUpdatedAt, userId
+                storedUpdatedAt, userId
               ).run();
               // Fetch the server's updated_at after upsert
               const updated = await env.DB.prepare(
                 'SELECT updated_at FROM logs WHERE id = ? AND user_id = ?'
               ).bind(log.id, userId).first();
-              const serverUpdatedAt = updated?.updated_at || clientUpdatedAt;
+              const serverUpdatedAt = updated?.updated_at || storedUpdatedAt;
               upserted.push({ id: log.id, action: 'updated', updatedAt: serverUpdatedAt });
             } else {
               // Client's version is older - don't overwrite, but return server's current updated_at
@@ -785,6 +809,7 @@ async function syncLogs(request, env) {
           }
         } else {
           const clientUpdatedAt = log.updatedAt ? new Date(log.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000');
+          const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt);
           const result = await env.DB.prepare(
             `INSERT INTO logs (user_id, client, start, end, arrival,
                durationMs, decimalHours, notes, parts,
@@ -800,10 +825,10 @@ async function syncLogs(request, env) {
             log.startMs || null, log.endMs || null, log.arrivalMs || null,
             log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
             log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null,
-            clientUpdatedAt
+            storedUpdatedAt
           ).run();
           const newId = result.meta?.id || result.results?.[0]?.id;
-          const serverUpdatedAt = result.results?.[0]?.updated_at || clientUpdatedAt;
+          const serverUpdatedAt = result.results?.[0]?.updated_at || storedUpdatedAt;
           upserted.push({ id: newId, action: 'created', localId: log._localId || null, updatedAt: serverUpdatedAt });
         }
       } catch (logError) {

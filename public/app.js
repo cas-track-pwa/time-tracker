@@ -540,6 +540,22 @@ function finalizeAndSaveLog(partsText) {
     };
 }
 
+// Mark an existing log entry as locally mutated:
+// - lastSyncedUpdatedAt = null reuses the "never confirmed by the server" marker
+//   (the same one used for brand-new entries and CSV imports), so the row is
+//   ALWAYS included in the next syncToCloud push — an edit always produces a
+//   network request, no matter how recent or clock-skewed the last ack was.
+// - updatedAt is bumped to at least 'lastSyncedUpdatedAt + 1s' so the push
+//   passes the server's strict conflict check even when the server-confirmed
+//   timestamp is ahead of the local clock (the worker truncates the timestamp
+//   to '.000', so +1s guarantees a strictly-greater value).
+function markLogDirty(log) {
+    const now = Date.now();
+    const lastConfirmed = (typeof log.lastSyncedUpdatedAt === 'number' && log.lastSyncedUpdatedAt > 0) ? log.lastSyncedUpdatedAt : 0;
+    log.updatedAt = Math.max(now, lastConfirmed + 1000);
+    log.lastSyncedUpdatedAt = null;
+}
+
 // Merge a resumed remote session's timing into the existing log entry
 // instead of creating a new one. Extends endMs / durationMs by the new
 // session length and appends the new session's notes.
@@ -590,7 +606,7 @@ function mergeResumeIntoLog() {
             }
         }
 
-        log.updatedAt = Date.now();
+        markLogDirty(log);
 
         const putRequest = store.put(log);
         putRequest.onerror = () => {
@@ -1062,7 +1078,7 @@ btnSaveEdit.addEventListener('click', () => {
         log.durationMs = end - start;
         log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
         log.duration = formatDuration(log.durationMs);
-        log.updatedAt = Date.now();
+        markLogDirty(log);
 
         const putRequest = store.put(log);
         putRequest.onsuccess = () => {
@@ -1844,7 +1860,7 @@ function setLastSyncTime(ts) {
 // Schema-version flag. Bumped whenever a change to the local log schema requires a
 // one-time full pull to repopulate per-row sync state. On the first sync after the
 // bump, the client passes since=0 to syncFromCloud, then clears the flag.
-const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 1;
+const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 3;
 function needsFullPullForSchemaUpgrade() {
     return parseInt(localStorage.getItem('lastSyncedUpdatedAtSchemaVersion') || '0', 10) < LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION;
 }
@@ -1966,7 +1982,12 @@ async function syncToCloud() {
                         // serverTombstones. Treat defensively: do nothing.
                         return;
                     }
-                    const serverUpdatedAtMs = new Date(u.updatedAt).getTime();
+                    // D1 returns updated_at as a UTC 'YYYY-MM-DD HH:MM:SS.SSS'
+                    // string. Append 'Z' so it parses as UTC, not local time
+                    // (otherwise the resulting epoch ms is offset by the local
+                    // timezone, which then leaks into lastSyncedUpdatedAt and
+                    // suppresses the next legitimate push).
+                    const serverUpdatedAtMs = new Date(String(u.updatedAt).replace(' ', 'T') + 'Z').getTime();
                     // Only adopt the server timestamp if no concurrent local edit
                     // landed during the round-trip.
                     const pushedAt = pushedUpdatedAtById.get(u.id);
@@ -2055,6 +2076,23 @@ async function syncFromCloud(sinceOverride) {
         const data = await response.json();
         const serverLogs = data.logs || [];
         console.log('syncFromCloud: received', serverLogs.length, 'logs from server');
+
+        // Capture the raw server updated_at timestamps BEFORE the processing loop
+        // below mutates each log object (it deletes log.updated_at after parsing).
+        // Rows can carry client-authored updated_at values that are ahead of the
+        // server's real clock (a fast client clock, or legacy timestamp contamination
+        // baked into D1). The server's incremental pull uses a strict
+        // `updated_at > since` filter, so a cursor pinned to real time is re-served
+        // those skewed rows on EVERY pull and never converges. Sealing the cursor
+        // past each received row makes the filter exclude it on the next pull.
+        let newestReceivedMs = 0;
+        for (const log of serverLogs) {
+            if (log.updated_at) {
+                const ms = new Date(String(log.updated_at).replace(' ', 'T') + 'Z').getTime();
+                if (!isNaN(ms) && ms > newestReceivedMs) newestReceivedMs = ms;
+            }
+        }
+
         const tx = db.transaction(['logs'], 'readwrite');
         const store = tx.objectStore('logs');
         for (const log of serverLogs) {
@@ -2075,10 +2113,15 @@ async function syncFromCloud(sinceOverride) {
                 } else {
                     // Normal live row — upsert into local IndexedDB.
                     // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
-                    // string) to a Unix epoch ms number so the next push doesn't
-                    // re-parse it as local time and produce a different UTC value.
+                    // UTC string) to a Unix epoch ms number. D1 stores DATETIME
+                    // values as UTC (the worker writes them via toISOString()),
+                    // so we must append 'Z' before parsing — otherwise
+                    // new Date() interprets the string as local time and
+                    // produces a value offset by the local timezone, which
+                    // then gets stored as lastSyncedUpdatedAt and incorrectly
+                    // suppresses the next legitimate push.
                     if (log.updated_at) {
-                        const serverUpdatedAtMs = new Date(log.updated_at).getTime();
+                        const serverUpdatedAtMs = new Date(String(log.updated_at).replace(' ', 'T') + 'Z').getTime();
                         if (typeof log.updatedAt !== 'number' || log.updatedAt !== serverUpdatedAtMs) {
                             log.updatedAt = serverUpdatedAtMs;
                         }
@@ -2089,10 +2132,41 @@ async function syncFromCloud(sinceOverride) {
                     // concurrent local edit landed with a newer updatedAt AND a
                     // lastSyncedUpdatedAt that already exceeds the server's value, do
                     // NOT overwrite lastSyncedUpdatedAt with the older server value.
+                    // EXCEPTION: during a schema-upgrade full pull (sinceOverride === 0),
+                    // always adopt the server's values — this is the one opportunity to
+                    // repair corrupted lastSyncedUpdatedAt values (e.g. from the old
+                    // local-time parse bug that put them in the future).
+                    const isSchemaUpgradePull = sinceOverride === 0;
                     const getLocalReq = store.get(log.id);
                     getLocalReq.onsuccess = () => {
                         const local = getLocalReq.result;
-                        if (local && typeof local.lastSyncedUpdatedAt === 'number' &&
+                        if (local && (local.lastSyncedUpdatedAt === null || local.lastSyncedUpdatedAt === undefined)) {
+                            // Local row has unsynced edits (marked dirty by
+                            // markLogDirty). The server copy for this row is stale,
+                            // so never clobber the local edit with it — regardless of
+                            // the server's timestamp (which may be shifted ahead of
+                            // the local clock). The next syncToCloud push will upload
+                            // the local version and restore lastSyncedUpdatedAt.
+                            resolve();
+                            return;
+                        }
+                        if (!isSchemaUpgradePull && local && typeof local.updatedAt === 'number' &&
+                            local.updatedAt > log.updatedAt) {
+                            // Local row is newer than the server's copy — there is a
+                            // pending local edit that has not yet been confirmed by the
+                            // server (either still in the debounce window or the push
+                            // ack hasn't landed). Do NOT overwrite local content with
+                            // the stale server data. We keep the local row entirely
+                            // intact so the next syncToCloud push can upload it.
+                            //
+                            // If lastSyncedUpdatedAt was set by a previous push that
+                            // the server already confirmed (for an older version), keep
+                            // it as-is — the next push will be triggered because
+                            // local.updatedAt > local.lastSyncedUpdatedAt.
+                            resolve();
+                            return;
+                        }
+                        if (!isSchemaUpgradePull && local && typeof local.lastSyncedUpdatedAt === 'number' &&
                             local.lastSyncedUpdatedAt > log.updatedAt) {
                             // Local has already pushed a newer value to the server
                             // (or has a pending in-flight push). Keep the local
@@ -2117,7 +2191,10 @@ async function syncFromCloud(sinceOverride) {
                 }
             });
         }
-        setLastSyncTime(data.serverTime);
+        // Seal the pull cursor past any future-timestamped rows just received (see
+        // the computation above, which captured the raw timestamps before the
+        // processing loop deleted them) plus the server clock and prior cursor.
+        setLastSyncTime(Math.max(getLastSyncTime() || 0, data.serverTime || 0, newestReceivedMs));
         return { success: true, count: serverLogs.length };
     } catch (error) {
         console.error('syncFromCloud error:', error);
@@ -2125,32 +2202,53 @@ async function syncFromCloud(sinceOverride) {
     }
 }
 
+let syncInFlight = null;
+
 async function performSync() {
     if (!isAuthenticated()) return;
-    syncStatusEl.classList.remove('hidden');
-    updateSyncStatus('syncing');
-    // On the first sync after a schema upgrade, force a full pull so every server
-    // row gets a chance to populate lastSyncedUpdatedAt. Without this, legacy rows
-    // whose server-side updated_at is older than the current lastSyncTime would
-    // never come back in the incremental pull, leaving lastSyncedUpdatedAt=null and
-    // causing every push to be reported as a conflict.
-    const since = needsFullPullForSchemaUpgrade() ? 0 : getLastSyncTime();
-    const downResult = await syncFromCloud(since);
-    const upResult = await syncToCloud();
-    if (needsFullPullForSchemaUpgrade()) {
-        markSchemaUpgradeComplete();
+    if (syncInFlight) return syncInFlight;
+    syncInFlight = (async () => {
+        syncStatusEl.classList.remove('hidden');
+        updateSyncStatus('syncing');
+        // On the first sync after a schema upgrade, force a full pull so every server
+        // row gets a chance to populate lastSyncedUpdatedAt. Without this, legacy rows
+        // whose server-side updated_at is older than the current lastSyncTime would
+        // never come back in the incremental pull, leaving lastSyncedUpdatedAt=null and
+        // causing every push to be reported as a conflict.
+        const needsFullPull = needsFullPullForSchemaUpgrade();
+        let upResult, downResult;
+        if (needsFullPull) {
+            // Schema upgrade: pull first so lastSyncedUpdatedAt gets populated before
+            // the push runs (otherwise legacy rows would all be reported as conflicts).
+            downResult = await syncFromCloud(0);
+            upResult = await syncToCloud();
+            markSchemaUpgradeComplete();
+        } else {
+            // Normal sync: push FIRST, then pull. Doing the pull first would race with
+            // a pending syncAfterWrite from a recent local edit — the pull would
+            // bring back the un-edited server row and overwrite the local edit before
+            // the push got a chance to upload it. Pushing first guarantees any pending
+            // local changes are on the server before we ingest anything.
+            upResult = await syncToCloud();
+            downResult = await syncFromCloud(getLastSyncTime());
+        }
+        if (!upResult.success || !downResult.success) {
+            const upErr = upResult.success ? '' : (upResult.error || 'upload failed');
+            const downErr = downResult.success ? '' : (downResult.error || 'fetch failed');
+            syncStatusEl.title = [upErr, downErr].filter(Boolean).join('; ');
+            updateSyncStatus('error');
+        } else {
+            syncStatusEl.title = '';
+            setLastSyncTime(Math.max(getLastSyncTime(), Date.now()));
+            checkConnectivity();
+        }
+        renderLogs();
+    })();
+    try {
+        await syncInFlight;
+    } finally {
+        syncInFlight = null;
     }
-    if (!upResult.success || !downResult.success) {
-        const upErr = upResult.success ? '' : (upResult.error || 'upload failed');
-        const downErr = downResult.success ? '' : (downResult.error || 'fetch failed');
-        syncStatusEl.title = [upErr, downErr].filter(Boolean).join('; ');
-        updateSyncStatus('error');
-    } else {
-        syncStatusEl.title = '';
-        setLastSyncTime(Math.max(getLastSyncTime(), Date.now()));
-        checkConnectivity();
-    }
-    renderLogs();
 }
 
 function syncAfterWrite() {
@@ -2611,7 +2709,7 @@ async function saveInvoicingCell(cell) {
             log.notes = value;
         }
 
-        log.updatedAt = Date.now();
+        markLogDirty(log);
 
         await new Promise((resolve, reject) => {
             const putReq = store.put(log);
