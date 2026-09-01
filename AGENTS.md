@@ -57,12 +57,15 @@ Each log entry in the `logs` store contains:
    travelMileage: number,  // Calculated travel distance (arrivalMileage - startMileage)
    isRemote: boolean,      // True if this was a remote work session (no travel)
    invoiceNumber: string,  // Optional invoice number (editable in Invoicing Mode, empty string if unset)
+   clientId: string,       // Globally-unique per-log UUID (v4) — the stable cross-device sync identity. Generated once at entry creation; immutable thereafter. The server addresses rows by (user_id, client_id), NOT by the per-device autoincrement id, so two devices both starting at id=1 no longer collide.
    updatedAt: number,      // Unix epoch ms of the last local mutation (push trigger)
    lastSyncedUpdatedAt: number | null,  // Unix epoch ms the server last confirmed via push ack; null = never confirmed
 }
 ```
 
 **Important:** `startMs` / `endMs` / `arrivalMs` are the source of truth for any date arithmetic (report filtering, edit-modal prefill, CSV round-tripping). The `start` / `end` / `arrivalTime` strings are locale-formatted **display-only** values produced by `toLocaleString()` / `toLocaleTimeString()` — re-parsing them with `new Date(...)` is locale/browser-dependent and should be treated as a legacy fallback only, for entries created before the `*Ms` fields existed (see "Known Issues & Fixes").
+
+The local autoincrement `id` is only the IndexedDB key used by in-app operations (render, edit, delete, resume). It is **not** a cross-device identity. The server maintains its own independent autoincrement `id`; rows pulled from another device are stored locally under a fresh autoincrement id decoupled from the server's id. The `byClientId` unique index (`logs.clientId`) is created at IndexedDB version 4.
 
 ### Modal Components
 
@@ -112,7 +115,7 @@ The app uses an offline-first sync model: all data is stored locally in IndexedD
 - `syncAfterWrite()`: Debounced background sync triggered after any local write (1s delay)
 - `checkConnectivity()` / `updateSyncStatus(status)`: Updates the `#syncStatus` badge (online / syncing / offline / idle)
 
-Sync strategy: the client pushes local logs to the server in a single batch (upsert by `id`, soft-delete by `_deleted` flag). Pushes only include rows whose `updatedAt` is strictly newer than `lastSyncedUpdatedAt`, so no-op re-pushes are filtered out. The server returns `serverTime` and per-row confirmed `updatedAt` values, which the client records as `lastSyncedUpdatedAt` so subsequent syncs skip those rows. On the next pull, the server returns all logs with `updated_at > since` (strictly greater, so rows already received are not re-included) for that user. Local IDs are preserved; new server-generated IDs are returned in the `upserted` array with `localId` mapping.
+Sync strategy: the client pushes local logs to the server in a single batch. Rows are upserted by `(user_id, clientId)` — the per-log UUID — not by the local autoincrement `id`, which is what fixes cross-device id collisions. Soft-deletes use the `_deleted` flag; the server tombstones the row by `client_id`. Pushes only include rows whose `updatedAt` is strictly newer than `lastSyncedUpdatedAt`, so no-op re-pushes are filtered out. The server returns `serverTime` and per-row confirmed `updatedAt` values, which the client records as `lastSyncedUpdatedAt` so subsequent syncs skip those rows. On the next pull, the server returns all logs with `updated_at > since` (strictly greater, so rows already received are not re-included) for that user. Pulled rows are matched locally by `clientId` via the IndexedDB `byClientId` index: an update lands on the existing local row (keeping its local `id`), and a brand-new row is added with a fresh local `id` — the server's `id` is never used as the local key.
 
 ### Timer Flow
 
@@ -259,6 +262,7 @@ time-tracker/
 │   ├── 002_add_is_remote.sql         # Adds isRemote column
 │   ├── 003_soft_delete.sql           # Adds deleted_at tombstone column
 │   └── 004_add_invoice_number.sql    # Adds invoice_number column
+│   └── 005_add_client_id.sql         # Adds client_id UUID + (user_id, client_id) unique index (cross-device sync identity)
 ```
 
 ## Cloudflare Worker (API Layer)
@@ -321,6 +325,27 @@ echo 'JWT_SECRET="your-dev-secret-here"' > .dev.vars
 # Optionally set ALLOWED_ORIGIN for local dev (defaults to echoing request origin if unset)
 # echo 'ALLOWED_ORIGIN="http://localhost:8787"' >> .dev.vars
 ```
+
+### Testing & Verification
+
+```bash
+# Generate worker-configuration.d.ts from wrangler.toml + .dev.vars (required for typecheck; gitignored)
+npm run types  # or: npx wrangler types
+
+# Run the Worker API test suite (Vitest + @cloudflare/vitest-pool-workers, runs in workerd)
+npm test  # or: npx vitest run
+
+# Watch mode
+npm run test:watch
+
+# Type-check worker.js + test files (checkJs)
+npm run typecheck
+```
+
+- Tests live in `test/` and exercise the real Worker via the `SELF` fetcher with isolated D1/KV per test file. The test schema is applied in `test/helpers.ts` (note: the repo migrations 001–004 are **not** all replayable on a fresh DB — 002's `ALTER TABLE` duplicates `isRemote`, which already exists in 001 — so tests use their own schema definition; fix the migrations before wiring up `wrangler d1 migrations apply`).
+- `.dev.vars` must exist with `JWT_SECRET` and `FALLBACK_ALLOWED_USERS` for both `wrangler dev` and the test suite.
+- `worker-configuration.d.ts` is generated and gitignored — regenerate with `npm run types` after changing bindings.
+- The Playwright MCP is configured in `opencode.jsonc` (`npx @playwright/mcp@latest`); browser automation against `wrangler dev` requires `npx playwright install chromium` once.
 
 ### Deployment
 
@@ -404,6 +429,18 @@ See `CLOUDFLARE_MIGRATION.md` for the full migration guide. Static assets are no
 - None at this time.
 
 ## Previously Open Items (Now Fixed)
+
+- **`GET /api/logs/:id` returned tombstoned rows** *(fixed)* — the single-row lookup (`getLog`) had no `deleted_at IS NULL` filter, unlike `GET /api/logs`, so deleting a row and fetching it by id returned the soft-deleted row instead of 404. **Fix**: added `AND deleted_at IS NULL` to the lookup (covered by a test in `test/logs.test.ts`).
+- **`serveStaticAsset` always fell through to the placeholder page** *(fixed)* — `new Request(assetFile, request)` with a relative `assetFile` (e.g. `'index.html'`) threw `TypeError: Invalid URL`, which the try/catch swallowed, so the asset-map branch was dead code and the "Cloudflare Worker is running!" fallback was always served (even in production with the `[assets]` binding mounted). **Fix**: resolve `assetFile` against the request origin (`new URL(assetFile, new URL(request.url).origin)`) before fetching the Assets binding. `sw.js` now also gets `Cache-Control: no-cache` instead of the immutable 1-year cache, so service-worker updates propagate. Covered by `test/assets.test.ts` (which confirms the binding serves real files in the test env).
+- **CSV export dropped genuine 0 durations** *(fixed)* — `exportToCSV()` used truthiness (`log.travelDurationMs ? formatDuration(...) : ""`), so a legitimate 0 exported blank — the same class of bug already fixed for mileage. **Fix**: explicit `!== null && !== undefined` checks in export, and applied the same treatment to the travel/on-site duration display in `renderLogs()` and the billing report so a genuine `00:00:00` shows instead of disappearing. Verified in-browser: a manual entry with arrival==start exports `"00:00:00"` and renders "🚗 Travel: 00:00:00".
+- **Mid-timer reload lost arrival/mileage state** *(fixed)* — `saveTimerState()` was only called from `startTimer()`; `btnMarkArrival`, `btnSaveStartMileage`, and `btnSaveArrivalMileage` never persisted their values, and `travelMileage` was missing from the saved state object. A reload after "Mark Arrival" reverted the timer to `travel-need-arrival` and dropped mileage. **Fix**: `saveTimerState()` now stores `travelMileage`, `restoreTimerState()` restores it (falling back to computing `arrivalMileage - startMileage` for states saved before this fix), and all three handlers persist after mutating. Restore logic is unchanged: mileage modals are only re-prompted when `requestMileage` is currently enabled and the value is genuinely unset. Verified in-browser: start travel → enter start mileage → mark arrival → enter arrival mileage → reload → timer restored to "arrived" state with arrival badge, and the finished log entry carried `startMileage`/`arrivalMileage`/`travelMileage` intact.
+
+- **Cross-device sync ID collision (data loss risk)** *(fixed)* — `syncLogs` in `worker.js` used the client's IndexedDB autoincrement `id` directly as the server primary key (`ON CONFLICT(id) DO UPDATE`), so two devices that both started at `id=1` could silently overwrite each other's rows. **Fix**: every log now carries a globally-unique `clientId` UUID (generated client-side at creation; IndexedDB v4 `byClientId` unique index; `LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION` bumped to 4). The server stores `client_id` (migration `005_add_client_id.sql`, backfilled `'legacy-' || id` for existing rows) and sync upserts are keyed by `(user_id, client_id)` with its own independent autoincrement `id`. Pushes from legacy clients (id-only) still resolve via the old id mapping. The client pull matches rows by `clientId` (never by the server's `id`) and stores brand-new pulled rows under a fresh local `id`, so ids no longer collide across devices. During the schema-upgrade full pull, legacy rows adopt the server's `client_id` (matched by the old id); never-synced rows get a fresh UUID. Also fixed: an empty push no longer advances the pull cursor to `Date.now()` (which could skip another device's newly-created rows), and `syncLogs`/`createLog` bind all nullable fields with `?? null` so entries that omit mileage fields (e.g. manual entries) no longer fail with `D1_TYPE_ERROR: Type 'undefined' not supported` and don't round-trip a genuine `0` to `null`. Covered by three new regression tests in `test/sync.test.ts`.
+- **Repo migrations 001–004 are not replayable on a fresh DB** *(fixed)* — `002_add_is_remote.sql` ran `ALTER TABLE logs ADD COLUMN isRemote` but `001_initial.sql` already creates `isRemote`, so `wrangler d1 migrations apply` failed at 002 before 005 could ever run. **Fix**: 002 is now a documentation-only no-op (the column ships in 001), so 001–005 apply cleanly on a fresh DB. Verified end-to-end in a browser: create → sync → edit → re-sync → delete → tombstone → pull-back of another device's row all round-trip with `clientId` intact.
+
+- **CSV import XSS via unescaped log fields** *(fixed)* — `renderLogs()` rendered `log.start`, `log.duration`, and `log.decimalHours` without `escapeHtml()`, and those fields are populated directly from CSV file content on import, so a crafted CSV could inject HTML/script into the page (escalating to a `localStorage` auth-token steal). **Fix**: wrapped all three in `escapeHtml()` and hardened `escapeHtml()` to coerce null/undefined to `''` instead of throwing.
+- **`updateLog` deleted-row check was dead code** *(fixed)* — `updateLog` selected only `id, updated_at` but then checked `existing.deleted_at`, which was always `undefined`, so the intended 409 for tombstoned rows was never returned. **Fix**: included `deleted_at` in the SELECT (covered by a test in `test/logs.test.ts`).
+- **Registered users got an unusable token (no `userId`)** *(fixed)* — `registerUser` read `result.meta.id` after the INSERT, but D1 exposes the autoincrement id as `meta.last_row_id`. The issued token therefore had no `userId`, so `getUserIdFromToken` returned `null` and **every** post-register API call returned 401 (login worked because it reads `user.id` from the SELECT). **Fix**: `userId = result.meta?.last_row_id ?? result.results?.[0]?.id`. Surfaces immediately in `test/auth.test.ts`.
 
 - **Edit still not pushed after schema upgrade; corrupted `lastSyncedUpdatedAt` persists** *(fixed)* — Even after bumping `LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION` to 2 and the `+Z` UTC-parse fix, the user's row still had `lastSyncedUpdatedAt` in the future (5+ hours ahead). The schema-upgrade full pull (`syncFromCloud(0)`) was running and parsing the server's `updated_at` correctly, but the local-preservation check `local.lastSyncedUpdatedAt > log.updatedAt` still evaluated to true (corrupted future value > correct server value), so the pull skipped overwriting the corrupted value. **Fix**: added an `isSchemaUpgradePull` flag (true when `performSync` runs with `sinceOverride === 0`) that bypasses both the `local.updatedAt > log.updatedAt` early-return and the `local.lastSyncedUpdatedAt > log.updatedAt` preservation branch during a full pull, so schema-upgrade pulls ALWAYS adopt the server's `updated_at`-derived values. Bumped `LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION` to 3 to force another full pull.
 

@@ -1,6 +1,6 @@
 -- Migration: Add isRemote column to logs table
--- Run this in Cloudflare D1 after deploying the updated schema
-
--- Add the isRemote column to existing logs table
--- Using a default of 0 (false) for existing entries
-ALTER TABLE logs ADD COLUMN isRemote INTEGER DEFAULT 0;
+--
+-- NOTE: This migration is intentionally a no-op. The isRemote column is already
+-- created in migrations/001_initial.sql, so this file exists only for history
+-- (older deployments applied it against a pre-isRemote schema). Keeping it a
+-- no-op makes `wrangler d1 migrations apply` replayable on a fresh database.

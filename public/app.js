@@ -1,10 +1,17 @@
 let db;
-const dbRequest = indexedDB.open("TimeTrackerDB", 3);
+const dbRequest = indexedDB.open("TimeTrackerDB", 4);
 
 dbRequest.onupgradeneeded = (e) => {
     db = e.target.result;
     if (!db.objectStoreNames.contains("logs")) {
-        db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+        const logsStore = db.createObjectStore("logs", { keyPath: "id", autoIncrement: true });
+        logsStore.createIndex("byClientId", "clientId", { unique: true });
+    } else {
+        // Version 4: add the byClientId index used for cross-device sync lookups.
+        const logsStore = e.target.transaction.objectStore("logs");
+        if (!logsStore.indexNames.contains("byClientId")) {
+            logsStore.createIndex("byClientId", "clientId", { unique: true });
+        }
     }
     if (!db.objectStoreNames.contains("timerState")) {
         db.createObjectStore("timerState", { keyPath: "id" });
@@ -32,6 +39,19 @@ function getJobTypeLabel(type) {
     return 'Travel';
 }
 
+// Generate a v4 UUID for a log's stable cross-device identity (clientId).
+function generateUuid() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+}
+
 // Save timer state to IndexedDB
 function saveTimerState() {
     if (!db) return;
@@ -45,6 +65,7 @@ function saveTimerState() {
         arrivalTime: arrivalTime,
         startMileage: startMileage,
         arrivalMileage: arrivalMileage,
+        travelMileage: travelMileage,
         client: clientInput.value.trim(),
         isRemote: isRemote,
         jobType: currentJobType,
@@ -69,6 +90,7 @@ function restoreTimerState() {
         arrivalTime = state.arrivalTime;
         startMileage = state.startMileage;
         arrivalMileage = state.arrivalMileage;
+        travelMileage = state.travelMileage ?? (startMileage !== null && arrivalMileage !== null ? arrivalMileage - startMileage : null);
         currentJobType = state.jobType || (isRemoteLog(state) ? 'remote' : 'travel');
         isRemote = (currentJobType === 'remote');
         pendingResumeLogId = (state.resumeLogId !== null && state.resumeLogId !== undefined) ? state.resumeLogId : null;
@@ -391,6 +413,8 @@ btnMarkArrival.addEventListener('click', () => {
     } else {
         arrivalMileage = null;
     }
+
+    saveTimerState();
 });
 
 function updateLiveDisplay() {
@@ -489,6 +513,7 @@ function finalizeAndSaveLog(partsText) {
         travelMileage: travelMileage,
         isRemote: isRemote,
         invoiceNumber: "",
+        clientId: generateUuid(),
         updatedAt: now,
         lastSyncedUpdatedAt: null
     };
@@ -680,6 +705,7 @@ btnSaveStartMileage.addEventListener('click', () => {
         startMileage = null;
     }
     startMileageModal.classList.add('hidden');
+    saveTimerState();
 });
 
 btnCancelArrivalMileage.addEventListener('click', () => {
@@ -698,6 +724,7 @@ btnSaveArrivalMileage.addEventListener('click', () => {
         travelMileage = null;
     }
     arrivalMileageModal.classList.add('hidden');
+    saveTimerState();
 });
 
 btnClear.addEventListener('click', () => {
@@ -776,11 +803,11 @@ function renderLogs() {
             if (isRemoteEntry) {
                 html += '<span class="remote-badge">Remote</span>';
             }
-            html += '<p class="log-timestamp">' + log.start + '</p></div>';
-            html += '<span class="duration-pill">' + log.duration + ' (' + log.decimalHours + 'h)</span>';
+            html += '<p class="log-timestamp">' + escapeHtml(log.start) + '</p></div>';
+            html += '<span class="duration-pill">' + escapeHtml(log.duration) + ' (' + escapeHtml(log.decimalHours) + 'h)</span>';
             html += '</div>';
 
-            if (!isRemoteEntry && log.travelDurationMs && log.onSiteDurationMs) {
+            if (!isRemoteEntry && log.travelDurationMs !== null && log.travelDurationMs !== undefined && log.onSiteDurationMs !== null && log.onSiteDurationMs !== undefined) {
                 const travelDur = formatDuration(log.travelDurationMs);
                 const onSiteDur = formatDuration(log.onSiteDurationMs);
                 html += '<div class="log-travel-details">';
@@ -1209,6 +1236,7 @@ btnSaveAdd.addEventListener('click', () => {
         travelMileage: selectedTravelMileage,
         isRemote: isRemoteEntry,
         invoiceNumber: "",
+        clientId: generateUuid(),
         updatedAt: Date.now(),
         lastSyncedUpdatedAt: null
     };
@@ -1348,6 +1376,7 @@ const log = {
         travelMileage: row[12] !== '' ? parseFloat(row[12]) : null,
          isRemote: remoteIdx !== null ? (row[remoteIdx].replace(/^\"|\"$/g, '').toLowerCase() === 'true') : false,
          invoiceNumber: invoiceIdx !== null ? row[invoiceIdx].replace(/^\"|\"$/g, '') : "",
+         clientId: generateUuid(),
          updatedAt: isNaN(updatedAtMs) ? null : updatedAtMs,
          lastSyncedUpdatedAt: null
     };
@@ -1562,8 +1591,8 @@ function exportToCSV() {
                 '"' + (log.arrivalTime || "") + '"',
                 '"' + log.end + '"',
                 '"' + log.duration + '"',
-                '"' + (log.travelDurationMs ? formatDuration(log.travelDurationMs) : "") + '"',
-                '"' + (log.onSiteDurationMs ? formatDuration(log.onSiteDurationMs) : "") + '"',
+                '"' + (log.travelDurationMs !== null && log.travelDurationMs !== undefined ? formatDuration(log.travelDurationMs) : "") + '"',
+                '"' + (log.onSiteDurationMs !== null && log.onSiteDurationMs !== undefined ? formatDuration(log.onSiteDurationMs) : "") + '"',
                 log.decimalHours,
                 '"' + (log.billableTime || "") + '"',
                 mi(log.startMileage),
@@ -1715,7 +1744,7 @@ function buildReportTable(logs, hasMileage) {
             billableDecimal = formatBillableTime(isRemote ? null : log.travelDurationMs, isRemote ? null : log.onSiteDurationMs, log.durationMs);
         }
 
-        if (!isRemote && log.travelDurationMs && log.onSiteDurationMs && log.arrivalTime) {
+        if (!isRemote && log.travelDurationMs !== null && log.travelDurationMs !== undefined && log.onSiteDurationMs !== null && log.onSiteDurationMs !== undefined && log.arrivalTime) {
             timelineHtml = 'Start: ' + escapeHtml(startTimeStr) + '<br>Arrived: ' + escapeHtml(log.arrivalTime) + '<br>End: ' + escapeHtml(endTimeStr);
             breakdownHtml = escapeHtml(billableDecimal);
         } else {
@@ -1829,7 +1858,7 @@ function generateReportForDateRange(startDate, endDate) {
 }
 
 function escapeHtml(str) {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    return String(str == null ? '' : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // --- Cloud Sync (Offline-First Backup) ---
@@ -1860,7 +1889,11 @@ function setLastSyncTime(ts) {
 // Schema-version flag. Bumped whenever a change to the local log schema requires a
 // one-time full pull to repopulate per-row sync state. On the first sync after the
 // bump, the client passes since=0 to syncFromCloud, then clears the flag.
-const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 3;
+//
+// v4: per-log clientId (UUID) cross-device identity. The full pull lets legacy
+// rows adopt the server's client_id (matched by the old id) and assigns fresh
+// UUIDs to rows that were never synced, before any push can run.
+const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 4;
 function needsFullPullForSchemaUpgrade() {
     return parseInt(localStorage.getItem('lastSyncedUpdatedAtSchemaVersion') || '0', 10) < LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION;
 }
@@ -1878,9 +1911,16 @@ async function syncToCloud() {
             request.onerror = () => reject(request.error);
         });
 
-        // Backfill updatedAt / lastSyncedUpdatedAt for legacy entries.
+        // Backfill updatedAt / lastSyncedUpdatedAt / clientId for legacy entries.
         // - updatedAt: use startMs as the fallback since that's when the entry was created
         // - lastSyncedUpdatedAt: null means "never confirmed by server" — include in push
+        // - clientId: rows without one predate the per-log UUID identity. Assign a
+        //   fresh UUID now UNLESS a schema-upgrade full pull is still pending — in
+        //   that case the pull is about to adopt the server's client_id for rows that
+        //   were previously synced, and pushing a random UUID first would create a
+        //   duplicate server row. Rows without a clientId are simply skipped below
+        //   until that pull has run.
+        const schemaUpgradePending = needsFullPullForSchemaUpgrade();
         const now = Date.now();
         let needsBackfill = false;
         for (const log of allLogs) {
@@ -1890,6 +1930,10 @@ async function syncToCloud() {
             }
             if (log.lastSyncedUpdatedAt === undefined) {
                 log.lastSyncedUpdatedAt = null;
+                needsBackfill = true;
+            }
+            if (!log.clientId && !schemaUpgradePending) {
+                log.clientId = generateUuid();
                 needsBackfill = true;
             }
         }
@@ -1905,25 +1949,31 @@ async function syncToCloud() {
         // updatedAt into lastSyncedUpdatedAt after the ack, but only if the local value
         // hasn't changed in the meantime. Otherwise a concurrent local edit would be
         // silently marked as already-synced.
-        const pushedUpdatedAtById = new Map();
+        const pushedUpdatedAtByClientId = new Map();
         for (const log of allLogs) {
-            if (log.id !== undefined && log.id !== null) {
-                pushedUpdatedAtById.set(log.id, log.updatedAt);
+            if (log.clientId) {
+                pushedUpdatedAtByClientId.set(log.clientId, log.updatedAt);
             }
         }
 
         // Only push rows whose local updatedAt is strictly newer than what the server
         // last confirmed. This skips the no-op re-pushes that previously caused the
-        // "server had newer data" log on every sync.
+        // "server had newer data" log on every sync. Rows without a clientId are
+        // skipped (they can't be addressed by the server) — the schema-upgrade full
+        // pull resolves them.
         const logsToPush = allLogs.filter(log => {
             if (log._deleted) return true;
+            if (!log.clientId) return false;
             if (log.id === undefined || log.id === null) return true;
             if (log.lastSyncedUpdatedAt === null || log.lastSyncedUpdatedAt === undefined) return true;
             return log.updatedAt > log.lastSyncedUpdatedAt;
         });
 
         if (logsToPush.length === 0) {
-            setLastSyncTime(Date.now());
+            // No local changes to push. Do NOT advance the pull cursor to
+            // Date.now(): that would leap past rows another device just created,
+            // and the incremental pull would skip them. The pull seals its own
+            // cursor from the server's response (serverTime / received rows).
             return { success: true, upserted: [], errors: [] };
         }
 
@@ -1963,15 +2013,16 @@ async function syncToCloud() {
         // lastSyncedUpdatedAt so a future local edit will still be pushed.
         //
         // Race protection: only update lastSyncedUpdatedAt if the local updatedAt is
-        // still the value we pushed (stored in pushedUpdatedAtById). If a concurrent
-        // local edit happened during the round-trip, local updatedAt is now greater
-        // than what we pushed, and we must NOT mark it as synced.
+        // still the value we pushed (stored in pushedUpdatedAtByClientId). If a
+        // concurrent local edit happened during the round-trip, local updatedAt is now
+        // greater than what we pushed, and we must NOT mark it as synced.
         const upsertedConfirmed = result.upserted.filter(u => u.updatedAt && (u.action === 'updated' || u.action === 'created' || u.action === 'deleted'));
         if (upsertedConfirmed.length > 0 && db) {
             const tx = db.transaction(['logs'], 'readwrite');
             const store = tx.objectStore('logs');
+            const clientIndex = store.index('byClientId');
             for (const u of upsertedConfirmed) {
-                const getReq = store.get(u.id);
+                const getReq = clientIndex.get(u.clientId);
                 getReq.onsuccess = () => {
                     const log = getReq.result;
                     if (!log) return;
@@ -1990,7 +2041,7 @@ async function syncToCloud() {
                     const serverUpdatedAtMs = new Date(String(u.updatedAt).replace(' ', 'T') + 'Z').getTime();
                     // Only adopt the server timestamp if no concurrent local edit
                     // landed during the round-trip.
-                    const pushedAt = pushedUpdatedAtById.get(u.id);
+                    const pushedAt = pushedUpdatedAtByClientId.get(u.clientId);
                     if (pushedAt !== undefined && log.updatedAt !== pushedAt) {
                         // Local edited during the push. Do not mark as synced; the next
                         // sync will pick it up because updatedAt > lastSyncedUpdatedAt.
@@ -2006,13 +2057,19 @@ async function syncToCloud() {
         }
 
         // Hard-delete locally any entries the server confirmed as deleted via our push.
-        const deletedIds = result.upserted
+        const deletedClientIds = result.upserted
             .filter(u => u.action === 'deleted')
-            .map(u => u.id);
-        if (deletedIds.length > 0 && db) {
+            .map(u => u.clientId);
+        if (deletedClientIds.length > 0 && db) {
             const tx = db.transaction(['logs'], 'readwrite');
             const store = tx.objectStore('logs');
-            deletedIds.forEach(id => store.delete(id));
+            const clientIndex = store.index('byClientId');
+            deletedClientIds.forEach(clientId => {
+                const getReq = clientIndex.get(clientId);
+                getReq.onsuccess = () => {
+                    if (getReq.result) store.delete(getReq.result.id);
+                };
+            });
         }
 
         // Apply server tombstones: entries that were deleted on another device
@@ -2022,9 +2079,10 @@ async function syncToCloud() {
         if (tombstones.length > 0 && db) {
             const tx2 = db.transaction(['logs'], 'readwrite');
             const store2 = tx2.objectStore('logs');
+            const clientIndex2 = store2.index('byClientId');
             for (const tombstone of tombstones) {
                 await new Promise((resolve) => {
-                    const getReq = store2.get(tombstone.id);
+                    const getReq = clientIndex2.get(tombstone.clientId);
                     getReq.onsuccess = () => {
                         const log = getReq.result;
                         if (log) {
@@ -2095,100 +2153,161 @@ async function syncFromCloud(sinceOverride) {
 
         const tx = db.transaction(['logs'], 'readwrite');
         const store = tx.objectStore('logs');
-        for (const log of serverLogs) {
+        const clientIndex = store.index('byClientId');
+        const isSchemaUpgradePull = sinceOverride === 0;
+
+        for (const serverRow of serverLogs) {
             await new Promise((resolve, reject) => {
-                if (log.deleted_at) {
-                    // Server has tombstoned this row — soft-delete it locally.
-                    // First fetch the local copy (if any) so we can mark it _deleted
-                    // without losing fields that renderLogs / export may still need.
-                    const getReq = store.get(log.id);
-                    getReq.onsuccess = () => {
-                        const local = getReq.result || log;
-                        local._deleted = true;
-                        const putReq = store.put(local);
-                        putReq.onsuccess = () => resolve();
-                        putReq.onerror = () => reject(putReq.error);
-                    };
-                    getReq.onerror = () => reject(getReq.error);
-                } else {
-                    // Normal live row — upsert into local IndexedDB.
-                    // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
-                    // UTC string) to a Unix epoch ms number. D1 stores DATETIME
-                    // values as UTC (the worker writes them via toISOString()),
-                    // so we must append 'Z' before parsing — otherwise
-                    // new Date() interprets the string as local time and
-                    // produces a value offset by the local timezone, which
-                    // then gets stored as lastSyncedUpdatedAt and incorrectly
-                    // suppresses the next legitimate push.
-                    if (log.updated_at) {
-                        const serverUpdatedAtMs = new Date(String(log.updated_at).replace(' ', 'T') + 'Z').getTime();
-                        if (typeof log.updatedAt !== 'number' || log.updatedAt !== serverUpdatedAtMs) {
-                            log.updatedAt = serverUpdatedAtMs;
+                // Normalize server-side fields to local names.
+                // client_id is the stable cross-device identity for this log.
+                if (serverRow.client_id) {
+                    serverRow.clientId = serverRow.client_id;
+                }
+                delete serverRow.client_id;
+                // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
+                // UTC string) to a Unix epoch ms number. D1 stores DATETIME
+                // values as UTC (the worker writes them via toISOString()),
+                // so we must append 'Z' before parsing — otherwise
+                // new Date() interprets the string as local time and
+                // produces a value offset by the local timezone, which
+                // then gets stored as lastSyncedUpdatedAt and incorrectly
+                // suppresses the next legitimate push.
+                if (serverRow.updated_at) {
+                    const serverUpdatedAtMs = new Date(String(serverRow.updated_at).replace(' ', 'T') + 'Z').getTime();
+                    if (typeof serverRow.updatedAt !== 'number' || serverRow.updatedAt !== serverUpdatedAtMs) {
+                        serverRow.updatedAt = serverUpdatedAtMs;
+                    }
+                }
+                delete serverRow.updated_at;
+
+                const finishRow = (local) => {
+                    if (serverRow.deleted_at) {
+                        // Server has tombstoned this row — soft-delete it locally
+                        // if we have a copy. Never create a phantom tombstone
+                        // keyed by the server's id (it can collide with a
+                        // different local row's id).
+                        if (local) {
+                            local._deleted = true;
+                            const putReq = store.put(local);
+                            putReq.onsuccess = () => resolve();
+                            putReq.onerror = () => reject(putReq.error);
+                        } else {
+                            resolve();
+                        }
+                        return;
+                    }
+                    if (!local) {
+                        // Brand-new row from another device. Do NOT trust the
+                        // server's id as our local key (ids collide across
+                        // devices) — let IndexedDB assign a fresh local id.
+                        delete serverRow.id;
+                        serverRow.lastSyncedUpdatedAt = (typeof serverRow.updatedAt === 'number' && isFinite(serverRow.updatedAt))
+                            ? serverRow.updatedAt : Date.now();
+                        const addReq = store.add(serverRow);
+                        addReq.onsuccess = () => resolve();
+                        addReq.onerror = () => reject(addReq.error);
+                        return;
+                    }
+                    // Local copy exists — apply the conflict-resolution rules.
+                    if (local.lastSyncedUpdatedAt === null || local.lastSyncedUpdatedAt === undefined) {
+                        // Local row has unsynced edits (marked dirty by
+                        // markLogDirty). The server copy for this row is stale,
+                        // so never clobber the local edit with it — regardless of
+                        // the server's timestamp (which may be shifted ahead of
+                        // the local clock). The next syncToCloud push will upload
+                        // the local version and restore lastSyncedUpdatedAt.
+                        resolve();
+                        return;
+                    }
+                    if (!isSchemaUpgradePull && typeof local.updatedAt === 'number' &&
+                        local.updatedAt > serverRow.updatedAt) {
+                        // Local row is newer than the server's copy — there is a
+                        // pending local edit that has not yet been confirmed by the
+                        // server (either still in the debounce window or the push
+                        // ack hasn't landed). Do NOT overwrite local content with
+                        // the stale server data. We keep the local row entirely
+                        // intact so the next syncToCloud push can upload it.
+                        //
+                        // If lastSyncedUpdatedAt was set by a previous push that
+                        // the server already confirmed (for an older version), keep
+                        // it as-is — the next push will be triggered because
+                        // local.updatedAt > local.lastSyncedUpdatedAt.
+                        resolve();
+                        return;
+                    }
+                    if (!isSchemaUpgradePull && typeof local.lastSyncedUpdatedAt === 'number' &&
+                        local.lastSyncedUpdatedAt > serverRow.updatedAt) {
+                        // Local has already pushed a newer value to the server
+                        // (or has a pending in-flight push). Keep the local
+                        // updatedAt and lastSyncedUpdatedAt; the next push will
+                        // upload the local change.
+                        serverRow.updatedAt = local.updatedAt;
+                        serverRow.lastSyncedUpdatedAt = local.lastSyncedUpdatedAt;
+                    } else {
+                        // Record the server's confirmed updatedAt as lastSyncedUpdatedAt
+                        // so the next syncToCloud treats this row as already in sync.
+                        serverRow.lastSyncedUpdatedAt = serverRow.updatedAt;
+                    }
+                    // Keep the local key (id) so we never clobber a different row.
+                    serverRow.id = local.id;
+                    const req = store.put(serverRow);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                };
+
+                const getByClientIdReq = clientIndex.get(serverRow.clientId || '__no_client_id__');
+                getByClientIdReq.onsuccess = () => {
+                    if (getByClientIdReq.result) {
+                        finishRow(getByClientIdReq.result);
+                        return;
+                    }
+                    // Legacy adoption: only during the schema-upgrade full pull.
+                    // Rows created before per-log UUIDs were stored on the server
+                    // under the originating device's local autoincrement id, with
+                    // a backfilled client_id of 'legacy-<id>'. If a local row
+                    // shares that old id and has no clientId yet, it IS this row —
+                    // adopt the server's clientId so subsequent pushes address it
+                    // correctly and no duplicate is created.
+                    if (isSchemaUpgradePull && serverRow.clientId && serverRow.clientId.indexOf('legacy-') === 0) {
+                        const getByIdReq = store.get(serverRow.id);
+                        getByIdReq.onsuccess = () => {
+                            const byId = getByIdReq.result;
+                            if (byId && !byId.clientId) {
+                                byId.clientId = serverRow.clientId;
+                                finishRow(byId);
+                            } else {
+                                finishRow(null);
+                            }
+                        };
+                        getByIdReq.onerror = () => reject(getByIdReq.error);
+                    } else {
+                        finishRow(null);
+                    }
+                };
+                getByClientIdReq.onerror = () => reject(getByClientIdReq.error);
+            });
+        }
+
+        // Assign clientIds to any remaining local rows that have no server
+        // counterpart (never-synced entries created before this schema change).
+        // They need a UUID so the next push can address them uniquely instead of
+        // colliding with another device's row. Runs during the schema-upgrade full
+        // pull; incremental pulls never encounter clientId-less rows.
+        if (isSchemaUpgradePull) {
+            const backfillTx = db.transaction(['logs'], 'readwrite');
+            const backfillStore = backfillTx.objectStore('logs');
+            const allReq = backfillStore.getAll();
+            await new Promise((resolve, reject) => {
+                allReq.onsuccess = () => {
+                    for (const r of allReq.result) {
+                        if (!r.clientId) {
+                            r.clientId = generateUuid();
+                            backfillStore.put(r);
                         }
                     }
-                    delete log.updated_at;
-                    // Record the server's confirmed updatedAt as lastSyncedUpdatedAt so
-                    // the next syncToCloud treats this row as already in sync. If a
-                    // concurrent local edit landed with a newer updatedAt AND a
-                    // lastSyncedUpdatedAt that already exceeds the server's value, do
-                    // NOT overwrite lastSyncedUpdatedAt with the older server value.
-                    // EXCEPTION: during a schema-upgrade full pull (sinceOverride === 0),
-                    // always adopt the server's values — this is the one opportunity to
-                    // repair corrupted lastSyncedUpdatedAt values (e.g. from the old
-                    // local-time parse bug that put them in the future).
-                    const isSchemaUpgradePull = sinceOverride === 0;
-                    const getLocalReq = store.get(log.id);
-                    getLocalReq.onsuccess = () => {
-                        const local = getLocalReq.result;
-                        if (local && (local.lastSyncedUpdatedAt === null || local.lastSyncedUpdatedAt === undefined)) {
-                            // Local row has unsynced edits (marked dirty by
-                            // markLogDirty). The server copy for this row is stale,
-                            // so never clobber the local edit with it — regardless of
-                            // the server's timestamp (which may be shifted ahead of
-                            // the local clock). The next syncToCloud push will upload
-                            // the local version and restore lastSyncedUpdatedAt.
-                            resolve();
-                            return;
-                        }
-                        if (!isSchemaUpgradePull && local && typeof local.updatedAt === 'number' &&
-                            local.updatedAt > log.updatedAt) {
-                            // Local row is newer than the server's copy — there is a
-                            // pending local edit that has not yet been confirmed by the
-                            // server (either still in the debounce window or the push
-                            // ack hasn't landed). Do NOT overwrite local content with
-                            // the stale server data. We keep the local row entirely
-                            // intact so the next syncToCloud push can upload it.
-                            //
-                            // If lastSyncedUpdatedAt was set by a previous push that
-                            // the server already confirmed (for an older version), keep
-                            // it as-is — the next push will be triggered because
-                            // local.updatedAt > local.lastSyncedUpdatedAt.
-                            resolve();
-                            return;
-                        }
-                        if (!isSchemaUpgradePull && local && typeof local.lastSyncedUpdatedAt === 'number' &&
-                            local.lastSyncedUpdatedAt > log.updatedAt) {
-                            // Local has already pushed a newer value to the server
-                            // (or has a pending in-flight push). Keep the local
-                            // updatedAt and lastSyncedUpdatedAt; the next push will
-                            // upload the local change.
-                            log.updatedAt = local.updatedAt;
-                            log.lastSyncedUpdatedAt = local.lastSyncedUpdatedAt;
-                        } else {
-                            log.lastSyncedUpdatedAt = log.updatedAt;
-                        }
-                        const req = store.put(log);
-                        req.onsuccess = () => resolve();
-                        req.onerror = () => reject(req.error);
-                    };
-                    getLocalReq.onerror = () => {
-                        // No local copy to compare against — safe to mark as synced.
-                        log.lastSyncedUpdatedAt = log.updatedAt;
-                        const req = store.put(log);
-                        req.onsuccess = () => resolve();
-                        req.onerror = () => reject(req.error);
-                    };
-                }
+                    resolve();
+                };
+                allReq.onerror = () => reject(allReq.error);
             });
         }
         // Seal the pull cursor past any future-timestamped rows just received (see

@@ -105,17 +105,25 @@ async function serveStaticAsset(request, env, url) {
     return new Response('Not Found', { status: 404 });
   }
 
-  // Try the Assets binding first (production, auto-uploaded by wrangler deploy)
+  // Try the Assets binding first (production + local dev, auto-uploaded by wrangler deploy/dev).
+  // The fetch must use an absolute URL: `new Request(assetFile, request)` throws
+  // `TypeError: Invalid URL` for a relative assetFile, which the old try/catch
+  // swallowed, making this branch dead code and always serving the fallback page.
+  // assetFile values in the map are relative (e.g. 'index.html'), so resolve them
+  // against the request origin before constructing the fetch.
   if (env.ASSETS) {
     try {
-      const response = await env.ASSETS.fetch(new Request(assetFile, request));
-      if (response && response.status === 200) {
+      const assetUrl = new URL(assetFile, new URL(request.url).origin);
+      const response = await env.ASSETS.fetch(new Request(assetUrl, request));
+      if (response.status === 200) {
         const headers = new Headers(response.headers);
-        headers.set('Cache-Control', 'public, max-age=31536000');
+        // Never long-cache sw.js — the service worker must pick up updates, and
+        // an immutable 1-year cache on it would defeat the update banner.
+        headers.set('Cache-Control', pathname === '/sw.js' ? 'no-cache' : 'public, max-age=31536000');
         return new Response(response.body, { status: 200, headers });
       }
     } catch (e) {
-      // Fall through to fallback
+      // Fall through to the fallback page below
     }
   }
 
@@ -226,7 +234,7 @@ async function registerUser(request, env) {
         'INSERT INTO users (email, password_hash) VALUES (?, ?)'
       ).bind(email.toLowerCase(), passwordHash).run();
 
-      const userId = result.meta.id;
+      const userId = result.meta?.last_row_id ?? result.results?.[0]?.id;
       const token = await createToken(env, userId, email.toLowerCase());
 
       return withCORS(new Response(JSON.stringify({
@@ -445,30 +453,31 @@ const logData = await request.json();
 
     const clientUpdatedAt = logData.updatedAt ? new Date(logData.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
     const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt);
+    const clientId = logData.clientId || crypto.randomUUID();
 
     const result = await env.DB.prepare(
       `INSERT INTO logs (
-         user_id, client, start, end, arrival,
+         client_id, user_id, client, start, end, arrival,
          durationMs, decimalHours, notes, parts,
          billableTime, travelMileage, startMileage, arrivalMileage,
          startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
          invoice_number, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       RETURNING id, updated_at`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id, client_id, updated_at`
     ).bind(
-      userId,
+      clientId, userId,
       logData.client,
       logData.start,
       logData.end,
       logData.arrival || null,
-      logData.durationMs,
-      logData.decimalHours,
-      logData.notes,
-      logData.parts,
-      logData.billableTime,
-      logData.travelMileage,
-      logData.startMileage,
-      logData.arrivalMileage,
+      logData.durationMs ?? null,
+      logData.decimalHours ?? null,
+      logData.notes ?? null,
+      logData.parts ?? null,
+      logData.billableTime ?? null,
+      logData.travelMileage ?? null,
+      logData.startMileage ?? null,
+      logData.arrivalMileage ?? null,
       logData.startMs || null,
       logData.endMs || null,
       logData.arrivalMs || null,
@@ -485,6 +494,7 @@ const logData = await request.json();
     return withCORS(new Response(JSON.stringify({
       success: true,
       id: result.meta?.id || result.results?.[0]?.id,
+      clientId: result.results?.[0]?.client_id || clientId,
       updatedAt: serverUpdatedAt
     }), {
       headers: { 'Content-Type': 'application/json' }
@@ -510,7 +520,7 @@ async function getLog(request, env, url) {
     const logId = url.pathname.split('/').pop();
 
     const result = await env.DB.prepare(
-      'SELECT * FROM logs WHERE id = ? AND user_id = ?'
+      'SELECT * FROM logs WHERE id = ? AND user_id = ? AND deleted_at IS NULL'
     ).bind(logId, userId).first();
 
     if (!result) {
@@ -546,7 +556,7 @@ async function updateLog(request, env, url) {
 
     // Conflict resolution: only update if client's updatedAt is newer than server's updated_at
     const existing = await env.DB.prepare(
-      'SELECT id, updated_at FROM logs WHERE id = ? AND user_id = ?'
+      'SELECT id, deleted_at, updated_at FROM logs WHERE id = ? AND user_id = ?'
     ).bind(logId, userId).first();
 
     if (!existing) {
@@ -729,26 +739,40 @@ async function syncLogs(request, env) {
 
     for (const log of logs) {
       try {
+        // Resolve the stable cross-device identity. Every log is addressed by its
+        // clientId (a per-log UUID generated on the creating device). Legacy
+        // clients that don't send one fall back to the old id mapping so their
+        // updates keep hitting the right row; brand-new rows get a server-generated
+        // UUID. This is what fixes the cross-device collision: two devices that
+        // both started at local id=1 no longer overwrite each other, because the
+        // sync key is a globally-unique clientId, not the local autoincrement id.
+        let clientId = log.clientId;
+        if (!clientId && log.id) {
+          const legacy = await env.DB.prepare(
+            'SELECT client_id FROM logs WHERE id = ? AND user_id = ?'
+          ).bind(log.id, userId).first();
+          if (legacy?.client_id) clientId = legacy.client_id;
+        }
+        if (!clientId) clientId = crypto.randomUUID();
+
         if (log._deleted) {
-          if (log.id) {
-            // Soft-delete: set tombstone timestamp instead of hard-deleting.
-            // This allows other devices to learn about the deletion via getSyncChanges.
-            const result = await env.DB.prepare(
-              'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? RETURNING updated_at'
-            ).bind(log.id, userId).run();
-            const serverUpdatedAt = result.results?.[0]?.updated_at || null;
-            upserted.push({ id: log.id, action: 'deleted', updatedAt: serverUpdatedAt });
-          }
-        } else if (log.id) {
+          // Soft-delete: set tombstone timestamp instead of hard-deleting.
+          // This allows other devices to learn about the deletion via getSyncChanges.
+          const result = await env.DB.prepare(
+            'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND client_id = ? RETURNING updated_at'
+          ).bind(userId, clientId).run();
+          const serverUpdatedAt = result.results?.[0]?.updated_at || null;
+          upserted.push({ clientId, action: 'deleted', updatedAt: serverUpdatedAt });
+        } else {
           // Check if this row has already been tombstoned on the server.
           // If so, do NOT overwrite the deletion — "deletion wins".
           const existing = await env.DB.prepare(
-            'SELECT id, deleted_at, updated_at FROM logs WHERE id = ? AND user_id = ?'
-          ).bind(log.id, userId).first();
+            'SELECT deleted_at, updated_at FROM logs WHERE user_id = ? AND client_id = ?'
+          ).bind(userId, clientId).first();
 
           if (existing && existing.deleted_at) {
             // Row is tombstoned server-side. Return it so the client can delete locally.
-            serverTombstones.push({ id: log.id, action: 'deleted' });
+            serverTombstones.push({ clientId, action: 'deleted' });
           } else {
             // Conflict resolution: only update if client's updatedAt is newer than server's updated_at
             // Convert client's updatedAt (Unix epoch ms) to ISO string for comparison
@@ -767,15 +791,16 @@ async function syncLogs(request, env) {
               // Accept the write based on the client's raw timestamp (a future-skewed
               // edit legitimately represents a newer version), but store a sanitized
               // timestamp so D1 updated_at can never drift hours ahead of real time.
-              const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt);
+              const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000'));
+              const action = existing ? 'updated' : 'created';
               await env.DB.prepare(
-                `INSERT INTO logs (id, user_id, client, start, end, arrival,
+                `INSERT INTO logs (client_id, user_id, client, start, end, arrival,
                    durationMs, decimalHours, notes, parts,
                    billableTime, travelMileage, startMileage, arrivalMileage,
                    startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
                    invoice_number, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET
+                  ON CONFLICT(user_id, client_id) DO UPDATE SET
                    client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
                    durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
                    parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
@@ -788,51 +813,28 @@ async function syncLogs(request, env) {
                    updated_at=excluded.updated_at
                   WHERE logs.deleted_at IS NULL AND logs.user_id=?`
               ).bind(
-                log.id, userId, log.client, log.start, log.end, log.arrival || null,
-                log.durationMs, log.decimalHours, log.notes, log.parts,
-                log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
-                log.startMs || null, log.endMs || null, log.arrivalMs || null,
-                log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-                log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null,
+                clientId, userId, log.client, log.start, log.end, log.arrival ?? null,
+                log.durationMs ?? null, log.decimalHours ?? null, log.notes ?? null, log.parts ?? null,
+                log.billableTime ?? null, log.travelMileage ?? null, log.startMileage ?? null, log.arrivalMileage ?? null,
+                log.startMs ?? null, log.endMs ?? null, log.arrivalMs ?? null,
+                log.duration ?? null, log.travelDurationMs ?? null, log.onSiteDurationMs ?? null,
+                log.arrivalTime ?? null, log.isRemote ? 1 : 0, log.invoiceNumber ?? null,
                 storedUpdatedAt, userId
               ).run();
               // Fetch the server's updated_at after upsert
               const updated = await env.DB.prepare(
-                'SELECT updated_at FROM logs WHERE id = ? AND user_id = ?'
-              ).bind(log.id, userId).first();
-              const serverUpdatedAt = updated?.updated_at || storedUpdatedAt;
-              upserted.push({ id: log.id, action: 'updated', updatedAt: serverUpdatedAt });
+                'SELECT updated_at FROM logs WHERE user_id = ? AND client_id = ?'
+              ).bind(userId, clientId).first();
+              const confirmedUpdatedAt = updated?.updated_at || storedUpdatedAt;
+              upserted.push({ clientId, action, updatedAt: confirmedUpdatedAt });
             } else {
               // Client's version is older - don't overwrite, but return server's current updated_at
-              upserted.push({ id: log.id, action: 'conflict', serverUpdatedAt: serverUpdatedAt });
+              upserted.push({ clientId, action: 'conflict', serverUpdatedAt: serverUpdatedAt });
             }
           }
-        } else {
-          const clientUpdatedAt = log.updatedAt ? new Date(log.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000');
-          const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt);
-          const result = await env.DB.prepare(
-            `INSERT INTO logs (user_id, client, start, end, arrival,
-               durationMs, decimalHours, notes, parts,
-               billableTime, travelMileage, startMileage, arrivalMileage,
-               startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
-               invoice_number, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              RETURNING id, updated_at`
-          ).bind(
-            userId, log.client, log.start, log.end, log.arrival || null,
-            log.durationMs, log.decimalHours, log.notes, log.parts,
-            log.billableTime, log.travelMileage, log.startMileage, log.arrivalMileage,
-            log.startMs || null, log.endMs || null, log.arrivalMs || null,
-            log.duration || null, log.travelDurationMs || null, log.onSiteDurationMs || null,
-            log.arrivalTime || null, log.isRemote ? 1 : 0, log.invoiceNumber || null,
-            storedUpdatedAt
-          ).run();
-          const newId = result.meta?.id || result.results?.[0]?.id;
-          const serverUpdatedAt = result.results?.[0]?.updated_at || storedUpdatedAt;
-          upserted.push({ id: newId, action: 'created', localId: log._localId || null, updatedAt: serverUpdatedAt });
         }
       } catch (logError) {
-        errors.push({ id: log.id || log._localId, error: logError.message });
+        errors.push({ id: log.id || log.clientId || log._localId, error: logError.message });
       }
     }
 
