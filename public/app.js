@@ -1901,6 +1901,19 @@ function markSchemaUpgradeComplete() {
     localStorage.setItem('lastSyncedUpdatedAtSchemaVersion', LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION.toString());
 }
 
+// One-time repair flag for the invoice_number pull-mapping bug (pre-fix
+// syncFromCloud stored server rows verbatim, so the stale camelCase
+// invoiceNumber won over the authoritative snake_case invoice_number).
+// Versioned separately from the sync schema flag so the repair runs once
+// even for clients already on the current schema version.
+const INVOICE_NUMBER_REPAIR_VERSION = 1;
+function needsInvoiceNumberRepair() {
+    return parseInt(localStorage.getItem('invoiceNumberRepairVersion') || '0', 10) < INVOICE_NUMBER_REPAIR_VERSION;
+}
+function markInvoiceNumberRepairComplete() {
+    localStorage.setItem('invoiceNumberRepairVersion', INVOICE_NUMBER_REPAIR_VERSION.toString());
+}
+
 async function syncToCloud() {
     if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
     try {
@@ -1934,6 +1947,23 @@ async function syncToCloud() {
             }
             if (!log.clientId && !schemaUpgradePending) {
                 log.clientId = generateUuid();
+                needsBackfill = true;
+            }
+            // Strip the legacy snake_case invoice_number key left behind by the
+            // pre-fix pull path (see syncFromCloud). The camelCase invoiceNumber
+            // is the local source of truth. The one-time repair in syncFromCloud
+            // handles the authoritative merge; this backfill only strips the
+            // phantom key (adopting the server value when the local one is
+            // empty) without forcing the row dirty, so it can never clobber an
+            // unsynced local edit — the normal dirty/push flow uploads those.
+            if (log.invoice_number !== undefined) {
+                const serverInvoice = log.invoice_number ?? '';
+                const localInvoice = (typeof log.invoiceNumber === 'string') ? log.invoiceNumber : (log.invoiceNumber ?? '');
+                if (serverInvoice !== '' || localInvoice === '') {
+                    log.invoiceNumber = serverInvoice;
+                }
+                delete log.invoice_number;
+                if (typeof log.invoiceNumber !== 'string') log.invoiceNumber = log.invoiceNumber ?? '';
                 needsBackfill = true;
             }
         }
@@ -2159,11 +2189,19 @@ async function syncFromCloud(sinceOverride) {
         for (const serverRow of serverLogs) {
             await new Promise((resolve, reject) => {
                 // Normalize server-side fields to local names.
-                // client_id is the stable cross-device identity for this log.
+                // client_id is the stable cross-device identity for this log,
+                // and invoice_number is stored snake_case in D1 but camelCase
+                // (invoiceNumber) in IndexedDB. Without this mapping a pulled
+                // row keeps BOTH keys, and a later push sends invoiceNumber
+                // (possibly stale/empty) which overwrites the server value.
                 if (serverRow.client_id) {
                     serverRow.clientId = serverRow.client_id;
                 }
                 delete serverRow.client_id;
+                if (serverRow.invoice_number !== undefined) {
+                    serverRow.invoiceNumber = serverRow.invoice_number ?? '';
+                }
+                delete serverRow.invoice_number;
                 // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
                 // UTC string) to a Unix epoch ms number. D1 stores DATETIME
                 // values as UTC (the worker writes them via toISOString()),
@@ -2309,6 +2347,41 @@ async function syncFromCloud(sinceOverride) {
                 };
                 allReq.onerror = () => reject(allReq.error);
             });
+        }
+        // One-time repair for rows corrupted by the pre-fix pull path, which
+        // stored server rows verbatim: the stale camelCase invoiceNumber won
+        // over the authoritative snake_case invoice_number, and the row kept
+        // both keys. Repair runs inside the pull transaction's scope (same
+        // rules as the backfill in syncToCloud): prefer the server value only
+        // when it is non-empty or the local value is empty, so a non-empty
+        // local invoiceNumber with an empty server value (an unsynced local
+        // edit) is never clobbered. Rows that actually carried the phantom
+        // snake_case key are marked dirty so the merged value pushes.
+        const needsInvoiceRepair = needsInvoiceNumberRepair();
+        if (needsInvoiceRepair) {
+            const repairTx = db.transaction(['logs'], 'readwrite');
+            const repairStore = repairTx.objectStore('logs');
+            const repairReq = repairStore.getAll();
+            await new Promise((resolve, reject) => {
+                repairReq.onsuccess = () => {
+                    for (const r of repairReq.result) {
+                        const snake = r.invoice_number;
+                        if (snake === undefined) continue;
+                        const serverInvoice = snake ?? '';
+                        const localInvoice = (typeof r.invoiceNumber === 'string') ? r.invoiceNumber : (r.invoiceNumber ?? '');
+                        if (serverInvoice !== '' || localInvoice === '') {
+                            r.invoiceNumber = serverInvoice;
+                        }
+                        delete r.invoice_number;
+                        if (typeof r.invoiceNumber !== 'string') r.invoiceNumber = r.invoiceNumber ?? '';
+                        markLogDirty(r);
+                        repairStore.put(r);
+                    }
+                    resolve();
+                };
+                repairReq.onerror = () => reject(repairReq.error);
+            });
+            markInvoiceNumberRepairComplete();
         }
         // Seal the pull cursor past any future-timestamped rows just received (see
         // the computation above, which captured the raw timestamps before the

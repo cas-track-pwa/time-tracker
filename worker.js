@@ -21,7 +21,7 @@ const getCORSHeaders = (origin, env) => {
   };
 };
 
-const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export default {
   async fetch(request, env, ctx) {
