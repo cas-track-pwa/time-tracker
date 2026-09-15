@@ -20,15 +20,11 @@ dbRequest.onupgradeneeded = (e) => {
 
 dbRequest.onsuccess = (e) => {
     db = e.target.result;
-    consolidateStoredLogDateTimes()
-        .catch(err => console.error('Date-time consolidation failed:', err))
-        .then(() => {
-            renderLogs();
-            restoreTimerState();
-            checkConnectivity();
-            if (isAuthenticated()) { performSync(); }
-            if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); }
-        });
+    renderLogs();
+    restoreTimerState();
+    checkConnectivity();
+    if (isAuthenticated()) { performSync(); }
+    if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); }
 };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
@@ -453,7 +449,7 @@ function formatDecimalQuarter(ms) {
 // authored wall-clock can still be reconstructed. Rendering always shifts the
 // instant by its offset and formats in UTC, which yields the wall-clock the
 // user entered regardless of the device's current timezone. Rows without a
-// stored offset (legacy) fall back to the browser's offset for that instant.
+// stored offset fall back to the browser's offset for that instant.
 
 function offsetMinutesOf(d) {
     return -d.getTimezoneOffset();
@@ -506,9 +502,7 @@ function toDecimalHours(ms) {
     return (ms / (1000 * 60 * 60)).toFixed(2);
 }
 
-// Resolve a log's epoch-ms fields. Epoch ms is the only stored representation
-// (the legacy display strings were dropped in phase 2); rows pulled from the
-// server or read from IndexedDB are normalized before they are rendered.
+// Resolve a log's epoch-ms fields. Epoch ms is the only stored representation.
 function logStartMs(log) {
     return (log.startMs !== null && log.startMs !== undefined) ? log.startMs : null;
 }
@@ -540,9 +534,9 @@ function toIsoWithOffset(ms, offset) {
     return new Date(ms + off * 60000).toISOString().replace('Z', `${sign}${hh}:${mm}`);
 }
 
-// Extract minutes east of UTC from an ISO string. Returns null for 'Z' (the
-// legacy export format, which carried no authored offset) so the caller can
-// fall back to the browser offset rather than treating it as true UTC.
+// Extract minutes east of UTC from an ISO string. Returns null when the string
+// carries no explicit offset (e.g. a 'Z' suffix) so the caller can fall back to
+// the browser offset rather than treating it as true UTC.
 function parseOffsetMinutesFromIso(iso) {
     if (!iso) return null;
     const m = /([+-])(\d{2}):?(\d{2})$/.exec(iso);
@@ -559,60 +553,6 @@ function deriveOffsetMinutes(iso, ms) {
     const fromIso = parseOffsetMinutesFromIso(iso);
     if (fromIso !== null) return fromIso;
     return (ms === null || ms === undefined || isNaN(ms)) ? null : offsetMinutesOf(new Date(ms));
-}
-
-// Derive any missing epoch/offset/duration fields on a log and drop the legacy
-// display-string fields. Shared by the local consolidation pass and the sync
-// pull so both paths produce the same shape.
-function normalizeConsolidatedTimestamps(row) {
-    if ((row.startMs === null || row.startMs === undefined) && row.start) {
-        const d = parseToDate(row.start);
-        if (d) row.startMs = d.getTime();
-    }
-    if ((row.endMs === null || row.endMs === undefined) && row.end) {
-        const d = parseToDate(row.end);
-        if (d) row.endMs = d.getTime();
-    }
-    if ((row.arrivalMs === null || row.arrivalMs === undefined) && row.arrivalTime) {
-        const startMsVal = (row.startMs !== null && row.startMs !== undefined) ? row.startMs : null;
-        const timeMatch = /(\d{1,2}):(\d{2})/.exec(row.arrivalTime);
-        if (timeMatch && startMsVal !== null) {
-            let hours = parseInt(timeMatch[1], 10);
-            const minutes = parseInt(timeMatch[2], 10);
-            if (row.arrivalTime.includes('PM') && hours !== 12) hours += 12;
-            if (row.arrivalTime.includes('AM') && hours === 12) hours = 0;
-            const arrivalDate = new Date(startMsVal);
-            arrivalDate.setHours(hours, minutes, 0, 0);
-            row.arrivalMs = arrivalDate.getTime();
-        }
-    }
-    if ((row.startOffset === null || row.startOffset === undefined) && row.startMs !== null && row.startMs !== undefined) {
-        row.startOffset = offsetMinutesOf(new Date(row.startMs));
-    }
-    if ((row.endOffset === null || row.endOffset === undefined) && row.endMs !== null && row.endMs !== undefined) {
-        row.endOffset = offsetMinutesOf(new Date(row.endMs));
-    }
-    if ((row.arrivalOffset === null || row.arrivalOffset === undefined) && row.arrivalMs !== null && row.arrivalMs !== undefined) {
-        row.arrivalOffset = offsetMinutesOf(new Date(row.arrivalMs));
-    }
-    if ((row.durationMs === null || row.durationMs === undefined) && row.startMs !== null && row.startMs !== undefined && row.endMs !== null && row.endMs !== undefined) {
-        row.durationMs = row.endMs - row.startMs;
-    }
-    if ((row.travelDurationMs === null || row.travelDurationMs === undefined) && row.startMs !== null && row.startMs !== undefined && row.arrivalMs !== null && row.arrivalMs !== undefined) {
-        row.travelDurationMs = row.arrivalMs - row.startMs;
-    }
-    if ((row.onSiteDurationMs === null || row.onSiteDurationMs === undefined) && row.arrivalMs !== null && row.arrivalMs !== undefined && row.endMs !== null && row.endMs !== undefined) {
-        row.onSiteDurationMs = row.endMs - row.arrivalMs;
-    }
-}
-
-function stripLegacyDateTimeFields(row) {
-    delete row.start;
-    delete row.end;
-    delete row.arrival;
-    delete row.arrivalTime;
-    delete row.duration;
-    delete row.decimalHours;
 }
 
 function formatBillableTime(travelMs, onSiteMs, durationMs) {
@@ -1017,13 +957,6 @@ function renderLogs() {
     request.onerror = () => {
         logHistory.innerHTML = '<div class="empty-state">Failed to load logs.</div>';
     };
-}
-
-// Helper function to safely parse a date string or timestamp
-function parseToDate(dateVal) {
-    if (!dateVal) return null;
-    let d = new Date(dateVal);
-    return isNaN(d.getTime()) ? null : d;
 }
 
 function setJobTypeEntryFields(jobType, arrivalInput, mileageInput) {
@@ -1437,13 +1370,12 @@ if (lines.length < 2) {
 }
 
     const headers = lines[0].split(',');
-    const legacyHeaderCount = 15;
     const currentHeaderCount = 19;
     const invoiceHeaderCount = 20;
     const updatedAtHeaderCount = 21;
 
-    if (headers.length !== legacyHeaderCount && headers.length !== currentHeaderCount && headers.length !== invoiceHeaderCount && headers.length !== updatedAtHeaderCount) {
-        alert('Invalid CSV format. Expected ' + legacyHeaderCount + ', ' + currentHeaderCount + ', ' + invoiceHeaderCount + ', or ' + updatedAtHeaderCount + ' columns, found ' + headers.length + '.');
+    if (headers.length !== currentHeaderCount && headers.length !== invoiceHeaderCount && headers.length !== updatedAtHeaderCount) {
+        alert('Invalid CSV format. Expected ' + currentHeaderCount + ', ' + invoiceHeaderCount + ', or ' + updatedAtHeaderCount + ' columns, found ' + headers.length + '.');
         btnImportCsv.value = '';
         return;
     }
@@ -1451,34 +1383,24 @@ if (lines.length < 2) {
 const newLogs = [];
 for (let i = 1; i < lines.length; i++) {
     const row = parseCsvRow(lines[i]);
-    if (row.length >= 14) {
+    if (row.length >= 19) {
     const durationStr = row[5].replace(/^\"|\"$/g, '');
     const travelDurStr = row[6].replace(/^\"|\"$/g, '');
     const onSiteDurStr = row[7].replace(/^\"|\"$/g, '');
-    const startStr = row[2].replace(/^\"|\"$/g, '');
-    const endStr = row[4].replace(/^\"|\"$/g, '');
-    const arrivalStr = row[3].replace(/^\"|\"$/g, '') || null;
 
-    const isLegacy = row.length === 15;
-    const hasInvoice = row.length === 20;
-    const hasUpdatedAt = row.length === 21;
-    const notesIdx = isLegacy ? 13 : 14;
-    const partsIdx = isLegacy ? 14 : 15;
-    const startIsoIdx = isLegacy ? null : 16;
-    const endIsoIdx = isLegacy ? null : 17;
-    const arrivalIsoIdx = isLegacy ? null : 18;
-    const remoteIdx = isLegacy ? null : 13;
+    const hasInvoice = row.length >= 20;
+    const hasUpdatedAt = row.length >= 21;
     const invoiceIdx = hasInvoice ? 19 : null;
     const updatedAtIdx = hasUpdatedAt ? 20 : null;
 
-    const startIso = startIsoIdx !== null && row[startIsoIdx] ? row[startIsoIdx].replace(/^\"|\"$/g, '') : '';
-    const endIso = endIsoIdx !== null && row[endIsoIdx] ? row[endIsoIdx].replace(/^\"|\"$/g, '') : '';
-    const arrivalIso = arrivalIsoIdx !== null && row[arrivalIsoIdx] ? row[arrivalIsoIdx].replace(/^\"|\"$/g, '') : '';
+    const startIso = row[16] ? row[16].replace(/^\"|\"$/g, '') : '';
+    const endIso = row[17] ? row[17].replace(/^\"|\"$/g, '') : '';
+    const arrivalIso = row[18] ? row[18].replace(/^\"|\"$/g, '') : '';
     const updatedAtIso = updatedAtIdx !== null && row[updatedAtIdx] ? row[updatedAtIdx].replace(/^\"|\"$/g, '') : '';
 
-    const startMs = startIso ? new Date(startIso).getTime() : new Date(startStr).getTime();
-    const endMs = endIso ? new Date(endIso).getTime() : new Date(endStr).getTime();
-    const arrivalMs = arrivalIso ? new Date(arrivalIso).getTime() : (arrivalStr ? new Date(arrivalStr).getTime() : NaN);
+    const startMs = new Date(startIso).getTime();
+    const endMs = new Date(endIso).getTime();
+    const arrivalMs = arrivalIso ? new Date(arrivalIso).getTime() : NaN;
     const updatedAtMs = updatedAtIso ? new Date(updatedAtIso).getTime() : NaN;
 
     const startOffset = deriveOffsetMinutes(startIso, startMs);
@@ -1494,15 +1416,15 @@ const log = {
         arrivalOffset: arrivalOffset,
         endOffset: endOffset,
         durationMs: parseDurationToMs(durationStr),
-        notes: row[notesIdx].replace(/^\"|\"$/g, ''),
-        parts: row[partsIdx] ? row[partsIdx].replace(/^\"|\"$/g, '') : '',
+        notes: row[14].replace(/^\"|\"$/g, ''),
+        parts: row[15] ? row[15].replace(/^\"|\"$/g, '') : '',
         billableTime: row[9].replace(/^\"|\"$/g, '') || '1',
         travelDurationMs: parseDurationToMs(travelDurStr),
         onSiteDurationMs: parseDurationToMs(onSiteDurStr),
         startMileage: row[10] !== '' ? parseFloat(row[10]) : null,
         arrivalMileage: row[11] !== '' ? parseFloat(row[11]) : null,
         travelMileage: row[12] !== '' ? parseFloat(row[12]) : null,
-         isRemote: remoteIdx !== null ? (row[remoteIdx].replace(/^\"|\"$/g, '').toLowerCase() === 'true') : false,
+         isRemote: row[13].replace(/^\"|\"$/g, '').toLowerCase() === 'true',
          invoiceNumber: invoiceIdx !== null ? row[invoiceIdx].replace(/^\"|\"$/g, '') : "",
          clientId: generateUuid(),
          updatedAt: isNaN(updatedAtMs) ? null : updatedAtMs,
@@ -2022,80 +1944,6 @@ function setLastSyncTime(ts) {
     localStorage.setItem('lastSyncTime', ts.toString());
 }
 
-// Schema-version flag. Bumped whenever a change to the local log schema requires a
-// one-time full pull to repopulate per-row sync state. On the first sync after the
-// bump, the client passes since=0 to syncFromCloud, then clears the flag.
-//
-// v4: per-log clientId (UUID) cross-device identity. The full pull lets legacy
-// rows adopt the server's client_id (matched by the old id) and assigns fresh
-// UUIDs to rows that were never synced, before any push can run.
-//
-// v5: time/date consolidation. Epoch-ms fields are the single source of truth
-// and per-timestamp UTC offsets (startOffset/arrivalOffset/endOffset) were
-// added. The full pull lets server rows be normalized (legacy display strings
-// dropped, offsets derived) and lets locally-consolidated rows push their new
-// offsets.
-const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 5;
-function needsFullPullForSchemaUpgrade() {
-    return parseInt(localStorage.getItem('lastSyncedUpdatedAtSchemaVersion') || '0', 10) < LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION;
-}
-function markSchemaUpgradeComplete() {
-    localStorage.setItem('lastSyncedUpdatedAtSchemaVersion', LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION.toString());
-}
-
-// One-time local repair that moves every stored row onto the consolidated
-// time/date model: epoch-ms fields become authoritative, UTC offsets are
-// derived, and the legacy display strings (start/end/arrivalTime/duration/
-// decimalHours) are dropped. Rows that carried legacy fields are marked dirty
-// so the new offsets are pushed to the server. Versioned separately from the
-// sync schema flag so it runs exactly once.
-const DATE_TIME_CONSOLIDATION_VERSION = 1;
-function needsDateTimeConsolidation() {
-    return parseInt(localStorage.getItem('dateTimeConsolidationVersion') || '0', 10) < DATE_TIME_CONSOLIDATION_VERSION;
-}
-function markDateTimeConsolidationComplete() {
-    localStorage.setItem('dateTimeConsolidationVersion', DATE_TIME_CONSOLIDATION_VERSION.toString());
-}
-
-function consolidateStoredLogDateTimes() {
-    if (!db || !needsDateTimeConsolidation()) return Promise.resolve();
-    const legacyKeys = ['start', 'end', 'arrival', 'arrivalTime', 'duration', 'decimalHours'];
-    return new Promise((resolve) => {
-        const tx = db.transaction(['logs'], 'readwrite');
-        const store = tx.objectStore('logs');
-        const req = store.getAll();
-        req.onsuccess = () => {
-            for (const log of req.result) {
-                const hadLegacy = legacyKeys.some(k => log[k] !== undefined);
-                normalizeConsolidatedTimestamps(log);
-                stripLegacyDateTimeFields(log);
-                if (hadLegacy) {
-                    // The derived offsets are new information the server doesn't
-                    // have yet; dirty the row so the next push uploads them.
-                    markLogDirty(log);
-                }
-                store.put(log);
-            }
-        };
-        req.onerror = () => resolve();
-        tx.oncomplete = () => { markDateTimeConsolidationComplete(); resolve(); };
-        tx.onerror = () => resolve();
-    });
-}
-
-// One-time repair flag for the invoice_number pull-mapping bug (pre-fix
-// syncFromCloud stored server rows verbatim, so the stale camelCase
-// invoiceNumber won over the authoritative snake_case invoice_number).
-// Versioned separately from the sync schema flag so the repair runs once
-// even for clients already on the current schema version.
-const INVOICE_NUMBER_REPAIR_VERSION = 1;
-function needsInvoiceNumberRepair() {
-    return parseInt(localStorage.getItem('invoiceNumberRepairVersion') || '0', 10) < INVOICE_NUMBER_REPAIR_VERSION;
-}
-function markInvoiceNumberRepairComplete() {
-    localStorage.setItem('invoiceNumberRepairVersion', INVOICE_NUMBER_REPAIR_VERSION.toString());
-}
-
 async function syncToCloud() {
     if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
     try {
@@ -2105,62 +1953,6 @@ async function syncToCloud() {
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
-
-        // Backfill updatedAt / lastSyncedUpdatedAt / clientId for legacy entries.
-        // - updatedAt: use startMs as the fallback since that's when the entry was created
-        // - lastSyncedUpdatedAt: null means "never confirmed by server" — include in push
-        // - clientId: rows without one predate the per-log UUID identity. Assign a
-        //   fresh UUID now UNLESS a schema-upgrade full pull is still pending — in
-        //   that case the pull is about to adopt the server's client_id for rows that
-        //   were previously synced, and pushing a random UUID first would create a
-        //   duplicate server row. Rows without a clientId are simply skipped below
-        //   until that pull has run.
-        const schemaUpgradePending = needsFullPullForSchemaUpgrade();
-        const now = Date.now();
-        let needsBackfill = false;
-        for (const log of allLogs) {
-            if (log.updatedAt === null || log.updatedAt === undefined) {
-                log.updatedAt = log.startMs || now;
-                needsBackfill = true;
-            }
-            if (log.lastSyncedUpdatedAt === undefined) {
-                log.lastSyncedUpdatedAt = null;
-                needsBackfill = true;
-            }
-            if (!log.clientId && !schemaUpgradePending) {
-                log.clientId = generateUuid();
-                needsBackfill = true;
-            }
-            // Strip the legacy snake_case invoice_number key left behind by the
-            // pre-fix pull path (see syncFromCloud). The camelCase invoiceNumber
-            // is the local source of truth. The one-time repair in syncFromCloud
-            // handles the authoritative merge; this backfill only strips the
-            // phantom key (adopting the server value when the local one is
-            // empty) without forcing the row dirty, so it can never clobber an
-            // unsynced local edit — the normal dirty/push flow uploads those.
-            const hadLegacyDates = ['start', 'end', 'arrival', 'arrivalTime', 'duration', 'decimalHours'].some(k => log[k] !== undefined);
-            if (hadLegacyDates) {
-                normalizeConsolidatedTimestamps(log);
-                stripLegacyDateTimeFields(log);
-                needsBackfill = true;
-            }
-            if (log.invoice_number !== undefined) {
-                const serverInvoice = log.invoice_number ?? '';
-                const localInvoice = (typeof log.invoiceNumber === 'string') ? log.invoiceNumber : (log.invoiceNumber ?? '');
-                if (serverInvoice !== '' || localInvoice === '') {
-                    log.invoiceNumber = serverInvoice;
-                }
-                delete log.invoice_number;
-                if (typeof log.invoiceNumber !== 'string') log.invoiceNumber = log.invoiceNumber ?? '';
-                needsBackfill = true;
-            }
-        }
-        if (needsBackfill && db) {
-            const tx = db.transaction(['logs'], 'readwrite');
-            const store2 = tx.objectStore('logs');
-            allLogs.forEach(log => store2.put(log));
-            await new Promise(resolve => { tx.oncomplete = resolve; });
-        }
 
         // Snapshot per-log updatedAt at the moment we read the logs to push. This is the
         // value the push payload actually contained; we'll write the server-confirmed
@@ -2328,10 +2120,10 @@ async function syncToCloud() {
     }
 }
 
-async function syncFromCloud(sinceOverride) {
+async function syncFromCloud() {
     if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
     try {
-        const since = sinceOverride !== undefined ? sinceOverride : getLastSyncTime();
+        const since = getLastSyncTime();
         const response = await fetch(`${API_BASE}/api/sync?since=${since}`, {
             headers: getAuthHeaders()
         });
@@ -2372,7 +2164,6 @@ async function syncFromCloud(sinceOverride) {
         const tx = db.transaction(['logs'], 'readwrite');
         const store = tx.objectStore('logs');
         const clientIndex = store.index('byClientId');
-        const isSchemaUpgradePull = sinceOverride === 0;
 
         for (const serverRow of serverLogs) {
             await new Promise((resolve, reject) => {
@@ -2405,9 +2196,6 @@ async function syncFromCloud(sinceOverride) {
                     }
                 }
                 delete serverRow.updated_at;
-
-                normalizeConsolidatedTimestamps(serverRow);
-                stripLegacyDateTimeFields(serverRow);
 
                 const finishRow = (local) => {
                     if (serverRow.deleted_at) {
@@ -2448,7 +2236,7 @@ async function syncFromCloud(sinceOverride) {
                         resolve();
                         return;
                     }
-                    if (!isSchemaUpgradePull && typeof local.updatedAt === 'number' &&
+                    if (typeof local.updatedAt === 'number' &&
                         local.updatedAt > serverRow.updatedAt) {
                         // Local row is newer than the server's copy — there is a
                         // pending local edit that has not yet been confirmed by the
@@ -2464,7 +2252,7 @@ async function syncFromCloud(sinceOverride) {
                         resolve();
                         return;
                     }
-                    if (!isSchemaUpgradePull && typeof local.lastSyncedUpdatedAt === 'number' &&
+                    if (typeof local.lastSyncedUpdatedAt === 'number' &&
                         local.lastSyncedUpdatedAt > serverRow.updatedAt) {
                         // Local has already pushed a newer value to the server
                         // (or has a pending in-flight push). Keep the local
@@ -2490,90 +2278,12 @@ async function syncFromCloud(sinceOverride) {
                         finishRow(getByClientIdReq.result);
                         return;
                     }
-                    // Legacy adoption: only during the schema-upgrade full pull.
-                    // Rows created before per-log UUIDs were stored on the server
-                    // under the originating device's local autoincrement id, with
-                    // a backfilled client_id of 'legacy-<id>'. If a local row
-                    // shares that old id and has no clientId yet, it IS this row —
-                    // adopt the server's clientId so subsequent pushes address it
-                    // correctly and no duplicate is created.
-                    if (isSchemaUpgradePull && serverRow.clientId && serverRow.clientId.indexOf('legacy-') === 0) {
-                        const getByIdReq = store.get(serverRow.id);
-                        getByIdReq.onsuccess = () => {
-                            const byId = getByIdReq.result;
-                            if (byId && !byId.clientId) {
-                                byId.clientId = serverRow.clientId;
-                                finishRow(byId);
-                            } else {
-                                finishRow(null);
-                            }
-                        };
-                        getByIdReq.onerror = () => reject(getByIdReq.error);
-                    } else {
-                        finishRow(null);
-                    }
+                    finishRow(null);
                 };
                 getByClientIdReq.onerror = () => reject(getByClientIdReq.error);
             });
         }
 
-        // Assign clientIds to any remaining local rows that have no server
-        // counterpart (never-synced entries created before this schema change).
-        // They need a UUID so the next push can address them uniquely instead of
-        // colliding with another device's row. Runs during the schema-upgrade full
-        // pull; incremental pulls never encounter clientId-less rows.
-        if (isSchemaUpgradePull) {
-            const backfillTx = db.transaction(['logs'], 'readwrite');
-            const backfillStore = backfillTx.objectStore('logs');
-            const allReq = backfillStore.getAll();
-            await new Promise((resolve, reject) => {
-                allReq.onsuccess = () => {
-                    for (const r of allReq.result) {
-                        if (!r.clientId) {
-                            r.clientId = generateUuid();
-                            backfillStore.put(r);
-                        }
-                    }
-                    resolve();
-                };
-                allReq.onerror = () => reject(allReq.error);
-            });
-        }
-        // One-time repair for rows corrupted by the pre-fix pull path, which
-        // stored server rows verbatim: the stale camelCase invoiceNumber won
-        // over the authoritative snake_case invoice_number, and the row kept
-        // both keys. Repair runs inside the pull transaction's scope (same
-        // rules as the backfill in syncToCloud): prefer the server value only
-        // when it is non-empty or the local value is empty, so a non-empty
-        // local invoiceNumber with an empty server value (an unsynced local
-        // edit) is never clobbered. Rows that actually carried the phantom
-        // snake_case key are marked dirty so the merged value pushes.
-        const needsInvoiceRepair = needsInvoiceNumberRepair();
-        if (needsInvoiceRepair) {
-            const repairTx = db.transaction(['logs'], 'readwrite');
-            const repairStore = repairTx.objectStore('logs');
-            const repairReq = repairStore.getAll();
-            await new Promise((resolve, reject) => {
-                repairReq.onsuccess = () => {
-                    for (const r of repairReq.result) {
-                        const snake = r.invoice_number;
-                        if (snake === undefined) continue;
-                        const serverInvoice = snake ?? '';
-                        const localInvoice = (typeof r.invoiceNumber === 'string') ? r.invoiceNumber : (r.invoiceNumber ?? '');
-                        if (serverInvoice !== '' || localInvoice === '') {
-                            r.invoiceNumber = serverInvoice;
-                        }
-                        delete r.invoice_number;
-                        if (typeof r.invoiceNumber !== 'string') r.invoiceNumber = r.invoiceNumber ?? '';
-                        markLogDirty(r);
-                        repairStore.put(r);
-                    }
-                    resolve();
-                };
-                repairReq.onerror = () => reject(repairReq.error);
-            });
-            markInvoiceNumberRepairComplete();
-        }
         // Seal the pull cursor past any future-timestamped rows just received (see
         // the computation above, which captured the raw timestamps before the
         // processing loop deleted them) plus the server clock and prior cursor.
@@ -2593,28 +2303,13 @@ async function performSync() {
     syncInFlight = (async () => {
         syncStatusEl.classList.remove('hidden');
         updateSyncStatus('syncing');
-        // On the first sync after a schema upgrade, force a full pull so every server
-        // row gets a chance to populate lastSyncedUpdatedAt. Without this, legacy rows
-        // whose server-side updated_at is older than the current lastSyncTime would
-        // never come back in the incremental pull, leaving lastSyncedUpdatedAt=null and
-        // causing every push to be reported as a conflict.
-        const needsFullPull = needsFullPullForSchemaUpgrade();
-        let upResult, downResult;
-        if (needsFullPull) {
-            // Schema upgrade: pull first so lastSyncedUpdatedAt gets populated before
-            // the push runs (otherwise legacy rows would all be reported as conflicts).
-            downResult = await syncFromCloud(0);
-            upResult = await syncToCloud();
-            markSchemaUpgradeComplete();
-        } else {
-            // Normal sync: push FIRST, then pull. Doing the pull first would race with
-            // a pending syncAfterWrite from a recent local edit — the pull would
-            // bring back the un-edited server row and overwrite the local edit before
-            // the push got a chance to upload it. Pushing first guarantees any pending
-            // local changes are on the server before we ingest anything.
-            upResult = await syncToCloud();
-            downResult = await syncFromCloud(getLastSyncTime());
-        }
+        // Push FIRST, then pull. Doing the pull first would race with a pending
+        // syncAfterWrite from a recent local edit — the pull would bring back the
+        // un-edited server row and overwrite the local edit before the push got a
+        // chance to upload it. Pushing first guarantees any pending local changes
+        // are on the server before we ingest anything.
+        const upResult = await syncToCloud();
+        const downResult = await syncFromCloud();
         if (!upResult.success || !downResult.success) {
             const upErr = upResult.success ? '' : (upResult.error || 'upload failed');
             const downErr = downResult.success ? '' : (downResult.error || 'fetch failed');

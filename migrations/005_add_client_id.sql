@@ -5,8 +5,8 @@
 -- globally-unique client_id that is the sync key; the server's own autoincrement
 -- id is purely internal.
 --
--- Apply to remote: npx wrangler d1 execute time-tracker --remote < migrations/005_add_client_id.sql
--- Apply locally:   npx wrangler d1 execute time-tracker --local < migrations/005_add_client_id.sql
+-- Apply to remote: npx wrangler d1 execute time-tracker --remote --file migrations/005_add_client_id.sql
+-- Apply locally:   npx wrangler d1 execute time-tracker --local --file migrations/005_add_client_id.sql
 
 ALTER TABLE logs ADD COLUMN client_id TEXT;
 

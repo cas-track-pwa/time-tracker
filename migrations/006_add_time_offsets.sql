@@ -13,8 +13,8 @@
 -- stop writing them, and SQLite cannot alter a column constraint in place, so
 -- the table is rebuilt. A follow-up migration will drop the legacy columns.
 --
--- Apply to remote: npx wrangler d1 execute time-tracker --remote < migrations/006_add_time_offsets.sql
--- Apply locally:   npx wrangler d1 execute time-tracker --local < migrations/006_add_time_offsets.sql
+-- Apply to remote: npx wrangler d1 execute time-tracker --remote --file migrations/006_add_time_offsets.sql
+-- Apply locally:   npx wrangler d1 execute time-tracker --local --file migrations/006_add_time_offsets.sql
 
 CREATE TABLE logs_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -13,7 +13,7 @@ describe("CORS headers", () => {
   });
 
   it("responds to OPTIONS preflight with CORS methods", async () => {
-    const res = await api("OPTIONS", "/api/logs", { origin: "https://app.example.com" });
+    const res = await api("OPTIONS", "/api/sync", { origin: "https://app.example.com" });
     expect(res.status).toBe(200);
     expect(res.headers.get("Access-Control-Allow-Methods")).toContain("POST");
     expect(res.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");

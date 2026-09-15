@@ -16,8 +16,8 @@
 -- `idx_logs_start` indexes `start`, so it must be dropped before the column.
 -- All date ordering already uses `startMs` (ORDER BY startMs).
 --
--- Apply to remote: npx wrangler d1 execute time-tracker --remote < migrations/007_drop_legacy_datetime_columns.sql
--- Apply locally:   npx wrangler d1 execute time-tracker --local < migrations/007_drop_legacy_datetime_columns.sql
+-- Apply to remote: npx wrangler d1 execute time-tracker --remote --file migrations/007_drop_legacy_datetime_columns.sql
+-- Apply locally:   npx wrangler d1 execute time-tracker --local --file migrations/007_drop_legacy_datetime_columns.sql
 
 DROP INDEX IF EXISTS idx_logs_start;
 

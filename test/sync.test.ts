@@ -46,9 +46,12 @@ describe("POST /api/sync (batch upsert, clientId-keyed)", () => {
     expect(res.json?.upserted[0].action).toBe("updated");
     expect(res.json?.upserted[0].clientId).toBe(clientId);
 
-    const listed = await api("GET", "/api/logs", { token });
-    expect(listed.json!.length).toBe(1);
-    expect(listed.json![0].client).toBe("Updated Corp");
+    const row = await env.DB.prepare(
+      "SELECT client FROM logs WHERE client_id = ?"
+    ).bind(clientId).first();
+    expect(row?.client).toBe("Updated Corp");
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM logs").first();
+    expect(count?.n).toBe(1);
   });
 
   it("returns a conflict when pushing an older timestamp for an existing row", async () => {
@@ -81,8 +84,10 @@ describe("POST /api/sync (batch upsert, clientId-keyed)", () => {
     expect(del.json?.upserted[0].action).toBe("deleted");
     expect(del.json?.upserted[0].clientId).toBe(clientId);
 
-    const listed = await api("GET", "/api/logs", { token });
-    expect(listed.json!.length).toBe(0);
+    const row = await env.DB.prepare(
+      "SELECT deleted_at FROM logs WHERE client_id = ?"
+    ).bind(clientId).first();
+    expect(row?.deleted_at).toBeTruthy();
   });
 
   it("clamps future-skewed client timestamps to the server clock", async () => {
@@ -113,10 +118,8 @@ describe("cross-device ID collision regression", () => {
     expect(resA.json?.success).toBe(true);
     expect(resB.json?.success).toBe(true);
 
-    const listed = await api("GET", "/api/logs", { token });
-    expect(listed.json!.length).toBe(2);
-    const clients = listed.json!.map((l: any) => l.client).sort();
-    expect(clients).toEqual(["Device A Corp", "Device B Corp"]);
+    const rows = await env.DB.prepare("SELECT client FROM logs ORDER BY client").all();
+    expect(rows.results?.map((r: any) => r.client)).toEqual(["Device A Corp", "Device B Corp"]);
   });
 
   it("does not duplicate a row when the same clientId is pushed again", async () => {
@@ -130,35 +133,10 @@ describe("cross-device ID collision regression", () => {
     });
     expect(res.json?.upserted[0].action).toBe("updated");
 
-    const listed = await api("GET", "/api/logs", { token });
-    expect(listed.json!.length).toBe(1);
-  });
-
-  it("lets a legacy client (id only, no clientId) keep updating its pre-migration row", async () => {
-    // Pre-migration rows were stored under the client's local autoincrement id
-    // with a backfilled client_id of 'legacy-<id>'. A legacy client that still
-    // pushes id-only must resolve to that same row (no duplicate).
-    const reg = await api("POST", "/api/auth/register", {
-      body: { email: "user2@example.com", password: "password123" },
-    });
-    const token = reg.json!.token as string;
-    const userId = reg.json!.userId as number;
-
-    await env.DB.prepare(
-      `INSERT INTO logs (id, user_id, client_id, client, startMs, endMs, created_at, updated_at)
-       VALUES (5, ?, 'legacy-5', 'Seed Corp', 1000, 2000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-    ).bind(userId).run();
-
-    const res = await api("POST", "/api/sync", {
-      token,
-      body: { logs: [makeLog({ id: 5, clientId: undefined, client: "Legacy Corp Renamed", updatedAt: Date.now() })] },
-    });
-    expect(res.json?.upserted[0].clientId).toBe("legacy-5");
-    expect(res.json?.upserted[0].action).toBe("updated");
-
-    const listed = await api("GET", "/api/logs", { token });
-    expect(listed.json!.length).toBe(1);
-    expect(listed.json![0].client).toBe("Legacy Corp Renamed");
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM logs WHERE client_id = ?"
+    ).bind(clientId).first();
+    expect(row?.n).toBe(1);
   });
 });
 

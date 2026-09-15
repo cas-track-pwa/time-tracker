@@ -53,12 +53,12 @@ describe("POST /api/auth/login", () => {
 
 describe("token gating", () => {
   it("rejects API requests without a token", async () => {
-    const res = await api("GET", "/api/logs");
+    const res = await api("GET", "/api/sync?since=0");
     expect(res.status).toBe(401);
   });
 
   it("rejects API requests with a bogus token", async () => {
-    const res = await api("GET", "/api/logs", { token: "not-a-real-token" });
+    const res = await api("GET", "/api/sync?since=0", { token: "not-a-real-token" });
     expect(res.status).toBe(401);
   });
 });
@@ -69,7 +69,7 @@ describe("POST /api/auth/logout", () => {
     const out = await api("POST", "/api/auth/logout", { token });
     expect(out.status).toBe(200);
 
-    const res = await api("GET", "/api/logs", { token });
+    const res = await api("GET", "/api/sync?since=0", { token });
     expect(res.status).toBe(401);
   });
 });

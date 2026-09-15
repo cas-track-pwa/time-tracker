@@ -1,7 +1,7 @@
 // Cloudflare Workers API endpoints for Time Tracker
 // This file will be deployed as a Cloudflare Worker
 
-// CORS configuration — restrict ALLOWED_ORIGIN in production via wrangler secret/vars
+// CORS configuration â€” restrict ALLOWED_ORIGIN in production via wrangler secret/vars
 // For local dev, defaults to '*' (all origins)
 const getCORSHeaders = (origin, env) => {
   // In production, use the ALLOWED_ORIGIN env var if set; otherwise echo the request origin
@@ -60,14 +60,6 @@ export default {
   }
 };
 
-// Add CORS headers to a Response
-// Note: CORS headers are now added at the fetch handler level via getCORSHeaders()
-// for configurable origin support. This function is kept for backward compatibility
-// but no longer sets headers (the fetch handler handles it).
-function withCORS(response) {
-  return response;
-}
-
 async function serveStaticAsset(request, env, url) {
   const pathname = url.pathname;
 
@@ -117,7 +109,7 @@ async function serveStaticAsset(request, env, url) {
       const response = await env.ASSETS.fetch(new Request(assetUrl, request));
       if (response.status === 200) {
         const headers = new Headers(response.headers);
-        // Never long-cache sw.js — the service worker must pick up updates, and
+        // Never long-cache sw.js â€” the service worker must pick up updates, and
         // an immutable 1-year cache on it would defeat the update banner.
         headers.set('Cache-Control', pathname === '/sw.js' ? 'no-cache' : 'public, max-age=31536000');
         return new Response(response.body, { status: 200, headers });
@@ -177,23 +169,6 @@ async function handleAPI(request, env, url) {
      return changePassword(request, env);
    }
 
-  // Logs endpoints
-  if (path === '/api/logs' && method === 'GET') {
-    return getLogs(request, env);
-  }
-  if (path === '/api/logs' && method === 'POST') {
-    return createLog(request, env);
-  }
-  if (path.startsWith('/api/logs/') && method === 'GET') {
-    return getLog(request, env, url);
-  }
-  if (path.startsWith('/api/logs/') && method === 'PUT') {
-    return updateLog(request, env, url);
-  }
-  if (path.startsWith('/api/logs/') && method === 'DELETE') {
-    return deleteLog(request, env, url);
-  }
-
   // Sync endpoints (offline-first backup)
   if (path === '/api/sync' && method === 'POST') {
     return syncLogs(request, env);
@@ -211,18 +186,18 @@ async function registerUser(request, env) {
     const { email, password } = await request.json();
 
     if (!email || !password) {
-      return withCORS(new Response(JSON.stringify({ error: 'Email and password are required' }), {
+      return new Response(JSON.stringify({ error: 'Email and password are required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Check if email is in allowed users list
     if (!(await isUserAllowed(email, env))) {
-      return withCORS(new Response(JSON.stringify({ error: 'Access denied - email not authorized' }), {
+      return new Response(JSON.stringify({ error: 'Access denied - email not authorized' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Hash the password
@@ -237,29 +212,29 @@ async function registerUser(request, env) {
       const userId = result.meta?.last_row_id ?? result.results?.[0]?.id;
       const token = await createToken(env, userId, email.toLowerCase());
 
-      return withCORS(new Response(JSON.stringify({
+      return new Response(JSON.stringify({
         success: true,
         token,
         userId,
         email
       }), {
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     } catch (dbError) {
       // Check if it's a unique constraint violation (email already exists)
       if (dbError.message.includes('UNIQUE') || dbError.message.includes('constraint')) {
-        return withCORS(new Response(JSON.stringify({ error: 'User already exists' }), {
+        return new Response(JSON.stringify({ error: 'User already exists' }), {
           status: 409,
           headers: { 'Content-Type': 'application/json' }
-        }));
+        });
       }
       throw dbError;
     }
   } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   }
 }
 
@@ -269,18 +244,18 @@ async function loginUser(request, env) {
     const { email, password } = await request.json();
 
     if (!email || !password) {
-      return withCORS(new Response(JSON.stringify({ error: 'Email and password are required' }), {
+      return new Response(JSON.stringify({ error: 'Email and password are required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Check if email is in allowed users list
     if (!(await isUserAllowed(email, env))) {
-      return withCORS(new Response(JSON.stringify({ error: 'Access denied - email not authorized' }), {
+      return new Response(JSON.stringify({ error: 'Access denied - email not authorized' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Look up user in D1
@@ -289,37 +264,37 @@ async function loginUser(request, env) {
     ).bind(email.toLowerCase()).first();
 
     if (!user) {
-      return withCORS(new Response(JSON.stringify({ error: 'Invalid credentials' }), {
+      return new Response(JSON.stringify({ error: 'Invalid credentials' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Verify password
     const passwordValid = await verifyPassword(password, user.password_hash);
     if (!passwordValid) {
-      return withCORS(new Response(JSON.stringify({ error: 'Invalid credentials' }), {
+      return new Response(JSON.stringify({ error: 'Invalid credentials' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Generate signed token
     const token = await createToken(env, user.id, user.email);
 
-    return withCORS(new Response(JSON.stringify({
+    return new Response(JSON.stringify({
       success: true,
       token,
       userId: user.id,
       email: user.email
     }), {
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   }
 }
 
@@ -327,26 +302,26 @@ async function changePassword(request, env) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     const { currentPassword, newPassword } = await request.json();
 
     if (!currentPassword || !newPassword) {
-      return withCORS(new Response(JSON.stringify({ error: 'Current password and new password are required' }), {
+      return new Response(JSON.stringify({ error: 'Current password and new password are required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     if (newPassword.length < 8) {
-      return withCORS(new Response(JSON.stringify({ error: 'New password must be at least 8 characters' }), {
+      return new Response(JSON.stringify({ error: 'New password must be at least 8 characters' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Get user's current password hash
@@ -355,19 +330,19 @@ async function changePassword(request, env) {
     ).bind(userId).first();
 
     if (!user) {
-      return withCORS(new Response(JSON.stringify({ error: 'User not found' }), {
+      return new Response(JSON.stringify({ error: 'User not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Verify current password
     const passwordValid = await verifyPassword(currentPassword, user.password_hash);
     if (!passwordValid) {
-      return withCORS(new Response(JSON.stringify({ error: 'Current password is incorrect' }), {
+      return new Response(JSON.stringify({ error: 'Current password is incorrect' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     // Hash and update the new password
@@ -376,14 +351,14 @@ async function changePassword(request, env) {
       'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(newPasswordHash, userId).run();
 
-    return withCORS(new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   }
 }
 
@@ -401,255 +376,14 @@ async function logoutUser(request, env) {
         });
       }
     }
-    return withCORS(new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    }));
-  }
-}
-
-// Logs handlers
-async function getLogs(request, env) {
-  try {
-    const userId = await getUserIdFromToken(request, env);
-    if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    // Exclude tombstoned (soft-deleted) rows from normal listing
-    const result = await env.DB.prepare(
-      'SELECT * FROM logs WHERE user_id = ? AND deleted_at IS NULL ORDER BY startMs DESC'
-    ).bind(userId).all();
-
-    return withCORS(new Response(JSON.stringify(result.results), {
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  }
-}
-
-async function createLog(request, env) {
-  try {
-    const userId = await getUserIdFromToken(request, env);
-    if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-const logData = await request.json();
-
-    const clientUpdatedAt = logData.updatedAt ? new Date(logData.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
-    const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt);
-    const clientId = logData.clientId || crypto.randomUUID();
-
-    const result = await env.DB.prepare(
-      `INSERT INTO logs (
-         client_id, user_id, client,
-         durationMs, notes, parts,
-         billableTime, travelMileage, startMileage, arrivalMileage,
-         startMs, endMs, arrivalMs, travelDurationMs, onSiteDurationMs, isRemote,
-         startOffset, arrivalOffset, endOffset,
-         invoice_number, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       RETURNING id, client_id, updated_at`
-    ).bind(
-      clientId, userId,
-      logData.client,
-      logData.durationMs ?? null,
-      logData.notes ?? null,
-      logData.parts ?? null,
-      logData.billableTime ?? null,
-      logData.travelMileage ?? null,
-      logData.startMileage ?? null,
-      logData.arrivalMileage ?? null,
-      logData.startMs ?? null,
-      logData.endMs ?? null,
-      logData.arrivalMs ?? null,
-      logData.travelDurationMs ?? null,
-      logData.onSiteDurationMs ?? null,
-      logData.isRemote ? 1 : 0,
-      logData.startOffset ?? null,
-      logData.arrivalOffset ?? null,
-      logData.endOffset ?? null,
-      logData.invoiceNumber || null,
-      storedUpdatedAt
-).run();
-    const serverUpdatedAt = result.results?.[0]?.updated_at || storedUpdatedAt;
-
-    return withCORS(new Response(JSON.stringify({
-      success: true,
-      id: result.meta?.id || result.results?.[0]?.id,
-      clientId: result.results?.[0]?.client_id || clientId,
-      updatedAt: serverUpdatedAt
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  }
-}
-
-async function getLog(request, env, url) {
-  try {
-    const userId = await getUserIdFromToken(request, env);
-    if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    const logId = url.pathname.split('/').pop();
-
-    const result = await env.DB.prepare(
-      'SELECT * FROM logs WHERE id = ? AND user_id = ? AND deleted_at IS NULL'
-    ).bind(logId, userId).first();
-
-    if (!result) {
-      return withCORS(new Response(JSON.stringify({ error: 'Log not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    return withCORS(new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  }
-}
-
-async function updateLog(request, env, url) {
-  try {
-    const userId = await getUserIdFromToken(request, env);
-    if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    const logId = url.pathname.split('/').pop();
-    const logData = await request.json();
-
-    // Conflict resolution: only update if client's updatedAt is newer than server's updated_at
-    const existing = await env.DB.prepare(
-      'SELECT id, deleted_at, updated_at FROM logs WHERE id = ? AND user_id = ?'
-    ).bind(logId, userId).first();
-
-    if (!existing) {
-      return withCORS(new Response(JSON.stringify({ error: 'Log not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    if (existing.deleted_at) {
-      return withCORS(new Response(JSON.stringify({ error: 'Log has been deleted' }), {
-        status: 409,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    const clientUpdatedAt = logData.updatedAt ? new Date(logData.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
-    const serverUpdatedAt = existing.updated_at || '0000-01-01 00:00:00';
-
-    if (clientUpdatedAt && clientUpdatedAt < serverUpdatedAt) {
-      // Client's version is older - return conflict
-      return withCORS(new Response(JSON.stringify({ error: 'Conflict: log was modified on another device', conflict: true, serverUpdatedAt }), {
-        status: 409,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    const newUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000'));
-
-    const result = await env.DB.prepare(
-      `UPDATE logs SET
-        client = ?,
-        durationMs = ?, notes = ?, parts = ?,
-        billableTime = ?, travelMileage = ?, startMileage = ?, arrivalMileage = ?,
-        startMs = ?, endMs = ?, arrivalMs = ?, travelDurationMs = ?, onSiteDurationMs = ?,
-        startOffset = ?, arrivalOffset = ?, endOffset = ?,
-        isRemote = ?,
-        invoice_number = ?,
-        updated_at = ?
-      WHERE id = ? AND user_id = ?`
-    ).bind(
-      logData.client,
-      logData.durationMs, logData.notes, logData.parts,
-      logData.billableTime, logData.travelMileage, logData.startMileage, logData.arrivalMileage,
-      logData.startMs ?? null, logData.endMs ?? null, logData.arrivalMs ?? null,
-      logData.travelDurationMs ?? null, logData.onSiteDurationMs ?? null,
-      logData.startOffset ?? null, logData.arrivalOffset ?? null, logData.endOffset ?? null,
-      logData.isRemote ? 1 : 0,
-      logData.invoiceNumber || null,
-      newUpdatedAt,
-      logId, userId
-    ).run();
-
-    // Fetch the updated row to get the actual updated_at
-    const updated = await env.DB.prepare(
-      'SELECT updated_at FROM logs WHERE id = ? AND user_id = ?'
-    ).bind(logId, userId).first();
-    const serverUpdatedAtResult = updated?.updated_at || newUpdatedAt;
-
-    return withCORS(new Response(JSON.stringify({ success: true, updatedAt: serverUpdatedAtResult }), {
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  }
-}
-
-async function deleteLog(request, env, url) {
-  try {
-    const userId = await getUserIdFromToken(request, env);
-    if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-
-    const logId = url.pathname.split('/').pop();
-
-    // Soft-delete via tombstone so other devices can learn about this deletion on sync
-    await env.DB.prepare(
-      'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?'
-    ).bind(logId, userId).run();
-
-    return withCORS(new Response(JSON.stringify({ success: true }), {
-      headers: { 'Content-Type': 'application/json' }
-    }));
-  } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   }
 }
 
@@ -700,10 +434,10 @@ async function isUserAllowed(email, env) {
 const MAX_CLIENT_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 // Clamp client-provided updated_at timestamps that are unreasonably far in the
-// future (a fast client clock, or corrupted legacy values). Without this, an
-// edited row can carry an updated_at that is permanently ahead of every
-// incremental pull cursor (which tracks real time), so the server's
-// `updated_at > since` filter re-serves that row on every sync forever.
+// future (a fast client clock). Without this, an edited row can carry an
+// updated_at that is permanently ahead of every incremental pull cursor (which
+// tracks real time), so the server's `updated_at > since` filter re-serves that
+// row on every sync forever.
 function sanitizeClientTimestamp(clientIso) {
   if (!clientIso) return clientIso;
   const clientMs = new Date(clientIso).getTime();
@@ -718,17 +452,17 @@ async function syncLogs(request, env) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401, headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     const body = await request.json();
     const { logs } = body;
     if (!Array.isArray(logs)) {
-      return withCORS(new Response(JSON.stringify({ error: 'logs must be an array' }), {
+      return new Response(JSON.stringify({ error: 'logs must be an array' }), {
         status: 400, headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     const upserted = [];
@@ -739,19 +473,12 @@ async function syncLogs(request, env) {
     for (const log of logs) {
       try {
         // Resolve the stable cross-device identity. Every log is addressed by its
-        // clientId (a per-log UUID generated on the creating device). Legacy
-        // clients that don't send one fall back to the old id mapping so their
-        // updates keep hitting the right row; brand-new rows get a server-generated
-        // UUID. This is what fixes the cross-device collision: two devices that
-        // both started at local id=1 no longer overwrite each other, because the
-        // sync key is a globally-unique clientId, not the local autoincrement id.
+        // clientId (a per-log UUID generated on the creating device). This is what
+        // fixes the cross-device collision: two devices that both started at local
+        // id=1 no longer overwrite each other, because the sync key is a
+        // globally-unique clientId, not the local autoincrement id. (A log arriving
+        // without one gets a server-generated UUID.)
         let clientId = log.clientId;
-        if (!clientId && log.id) {
-          const legacy = await env.DB.prepare(
-            'SELECT client_id FROM logs WHERE id = ? AND user_id = ?'
-          ).bind(log.id, userId).first();
-          if (legacy?.client_id) clientId = legacy.client_id;
-        }
         if (!clientId) clientId = crypto.randomUUID();
 
         if (log._deleted) {
@@ -764,7 +491,7 @@ async function syncLogs(request, env) {
           upserted.push({ clientId, action: 'deleted', updatedAt: serverUpdatedAt });
         } else {
           // Check if this row has already been tombstoned on the server.
-          // If so, do NOT overwrite the deletion — "deletion wins".
+          // If so, do NOT overwrite the deletion â€” "deletion wins".
           const existing = await env.DB.prepare(
             'SELECT deleted_at, updated_at FROM logs WHERE user_id = ? AND client_id = ?'
           ).bind(userId, clientId).first();
@@ -781,11 +508,10 @@ async function syncLogs(request, env) {
             // Only proceed with upsert if the row is new, the client didn't send a
             // timestamp, or the client's updatedAt is at least as new as the server's.
             // The client uses per-row lastSyncedUpdatedAt to suppress no-op re-pushes,
-            // so the only time an equal-timestamp upsert reaches the server is for
-            // legacy rows (where the client never tracked lastSyncedUpdatedAt) or for
-            // rows that genuinely have the same updatedAt on both sides. Either way,
-            // accepting the upsert is a no-op on D1 and lets the client record the
-            // server's confirmed updated_at as lastSyncedUpdatedAt for subsequent syncs.
+            // so an equal-timestamp upsert only reaches the server when both sides
+            // genuinely share the same updatedAt. Accepting it is a no-op on D1 and
+            // lets the client record the server's confirmed updated_at for subsequent
+            // syncs.
             if (!existing || !clientUpdatedAt || clientUpdatedAt >= serverUpdatedAt) {
               // Accept the write based on the client's raw timestamp (a future-skewed
               // edit legitimately represents a newer version), but store a sanitized
@@ -836,7 +562,7 @@ async function syncLogs(request, env) {
           }
         }
       } catch (logError) {
-        errors.push({ id: log.id || log.clientId || log._localId, error: logError.message });
+        errors.push({ clientId: log.clientId, error: logError.message });
       }
     }
 
@@ -844,7 +570,7 @@ async function syncLogs(request, env) {
       await env.TIME_TRACKER_KV.put(`sync_${userId}`, Date.now().toString());
     }
 
-    return withCORS(new Response(JSON.stringify({
+    return new Response(JSON.stringify({
       success: true,
       upserted,
       // Tombstones the client needs to apply locally (entries deleted on another device)
@@ -853,11 +579,11 @@ async function syncLogs(request, env) {
       serverTime: Date.now()
     }), {
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   }
 }
 
@@ -868,9 +594,9 @@ async function getSyncChanges(request, env, url) {
   try {
     const userId = await getUserIdFromToken(request, env);
     if (!userId) {
-      return withCORS(new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401, headers: { 'Content-Type': 'application/json' }
-      }));
+      });
     }
 
     const since = url.searchParams.get('since');
@@ -881,7 +607,7 @@ async function getSyncChanges(request, env, url) {
       ? new Date(sinceMs).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000')
       : '0000-01-01 00:00:00';
 
-    // Return ALL rows updated since last sync — including tombstoned ones.
+    // Return ALL rows updated since last sync â€” including tombstoned ones.
     // The client inspects deleted_at to decide whether to upsert or delete locally.
     // Strict > (not >=) so rows whose updated_at equals since are not re-included
     // on the next pull. The client sets lastSyncTime = serverTime, which is
@@ -891,15 +617,15 @@ async function getSyncChanges(request, env, url) {
       `SELECT * FROM logs WHERE user_id = ? AND updated_at > ? ORDER BY startMs DESC`
     ).bind(userId, sinceDate).all();
 
-    return withCORS(new Response(JSON.stringify({
+    return new Response(JSON.stringify({
       logs: result.results || [], serverTime: Date.now()
     }), {
       headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   } catch (error) {
-    return withCORS(new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { 'Content-Type': 'application/json' }
-    }));
+    });
   }
 }
 
