@@ -425,7 +425,7 @@ async function getLogs(request, env) {
 
     // Exclude tombstoned (soft-deleted) rows from normal listing
     const result = await env.DB.prepare(
-      'SELECT * FROM logs WHERE user_id = ? AND deleted_at IS NULL ORDER BY start DESC'
+      'SELECT * FROM logs WHERE user_id = ? AND deleted_at IS NULL ORDER BY startMs DESC'
     ).bind(userId).all();
 
     return withCORS(new Response(JSON.stringify(result.results), {
@@ -457,35 +457,33 @@ const logData = await request.json();
 
     const result = await env.DB.prepare(
       `INSERT INTO logs (
-         client_id, user_id, client, start, end, arrival,
-         durationMs, decimalHours, notes, parts,
+         client_id, user_id, client,
+         durationMs, notes, parts,
          billableTime, travelMileage, startMileage, arrivalMileage,
-         startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
+         startMs, endMs, arrivalMs, travelDurationMs, onSiteDurationMs, isRemote,
+         startOffset, arrivalOffset, endOffset,
          invoice_number, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id, client_id, updated_at`
     ).bind(
       clientId, userId,
       logData.client,
-      logData.start,
-      logData.end,
-      logData.arrival || null,
       logData.durationMs ?? null,
-      logData.decimalHours ?? null,
       logData.notes ?? null,
       logData.parts ?? null,
       logData.billableTime ?? null,
       logData.travelMileage ?? null,
       logData.startMileage ?? null,
       logData.arrivalMileage ?? null,
-      logData.startMs || null,
-      logData.endMs || null,
-      logData.arrivalMs || null,
-      logData.duration || null,
-      logData.travelDurationMs || null,
-      logData.onSiteDurationMs || null,
-      logData.arrivalTime || null,
+      logData.startMs ?? null,
+      logData.endMs ?? null,
+      logData.arrivalMs ?? null,
+      logData.travelDurationMs ?? null,
+      logData.onSiteDurationMs ?? null,
       logData.isRemote ? 1 : 0,
+      logData.startOffset ?? null,
+      logData.arrivalOffset ?? null,
+      logData.endOffset ?? null,
       logData.invoiceNumber || null,
       storedUpdatedAt
 ).run();
@@ -588,21 +586,22 @@ async function updateLog(request, env, url) {
 
     const result = await env.DB.prepare(
       `UPDATE logs SET
-        client = ?, start = ?, end = ?, arrival = ?,
-        durationMs = ?, decimalHours = ?, notes = ?, parts = ?,
+        client = ?,
+        durationMs = ?, notes = ?, parts = ?,
         billableTime = ?, travelMileage = ?, startMileage = ?, arrivalMileage = ?,
-        startMs = ?, endMs = ?, arrivalMs = ?, duration = ?, travelDurationMs = ?, onSiteDurationMs = ?, arrivalTime = ?,
+        startMs = ?, endMs = ?, arrivalMs = ?, travelDurationMs = ?, onSiteDurationMs = ?,
+        startOffset = ?, arrivalOffset = ?, endOffset = ?,
         isRemote = ?,
         invoice_number = ?,
         updated_at = ?
       WHERE id = ? AND user_id = ?`
     ).bind(
-      logData.client, logData.start, logData.end, logData.arrival || null,
-      logData.durationMs, logData.decimalHours, logData.notes, logData.parts,
+      logData.client,
+      logData.durationMs, logData.notes, logData.parts,
       logData.billableTime, logData.travelMileage, logData.startMileage, logData.arrivalMileage,
-      logData.startMs || null, logData.endMs || null, logData.arrivalMs || null,
-      logData.duration || null, logData.travelDurationMs || null, logData.onSiteDurationMs || null,
-      logData.arrivalTime || null,
+      logData.startMs ?? null, logData.endMs ?? null, logData.arrivalMs ?? null,
+      logData.travelDurationMs ?? null, logData.onSiteDurationMs ?? null,
+      logData.startOffset ?? null, logData.arrivalOffset ?? null, logData.endOffset ?? null,
       logData.isRemote ? 1 : 0,
       logData.invoiceNumber || null,
       newUpdatedAt,
@@ -794,31 +793,34 @@ async function syncLogs(request, env) {
               const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000'));
               const action = existing ? 'updated' : 'created';
               await env.DB.prepare(
-                `INSERT INTO logs (client_id, user_id, client, start, end, arrival,
-                   durationMs, decimalHours, notes, parts,
+                `INSERT INTO logs (client_id, user_id, client,
+                   durationMs, notes, parts,
                    billableTime, travelMileage, startMileage, arrivalMileage,
-                   startMs, endMs, arrivalMs, duration, travelDurationMs, onSiteDurationMs, arrivalTime, isRemote,
+                   startMs, endMs, arrivalMs, travelDurationMs, onSiteDurationMs, isRemote,
+                   startOffset, arrivalOffset, endOffset,
                    invoice_number, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(user_id, client_id) DO UPDATE SET
-                   client=excluded.client, start=excluded.start, end=excluded.end, arrival=excluded.arrival,
-                   durationMs=excluded.durationMs, decimalHours=excluded.decimalHours, notes=excluded.notes,
+                   client=excluded.client,
+                   durationMs=excluded.durationMs, notes=excluded.notes,
                    parts=excluded.parts, billableTime=excluded.billableTime, travelMileage=excluded.travelMileage,
                    startMileage=excluded.startMileage, arrivalMileage=excluded.arrivalMileage,
                    startMs=excluded.startMs, endMs=excluded.endMs, arrivalMs=excluded.arrivalMs,
-                   duration=excluded.duration, travelDurationMs=excluded.travelDurationMs,
-                   onSiteDurationMs=excluded.onSiteDurationMs, arrivalTime=excluded.arrivalTime,
+                   travelDurationMs=excluded.travelDurationMs,
+                   onSiteDurationMs=excluded.onSiteDurationMs,
+                   startOffset=excluded.startOffset, arrivalOffset=excluded.arrivalOffset, endOffset=excluded.endOffset,
                    isRemote=excluded.isRemote,
                    invoice_number=excluded.invoice_number,
                    updated_at=excluded.updated_at
                   WHERE logs.deleted_at IS NULL AND logs.user_id=?`
               ).bind(
-                clientId, userId, log.client, log.start, log.end, log.arrival ?? null,
-                log.durationMs ?? null, log.decimalHours ?? null, log.notes ?? null, log.parts ?? null,
+                clientId, userId, log.client,
+                log.durationMs ?? null, log.notes ?? null, log.parts ?? null,
                 log.billableTime ?? null, log.travelMileage ?? null, log.startMileage ?? null, log.arrivalMileage ?? null,
                 log.startMs ?? null, log.endMs ?? null, log.arrivalMs ?? null,
-                log.duration ?? null, log.travelDurationMs ?? null, log.onSiteDurationMs ?? null,
-                log.arrivalTime ?? null, log.isRemote ? 1 : 0, log.invoiceNumber ?? null,
+                log.travelDurationMs ?? null, log.onSiteDurationMs ?? null, log.isRemote ? 1 : 0,
+                log.startOffset ?? null, log.arrivalOffset ?? null, log.endOffset ?? null,
+                log.invoiceNumber ?? null,
                 storedUpdatedAt, userId
               ).run();
               // Fetch the server's updated_at after upsert
@@ -886,7 +888,7 @@ async function getSyncChanges(request, env, url) {
     // generated after the query snapshot completes, so any row with
     // updated_at < serverTime is correctly excluded from the next pull.
     const result = await env.DB.prepare(
-      `SELECT * FROM logs WHERE user_id = ? AND updated_at > ? ORDER BY start DESC`
+      `SELECT * FROM logs WHERE user_id = ? AND updated_at > ? ORDER BY startMs DESC`
     ).bind(userId, sinceDate).all();
 
     return withCORS(new Response(JSON.stringify({

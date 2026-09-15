@@ -145,8 +145,8 @@ describe("cross-device ID collision regression", () => {
     const userId = reg.json!.userId as number;
 
     await env.DB.prepare(
-      `INSERT INTO logs (id, user_id, client_id, client, start, end, created_at, updated_at)
-       VALUES (5, ?, 'legacy-5', 'Seed Corp', 'x', 'y', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      `INSERT INTO logs (id, user_id, client_id, client, startMs, endMs, created_at, updated_at)
+       VALUES (5, ?, 'legacy-5', 'Seed Corp', 1000, 2000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     ).bind(userId).run();
 
     const res = await api("POST", "/api/sync", {

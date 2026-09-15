@@ -18,7 +18,18 @@ dbRequest.onupgradeneeded = (e) => {
     }
 };
 
-dbRequest.onsuccess = (e) => { db = e.target.result; renderLogs(); restoreTimerState(); checkConnectivity(); if (isAuthenticated()) { performSync(); } if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); } };
+dbRequest.onsuccess = (e) => {
+    db = e.target.result;
+    consolidateStoredLogDateTimes()
+        .catch(err => console.error('Date-time consolidation failed:', err))
+        .then(() => {
+            renderLogs();
+            restoreTimerState();
+            checkConnectivity();
+            if (isAuthenticated()) { performSync(); }
+            if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); }
+        });
+};
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
 
 let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, pendingResumeLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false, currentJobType = 'travel';
@@ -436,6 +447,174 @@ function formatDecimalQuarter(ms) {
     return quarterHours.toFixed(2).replace(/\.00$/, '');
 }
 
+// --- Consolidated time/date helpers ---
+// Epoch-ms fields (startMs / arrivalMs / endMs) are the single source of truth.
+// The *_Offset fields store minutes east of UTC at capture time so the
+// authored wall-clock can still be reconstructed. Rendering always shifts the
+// instant by its offset and formats in UTC, which yields the wall-clock the
+// user entered regardless of the device's current timezone. Rows without a
+// stored offset (legacy) fall back to the browser's offset for that instant.
+
+function offsetMinutesOf(d) {
+    return -d.getTimezoneOffset();
+}
+
+// Shift an instant so that reading the result as UTC yields its wall-clock.
+function wallClockMs(ms, offset) {
+    if (ms === null || ms === undefined || isNaN(ms)) return null;
+    const off = (typeof offset === 'number' && isFinite(offset)) ? offset : offsetMinutesOf(new Date(ms));
+    return ms + off * 60000;
+}
+
+function toWallClockDate(ms, offset) {
+    const wc = wallClockMs(ms, offset);
+    return wc === null ? null : new Date(wc);
+}
+
+function formatLogTime(ms, offset) {
+    const d = toWallClockDate(ms, offset);
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+}
+
+function formatLogDateTime(ms, offset) {
+    const d = toWallClockDate(ms, offset);
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleString([], { timeZone: 'UTC' });
+}
+
+function formatLogDate(ms, offset, options) {
+    const d = toWallClockDate(ms, offset);
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleDateString([], Object.assign({ timeZone: 'UTC' }, options || {}));
+}
+
+// YYYY-MM-DDTHH:mm for a datetime-local input, in the authored wall-clock.
+function formatWallClockDateTimeLocal(ms, offset) {
+    const d = toWallClockDate(ms, offset);
+    if (!d || isNaN(d.getTime())) return '';
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const hours = String(d.getUTCHours()).padStart(2, '0');
+    const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toDecimalHours(ms) {
+    if (ms === null || ms === undefined || isNaN(ms)) return '0';
+    return (ms / (1000 * 60 * 60)).toFixed(2);
+}
+
+// Resolve a log's epoch-ms fields. Epoch ms is the only stored representation
+// (the legacy display strings were dropped in phase 2); rows pulled from the
+// server or read from IndexedDB are normalized before they are rendered.
+function logStartMs(log) {
+    return (log.startMs !== null && log.startMs !== undefined) ? log.startMs : null;
+}
+
+function logEndMs(log) {
+    return (log.endMs !== null && log.endMs !== undefined) ? log.endMs : null;
+}
+
+function logArrivalMs(log) {
+    return (log.arrivalMs !== null && log.arrivalMs !== undefined) ? log.arrivalMs : null;
+}
+
+function logDurationMs(log) {
+    if (log.durationMs !== null && log.durationMs !== undefined) return log.durationMs;
+    const s = logStartMs(log);
+    const e = logEndMs(log);
+    return (s !== null && e !== null) ? e - s : null;
+}
+
+// ISO 8601 with an explicit offset, e.g. 2026-09-15T15:00:00.000-05:00. Carries
+// both the absolute instant and the authored wall-clock for CSV round-tripping.
+function toIsoWithOffset(ms, offset) {
+    if (ms === null || ms === undefined || isNaN(ms)) return '';
+    const off = (typeof offset === 'number' && isFinite(offset)) ? offset : offsetMinutesOf(new Date(ms));
+    const sign = off >= 0 ? '+' : '-';
+    const abs = Math.abs(off);
+    const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+    const mm = String(abs % 60).padStart(2, '0');
+    return new Date(ms + off * 60000).toISOString().replace('Z', `${sign}${hh}:${mm}`);
+}
+
+// Extract minutes east of UTC from an ISO string. Returns null for 'Z' (the
+// legacy export format, which carried no authored offset) so the caller can
+// fall back to the browser offset rather than treating it as true UTC.
+function parseOffsetMinutesFromIso(iso) {
+    if (!iso) return null;
+    const m = /([+-])(\d{2}):?(\d{2})$/.exec(iso);
+    if (m) {
+        const sign = m[1] === '-' ? -1 : 1;
+        return sign * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+    }
+    return null;
+}
+
+// Prefer an explicit offset embedded in an ISO string; otherwise use the
+// browser's offset for that instant.
+function deriveOffsetMinutes(iso, ms) {
+    const fromIso = parseOffsetMinutesFromIso(iso);
+    if (fromIso !== null) return fromIso;
+    return (ms === null || ms === undefined || isNaN(ms)) ? null : offsetMinutesOf(new Date(ms));
+}
+
+// Derive any missing epoch/offset/duration fields on a log and drop the legacy
+// display-string fields. Shared by the local consolidation pass and the sync
+// pull so both paths produce the same shape.
+function normalizeConsolidatedTimestamps(row) {
+    if ((row.startMs === null || row.startMs === undefined) && row.start) {
+        const d = parseToDate(row.start);
+        if (d) row.startMs = d.getTime();
+    }
+    if ((row.endMs === null || row.endMs === undefined) && row.end) {
+        const d = parseToDate(row.end);
+        if (d) row.endMs = d.getTime();
+    }
+    if ((row.arrivalMs === null || row.arrivalMs === undefined) && row.arrivalTime) {
+        const startMsVal = (row.startMs !== null && row.startMs !== undefined) ? row.startMs : null;
+        const timeMatch = /(\d{1,2}):(\d{2})/.exec(row.arrivalTime);
+        if (timeMatch && startMsVal !== null) {
+            let hours = parseInt(timeMatch[1], 10);
+            const minutes = parseInt(timeMatch[2], 10);
+            if (row.arrivalTime.includes('PM') && hours !== 12) hours += 12;
+            if (row.arrivalTime.includes('AM') && hours === 12) hours = 0;
+            const arrivalDate = new Date(startMsVal);
+            arrivalDate.setHours(hours, minutes, 0, 0);
+            row.arrivalMs = arrivalDate.getTime();
+        }
+    }
+    if ((row.startOffset === null || row.startOffset === undefined) && row.startMs !== null && row.startMs !== undefined) {
+        row.startOffset = offsetMinutesOf(new Date(row.startMs));
+    }
+    if ((row.endOffset === null || row.endOffset === undefined) && row.endMs !== null && row.endMs !== undefined) {
+        row.endOffset = offsetMinutesOf(new Date(row.endMs));
+    }
+    if ((row.arrivalOffset === null || row.arrivalOffset === undefined) && row.arrivalMs !== null && row.arrivalMs !== undefined) {
+        row.arrivalOffset = offsetMinutesOf(new Date(row.arrivalMs));
+    }
+    if ((row.durationMs === null || row.durationMs === undefined) && row.startMs !== null && row.startMs !== undefined && row.endMs !== null && row.endMs !== undefined) {
+        row.durationMs = row.endMs - row.startMs;
+    }
+    if ((row.travelDurationMs === null || row.travelDurationMs === undefined) && row.startMs !== null && row.startMs !== undefined && row.arrivalMs !== null && row.arrivalMs !== undefined) {
+        row.travelDurationMs = row.arrivalMs - row.startMs;
+    }
+    if ((row.onSiteDurationMs === null || row.onSiteDurationMs === undefined) && row.arrivalMs !== null && row.arrivalMs !== undefined && row.endMs !== null && row.endMs !== undefined) {
+        row.onSiteDurationMs = row.endMs - row.arrivalMs;
+    }
+}
+
+function stripLegacyDateTimeFields(row) {
+    delete row.start;
+    delete row.end;
+    delete row.arrival;
+    delete row.arrivalTime;
+    delete row.duration;
+    delete row.decimalHours;
+}
+
 function formatBillableTime(travelMs, onSiteMs, durationMs) {
     let totalMs;
     if (travelMs && onSiteMs) {
@@ -485,27 +664,19 @@ btnSaveLog.addEventListener('click', () => {
 
 function finalizeAndSaveLog(partsText) {
     const durationMs = pendingEndTime - startTime;
-    let formattedArrivalTime = null;
-
-    if (arrivalTime) {
-        formattedArrivalTime = new Date(arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
     const now = Date.now();
     const newLog = {
         client: clientInput.value.trim(),
-        start: new Date(startTime).toLocaleString(),
-        end: new Date(pendingEndTime).toLocaleString(),
         startMs: startTime,
         endMs: pendingEndTime,
         arrivalMs: arrivalTime || null,
-        duration: formatDuration(durationMs),
+        startOffset: offsetMinutesOf(new Date(startTime)),
+        endOffset: offsetMinutesOf(new Date(pendingEndTime)),
+        arrivalOffset: arrivalTime ? offsetMinutesOf(new Date(arrivalTime)) : null,
         durationMs: durationMs,
-        decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
         notes: pendingNotes,
         parts: partsText || "",
         billableTime: pendingBillableTime,
-        arrivalTime: formattedArrivalTime,
         travelDurationMs: arrivalTime ? arrivalTime - startTime : null,
         onSiteDurationMs: arrivalTime ? pendingEndTime - arrivalTime : null,
         startMileage: startMileage,
@@ -608,11 +779,9 @@ function mergeResumeIntoLog() {
         const newEnd = pendingEndTime;
         const newDurationMs = (log.durationMs || 0) + sessionDurationMs;
 
-        log.end = new Date(newEnd).toLocaleString();
         log.endMs = newEnd;
+        log.endOffset = offsetMinutesOf(new Date(newEnd));
         log.durationMs = newDurationMs;
-        log.duration = formatDuration(newDurationMs);
-        log.decimalHours = (newDurationMs / (1000 * 60 * 60)).toFixed(2);
 
         const sessionNote = pendingNotes;
         if (sessionNote && sessionNote !== 'No notes provided.') {
@@ -782,9 +951,7 @@ function renderLogs() {
 
     request.onsuccess = () => {
         const logs = request.result.filter(log => !log._deleted).sort((a, b) => {
-            const aTime = (a.startMs != null) ? a.startMs : parseToDate(a.start)?.getTime();
-            const bTime = (b.startMs != null) ? b.startMs : parseToDate(b.start)?.getTime();
-            return (bTime || 0) - (aTime || 0);
+            return (logStartMs(b) || 0) - (logStartMs(a) || 0);
         });
         if (logs.length === 0) {
             logHistory.innerHTML = '<div class="empty-state">No logged hours found.</div>';
@@ -797,14 +964,16 @@ function renderLogs() {
         let html = "";
         logs.forEach(log => {
             const isRemoteEntry = isRemoteLog(log);
+            const startMsVal = logStartMs(log);
+            const durMs = logDurationMs(log);
             html += '<div class="log-card">';
             html += '<div class="log-card-header">';
             html += '<div><h4 class="log-client-name">' + escapeHtml(log.client) + '</h4>';
             if (isRemoteEntry) {
                 html += '<span class="remote-badge">Remote</span>';
             }
-            html += '<p class="log-timestamp">' + escapeHtml(log.start) + '</p></div>';
-            html += '<span class="duration-pill">' + escapeHtml(log.duration) + ' (' + escapeHtml(log.decimalHours) + 'h)</span>';
+            html += '<p class="log-timestamp">' + escapeHtml(formatLogDateTime(startMsVal, log.startOffset)) + '</p></div>';
+            html += '<span class="duration-pill">' + escapeHtml(formatDuration(durMs || 0)) + ' (' + escapeHtml(toDecimalHours(durMs)) + 'h)</span>';
             html += '</div>';
 
             if (!isRemoteEntry && log.travelDurationMs !== null && log.travelDurationMs !== undefined && log.onSiteDurationMs !== null && log.onSiteDurationMs !== undefined) {
@@ -857,17 +1026,6 @@ function parseToDate(dateVal) {
     return isNaN(d.getTime()) ? null : d;
 }
 
-// Helper function to format Date object into YYYY-MM-DDTHH:mm for datetime-local input
-function formatDateTimeLocal(d) {
-    if (!d || isNaN(d.getTime())) return '';
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
 function setJobTypeEntryFields(jobType, arrivalInput, mileageInput) {
     const isTravel = (jobType === 'travel');
     const isRemote = (jobType === 'remote');
@@ -915,7 +1073,7 @@ window.editLog = function(id) {
         let jobType = 'travel';
         if (isRemoteVal) {
             jobType = 'remote';
-        } else if (!log.arrivalTime && (log.travelMileage === null || log.travelMileage === undefined)) {
+        } else if (logArrivalMs(log) === null && (log.travelMileage === null || log.travelMileage === undefined)) {
             jobType = 'onsite';
         }
 
@@ -926,40 +1084,14 @@ window.editLog = function(id) {
         editMileage.value = (jobType === 'travel' && log.travelMileage !== null && log.travelMileage !== undefined) ? log.travelMileage : '';
         setJobTypeEntryFields(jobType, editArrivalTime, editMileage);
 
-        const startDate = (log.startMs !== null && log.startMs !== undefined)
-            ? new Date(log.startMs)
-            : parseToDate(log.start);
-        editStartTime.value = formatDateTimeLocal(startDate);
+        const startMsVal = logStartMs(log);
+        editStartTime.value = (startMsVal !== null) ? formatWallClockDateTimeLocal(startMsVal, log.startOffset) : '';
 
-        if (log.arrivalMs !== null && log.arrivalMs !== undefined) {
-            editArrivalTime.value = formatDateTimeLocal(new Date(log.arrivalMs));
-        } else if (log.arrivalTime && log.arrivalTime.trim() !== '') {
-            const timeMatch = log.arrivalTime.match(/(\d{1,2}):(\d{2})/);
-            if (timeMatch && startDate) {
-                let hours = parseInt(timeMatch[1], 10);
-                const minutes = timeMatch[2];
+        const arrivalMsVal = logArrivalMs(log);
+        editArrivalTime.value = (arrivalMsVal !== null) ? formatWallClockDateTimeLocal(arrivalMsVal, log.arrivalOffset) : '';
 
-                if (log.arrivalTime.includes('PM') && hours !== 12) {
-                    hours += 12;
-                }
-                if (log.arrivalTime.includes('AM') && hours === 12) {
-                    hours = 0;
-                }
-
-                const arrivalDate = new Date(startDate.getTime());
-                arrivalDate.setHours(hours, parseInt(minutes, 10), 0, 0);
-                editArrivalTime.value = formatDateTimeLocal(arrivalDate);
-            } else {
-                editArrivalTime.value = '';
-            }
-        } else {
-            editArrivalTime.value = '';
-        }
-
-        const endDate = (log.endMs !== null && log.endMs !== undefined)
-            ? new Date(log.endMs)
-            : parseToDate(log.end);
-        editEndTime.value = formatDateTimeLocal(endDate);
+        const endMsVal = logEndMs(log);
+        editEndTime.value = (endMsVal !== null) ? formatWallClockDateTimeLocal(endMsVal, log.endOffset) : '';
 
         editModal.classList.remove('hidden');
     };
@@ -1077,34 +1209,32 @@ btnSaveEdit.addEventListener('click', () => {
         log.travelMileage = (selectedJobType === 'travel' && editMileage.value !== '') ? parseFloat(editMileage.value) : null;
         log.isRemote = isRemoteEntry;
 
-        log.start = start.toLocaleString();
-        log.end = end.toLocaleString();
         log.startMs = start.getTime();
         log.endMs = end.getTime();
+        log.startOffset = offsetMinutesOf(start);
+        log.endOffset = offsetMinutesOf(end);
 
         if (selectedJobType === 'remote') {
-            log.arrivalTime = null;
             log.arrivalMs = null;
+            log.arrivalOffset = null;
             log.travelDurationMs = null;
             log.onSiteDurationMs = null;
             log.startMileage = null;
             log.arrivalMileage = null;
             log.travelMileage = null;
         } else if (arrival) {
-            log.arrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             log.arrivalMs = arrival.getTime();
+            log.arrivalOffset = offsetMinutesOf(arrival);
             log.travelDurationMs = arrival - start;
             log.onSiteDurationMs = end - arrival;
         } else {
-            log.arrivalTime = null;
             log.arrivalMs = null;
+            log.arrivalOffset = null;
             log.travelDurationMs = null;
             log.onSiteDurationMs = null;
         }
 
         log.durationMs = end - start;
-        log.decimalHours = (log.durationMs / (1000 * 60 * 60)).toFixed(2);
-        log.duration = formatDuration(log.durationMs);
         markLogDirty(log);
 
         const putRequest = store.put(log);
@@ -1197,12 +1327,10 @@ btnSaveAdd.addEventListener('click', () => {
 
     const durationMs = end - start;
 
-    let formattedArrivalTime = null;
     let travelDurationMs = null;
     let onSiteDurationMs = null;
 
     if (hasTravel && arrival) {
-        formattedArrivalTime = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         travelDurationMs = arrival - start;
         onSiteDurationMs = end - arrival;
     }
@@ -1219,18 +1347,16 @@ btnSaveAdd.addEventListener('click', () => {
 
     const newLog = {
         client: client,
-        start: start.toLocaleString(),
-        end: end.toLocaleString(),
         startMs: start.getTime(),
         endMs: end.getTime(),
         arrivalMs: arrival ? arrival.getTime() : null,
-        duration: formatDuration(durationMs),
+        startOffset: offsetMinutesOf(start),
+        endOffset: offsetMinutesOf(end),
+        arrivalOffset: arrival ? offsetMinutesOf(arrival) : null,
         durationMs: durationMs,
-        decimalHours: (durationMs / (1000 * 60 * 60)).toFixed(2),
         notes: notes,
         parts: addParts.value ? addParts.value.trim() : '',
         billableTime: selectedBillableTime,
-        arrivalTime: formattedArrivalTime,
         travelDurationMs: travelDurationMs,
         onSiteDurationMs: onSiteDurationMs,
         travelMileage: selectedTravelMileage,
@@ -1355,17 +1481,19 @@ for (let i = 1; i < lines.length; i++) {
     const arrivalMs = arrivalIso ? new Date(arrivalIso).getTime() : (arrivalStr ? new Date(arrivalStr).getTime() : NaN);
     const updatedAtMs = updatedAtIso ? new Date(updatedAtIso).getTime() : NaN;
 
+    const startOffset = deriveOffsetMinutes(startIso, startMs);
+    const endOffset = deriveOffsetMinutes(endIso, endMs);
+    const arrivalOffset = deriveOffsetMinutes(arrivalIso, arrivalMs);
+
 const log = {
         client: row[1].replace(/^\"|\"$/g, ''),
-        start: startStr,
         startMs: isNaN(startMs) ? null : startMs,
-        arrivalTime: arrivalStr,
         arrivalMs: isNaN(arrivalMs) ? null : arrivalMs,
-        end: endStr,
         endMs: isNaN(endMs) ? null : endMs,
-        duration: durationStr,
+        startOffset: startOffset,
+        arrivalOffset: arrivalOffset,
+        endOffset: endOffset,
         durationMs: parseDurationToMs(durationStr),
-        decimalHours: row[8] || '0',
         notes: row[notesIdx].replace(/^\"|\"$/g, ''),
         parts: row[partsIdx] ? row[partsIdx].replace(/^\"|\"$/g, '') : '',
         billableTime: row[9].replace(/^\"|\"$/g, '') || '1',
@@ -1584,16 +1712,20 @@ function exportToCSV() {
         const mi = (v) => (v !== null && v !== undefined) ? v : "";
 
         logs.forEach(log => {
+            const startMsVal = logStartMs(log);
+            const endMsVal = logEndMs(log);
+            const arrivalMsVal = logArrivalMs(log);
+            const durMs = logDurationMs(log);
             const row = [
                 log.id,
                 '"' + log.client.replace(/"/g, '""') + '"',
-                '"' + log.start + '"',
-                '"' + (log.arrivalTime || "") + '"',
-                '"' + log.end + '"',
-                '"' + log.duration + '"',
+                '"' + formatLogDateTime(startMsVal, log.startOffset) + '"',
+                '"' + (arrivalMsVal !== null ? formatLogTime(arrivalMsVal, log.arrivalOffset) : "") + '"',
+                '"' + formatLogDateTime(endMsVal, log.endOffset) + '"',
+                '"' + (durMs !== null && durMs !== undefined ? formatDuration(durMs) : "") + '"',
                 '"' + (log.travelDurationMs !== null && log.travelDurationMs !== undefined ? formatDuration(log.travelDurationMs) : "") + '"',
                 '"' + (log.onSiteDurationMs !== null && log.onSiteDurationMs !== undefined ? formatDuration(log.onSiteDurationMs) : "") + '"',
-                log.decimalHours,
+                toDecimalHours(durMs),
                 '"' + (log.billableTime || "") + '"',
                 mi(log.startMileage),
                 mi(log.arrivalMileage),
@@ -1601,9 +1733,9 @@ function exportToCSV() {
                 isRemoteLog(log) ? "true" : "false",
                 formatNotesForCsv(log.notes),
                 formatNotesForCsv(log.parts || ""),
-                (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs).toISOString() : "",
-                (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs).toISOString() : "",
-                (log.arrivalMs !== null && log.arrivalMs !== undefined) ? new Date(log.arrivalMs).toISOString() : "",
+                toIsoWithOffset(startMsVal, log.startOffset),
+                toIsoWithOffset(endMsVal, log.endOffset),
+                toIsoWithOffset(arrivalMsVal, log.arrivalOffset),
                 log.invoiceNumber || "",
                 (log.updatedAt !== null && log.updatedAt !== undefined) ? new Date(log.updatedAt).toISOString() : ""
             ];
@@ -1727,11 +1859,12 @@ function buildReportTable(logs, hasMileage) {
     tableHtml += '<tbody>';
 
     logs.forEach(log => {
-        const startDateObj = (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs) : new Date(log.start);
-        const endDateObj = (log.endMs !== null && log.endMs !== undefined) ? new Date(log.endMs) : new Date(log.end);
-        const dateOnly = startDateObj.toLocaleDateString();
-        const startTimeStr = startDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const endTimeStr = endDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const startMsVal = logStartMs(log);
+        const endMsVal = logEndMs(log);
+        const arrivalMsVal = logArrivalMs(log);
+        const dateOnly = formatLogDate(startMsVal, log.startOffset);
+        const startTimeStr = formatLogTime(startMsVal, log.startOffset);
+        const endTimeStr = formatLogTime(endMsVal, log.endOffset);
         const isRemote = isRemoteLog(log);
 
         let timelineHtml = "";
@@ -1741,11 +1874,11 @@ function buildReportTable(logs, hasMileage) {
         if (log.billableTime && log.billableTime !== '1') {
             billableDecimal = log.billableTime;
         } else {
-            billableDecimal = formatBillableTime(isRemote ? null : log.travelDurationMs, isRemote ? null : log.onSiteDurationMs, log.durationMs);
+            billableDecimal = formatBillableTime(isRemote ? null : log.travelDurationMs, isRemote ? null : log.onSiteDurationMs, logDurationMs(log));
         }
 
-        if (!isRemote && log.travelDurationMs !== null && log.travelDurationMs !== undefined && log.onSiteDurationMs !== null && log.onSiteDurationMs !== undefined && log.arrivalTime) {
-            timelineHtml = 'Start: ' + escapeHtml(startTimeStr) + '<br>Arrived: ' + escapeHtml(log.arrivalTime) + '<br>End: ' + escapeHtml(endTimeStr);
+        if (!isRemote && log.travelDurationMs !== null && log.travelDurationMs !== undefined && log.onSiteDurationMs !== null && log.onSiteDurationMs !== undefined && arrivalMsVal !== null) {
+            timelineHtml = 'Start: ' + escapeHtml(startTimeStr) + '<br>Arrived: ' + escapeHtml(formatLogTime(arrivalMsVal, log.arrivalOffset)) + '<br>End: ' + escapeHtml(endTimeStr);
             breakdownHtml = escapeHtml(billableDecimal);
         } else {
             timelineHtml = 'Start: ' + escapeHtml(startTimeStr) + '<br>End: ' + escapeHtml(endTimeStr);
@@ -1776,11 +1909,14 @@ function generateReportForDateRange(startDate, endDate) {
     request.onsuccess = function(e) {
         const logs = e.target.result.filter(log => !log._deleted);
 
+        const startKey = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        const endKey = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
         const filteredLogs = logs.filter(log => {
-            const logDate = (log.startMs !== null && log.startMs !== undefined)
-                ? new Date(log.startMs)
-                : new Date(log.start);
-            return logDate >= startDate && logDate <= endDate;
+            const wc = wallClockMs(logStartMs(log), log.startOffset);
+            if (wc === null) return false;
+            const d = new Date(wc);
+            const key = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+            return key >= startKey && key <= endKey;
         });
 
         if (filteredLogs.length === 0) {
@@ -1807,7 +1943,7 @@ function generateReportForDateRange(startDate, endDate) {
             if (log.billableTime && log.billableTime !== '1') {
                 billableDecimal = log.billableTime;
             } else {
-                billableDecimal = formatBillableTime(isRemote ? null : log.travelDurationMs, isRemote ? null : log.onSiteDurationMs, log.durationMs);
+                billableDecimal = formatBillableTime(isRemote ? null : log.travelDurationMs, isRemote ? null : log.onSiteDurationMs, logDurationMs(log));
             }
 
             const parsedVal = parseFloat(billableDecimal);
@@ -1893,12 +2029,58 @@ function setLastSyncTime(ts) {
 // v4: per-log clientId (UUID) cross-device identity. The full pull lets legacy
 // rows adopt the server's client_id (matched by the old id) and assigns fresh
 // UUIDs to rows that were never synced, before any push can run.
-const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 4;
+//
+// v5: time/date consolidation. Epoch-ms fields are the single source of truth
+// and per-timestamp UTC offsets (startOffset/arrivalOffset/endOffset) were
+// added. The full pull lets server rows be normalized (legacy display strings
+// dropped, offsets derived) and lets locally-consolidated rows push their new
+// offsets.
+const LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION = 5;
 function needsFullPullForSchemaUpgrade() {
     return parseInt(localStorage.getItem('lastSyncedUpdatedAtSchemaVersion') || '0', 10) < LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION;
 }
 function markSchemaUpgradeComplete() {
     localStorage.setItem('lastSyncedUpdatedAtSchemaVersion', LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION.toString());
+}
+
+// One-time local repair that moves every stored row onto the consolidated
+// time/date model: epoch-ms fields become authoritative, UTC offsets are
+// derived, and the legacy display strings (start/end/arrivalTime/duration/
+// decimalHours) are dropped. Rows that carried legacy fields are marked dirty
+// so the new offsets are pushed to the server. Versioned separately from the
+// sync schema flag so it runs exactly once.
+const DATE_TIME_CONSOLIDATION_VERSION = 1;
+function needsDateTimeConsolidation() {
+    return parseInt(localStorage.getItem('dateTimeConsolidationVersion') || '0', 10) < DATE_TIME_CONSOLIDATION_VERSION;
+}
+function markDateTimeConsolidationComplete() {
+    localStorage.setItem('dateTimeConsolidationVersion', DATE_TIME_CONSOLIDATION_VERSION.toString());
+}
+
+function consolidateStoredLogDateTimes() {
+    if (!db || !needsDateTimeConsolidation()) return Promise.resolve();
+    const legacyKeys = ['start', 'end', 'arrival', 'arrivalTime', 'duration', 'decimalHours'];
+    return new Promise((resolve) => {
+        const tx = db.transaction(['logs'], 'readwrite');
+        const store = tx.objectStore('logs');
+        const req = store.getAll();
+        req.onsuccess = () => {
+            for (const log of req.result) {
+                const hadLegacy = legacyKeys.some(k => log[k] !== undefined);
+                normalizeConsolidatedTimestamps(log);
+                stripLegacyDateTimeFields(log);
+                if (hadLegacy) {
+                    // The derived offsets are new information the server doesn't
+                    // have yet; dirty the row so the next push uploads them.
+                    markLogDirty(log);
+                }
+                store.put(log);
+            }
+        };
+        req.onerror = () => resolve();
+        tx.oncomplete = () => { markDateTimeConsolidationComplete(); resolve(); };
+        tx.onerror = () => resolve();
+    });
 }
 
 // One-time repair flag for the invoice_number pull-mapping bug (pre-fix
@@ -1956,6 +2138,12 @@ async function syncToCloud() {
             // phantom key (adopting the server value when the local one is
             // empty) without forcing the row dirty, so it can never clobber an
             // unsynced local edit — the normal dirty/push flow uploads those.
+            const hadLegacyDates = ['start', 'end', 'arrival', 'arrivalTime', 'duration', 'decimalHours'].some(k => log[k] !== undefined);
+            if (hadLegacyDates) {
+                normalizeConsolidatedTimestamps(log);
+                stripLegacyDateTimeFields(log);
+                needsBackfill = true;
+            }
             if (log.invoice_number !== undefined) {
                 const serverInvoice = log.invoice_number ?? '';
                 const localInvoice = (typeof log.invoiceNumber === 'string') ? log.invoiceNumber : (log.invoiceNumber ?? '');
@@ -2217,6 +2405,9 @@ async function syncFromCloud(sinceOverride) {
                     }
                 }
                 delete serverRow.updated_at;
+
+                normalizeConsolidatedTimestamps(serverRow);
+                stripLegacyDateTimeFields(serverRow);
 
                 const finishRow = (local) => {
                     if (serverRow.deleted_at) {
@@ -2711,7 +2902,7 @@ function getBillableDisplay(log) {
     return formatBillableTime(
         isRemote ? null : log.travelDurationMs,
         isRemote ? null : log.onSiteDurationMs,
-        log.durationMs
+        logDurationMs(log)
     );
 }
 
@@ -2772,9 +2963,7 @@ function renderInvoicingMode() {
             });
         } else {
             logs.sort((a, b) => {
-                const aTime = (a.startMs != null) ? a.startMs : parseToDate(a.start)?.getTime() || 0;
-                const bTime = (b.startMs != null) ? b.startMs : parseToDate(b.start)?.getTime() || 0;
-                return (bTime || 0) - (aTime || 0);
+                return (logStartMs(b) || 0) - (logStartMs(a) || 0);
             });
         }
 
@@ -2787,8 +2976,7 @@ function renderInvoicingMode() {
         logs.forEach(log => {
             const billableDisplay = getBillableDisplay(log);
             const invoiceVal = log.invoiceNumber || '';
-            const logDate = (log.startMs !== null && log.startMs !== undefined) ? new Date(log.startMs) : new Date(log.start);
-            const dateStr = logDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            const dateStr = formatLogDate(logStartMs(log), log.startOffset, { month: 'short', day: 'numeric', year: 'numeric' });
             html += '<tr class="invoicing-row" data-log-id="' + log.id + '">';
             html += '<td class="inv-cell-remote">' + (log.isRemote ? '<span class="remote-badge">Yes</span>' : '<span class="remote-badge" style="background-color:var(--bg-secondary, #f3f4f6); color:var(--text-muted, #6b7280);">No</span>') + '</td>';
             html += '<td class="inv-cell-date">' + dateStr + '</td>';
@@ -2818,7 +3006,7 @@ function getInvoSortVal(log, col) {
         case 'parts': return (log.parts || '').toLowerCase();
         case 'invoiceNumber': return (log.invoiceNumber || '').toLowerCase();
         case 'isRemote': return log.isRemote ? '1' : '0';
-        case 'date': return (log.startMs !== null && log.startMs !== undefined) ? log.startMs : (parseToDate(log.start)?.getTime() || 0);
+        case 'date': return logStartMs(log) || 0;
         default: return '';
     }
 }

@@ -15,19 +15,16 @@ CREATE TABLE IF NOT EXISTS logs (
     user_id INTEGER NOT NULL,
     client_id TEXT,
     client TEXT NOT NULL,
-    start DATETIME NOT NULL,
-    end DATETIME NOT NULL,
-    arrival DATETIME,
     startMs INTEGER,
     endMs INTEGER,
     arrivalMs INTEGER,
-    duration TEXT,
+    startOffset INTEGER,
+    arrivalOffset INTEGER,
+    endOffset INTEGER,
     durationMs INTEGER,
-    decimalHours TEXT,
     notes TEXT,
     parts TEXT,
     billableTime TEXT,
-    arrivalTime TEXT,
     travelDurationMs INTEGER,
     onSiteDurationMs INTEGER,
     startMileage REAL,
@@ -41,7 +38,6 @@ CREATE TABLE IF NOT EXISTS logs (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_logs_start ON logs(start);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_logs_deleted_at ON logs(deleted_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_user_client ON logs(user_id, client_id);
@@ -110,18 +106,16 @@ export function makeLog(overrides: Record<string, any> = {}) {
   return {
     clientId: crypto.randomUUID(),
     client: "Acme Corp",
-    start: new Date(now - 3600_000).toLocaleString(),
-    end: new Date(now).toLocaleString(),
     startMs: now - 3600_000,
     endMs: now,
     arrivalMs: null,
-    duration: "01:00:00",
+    startOffset: 0,
+    arrivalOffset: null,
+    endOffset: 0,
     durationMs: 3600_000,
-    decimalHours: "1.00",
     notes: "Worked on the widget.",
     parts: "",
     billableTime: "1",
-    arrivalTime: null,
     travelDurationMs: null,
     onSiteDurationMs: null,
     startMileage: null,

@@ -28,7 +28,7 @@ A progressive web app (PWA) for time tracking that allows users to:
 - **migrations/001_initial.sql**: D1 database schema (users + logs tables)
 - **CLOUDFLARE_MIGRATION.md**: Migration guide for deploying to Cloudflare Workers
 - **upload-assets.ps1**: PowerShell script for bulk-uploading static assets to KV (optional, manual use only)
- - Uses IndexedDB (`TimeTrackerDB`, currently version 3) as the local client-side store, with optional cloud backup/sync to Cloudflare D1 + KV
+ - Uses IndexedDB (`TimeTrackerDB`, currently version 4) as the local client-side store, with optional cloud backup/sync to Cloudflare D1 + KV
 - No external dependencies or frameworks on the client side; the Worker uses native Web Crypto APIs (PBKDF2, HMAC-SHA256) for auth
 
 ### Data Model
@@ -38,18 +38,16 @@ Each log entry in the `logs` store contains:
 {
   id: number,            // Auto-incremented primary key
   client: string,        // Client name
-  start: string,         // Start datetime (locale-formatted display string)
-  end: string,           // End datetime (locale-formatted display string)
-  startMs: number,       // Start time as raw epoch milliseconds
-  endMs: number,         // End time as raw epoch milliseconds
-  arrivalMs: number,     // Arrival time as raw epoch milliseconds (null if no arrival)
-  duration: string,      // Formatted duration (HH:MM:SS)
-  durationMs: number,    // Duration in milliseconds
-  decimalHours: string,  // Duration in decimal hours
+  startMs: number,       // Start instant, epoch ms (source of truth)
+  endMs: number,         // End instant, epoch ms (source of truth)
+  arrivalMs: number,     // Arrival instant, epoch ms (null if no arrival)
+  startOffset: number,   // Minutes east of UTC at capture (wall-clock preservation); null for legacy rows
+  arrivalOffset: number, // Same, for arrival; null if no arrival
+  endOffset: number,     // Same, for end
+  durationMs: number,    // Duration in milliseconds (endMs - startMs)
   notes: string,         // Work notes
   parts: string,         // Parts/materials used
   billableTime: string,  // Billable time override ("1" = use actual duration, decimal hours, or "sales call")
-  arrivalTime: string,   // Arrival time display string (HH:MM AM/PM), null if no arrival
   travelDurationMs: number,  // Travel duration in ms (start -> arrival), null if no arrival
   onSiteDurationMs: number,  // On-site duration in ms (arrival -> end), null if no arrival
   startMileage: number,  // Starting odometer reading
@@ -63,9 +61,18 @@ Each log entry in the `logs` store contains:
 }
 ```
 
-**Important:** `startMs` / `endMs` / `arrivalMs` are the source of truth for any date arithmetic (report filtering, edit-modal prefill, CSV round-tripping). The `start` / `end` / `arrivalTime` strings are locale-formatted **display-only** values produced by `toLocaleString()` / `toLocaleTimeString()` — re-parsing them with `new Date(...)` is locale/browser-dependent and should be treated as a legacy fallback only, for entries created before the `*Ms` fields existed (see "Known Issues & Fixes").
+**Important:** `startMs` / `arrivalMs` / `endMs` are the single source of truth for all date arithmetic, filtering, sorting, and sync. Time/date information is stored **only** as epoch ms plus a per-timestamp UTC offset (`startOffset` / `arrivalOffset` / `endOffset`, minutes east of UTC); all human-readable forms are rendered on demand (`formatLogDateTime(ms, offset)`, `formatLogTime(ms, offset)`, `formatLogDate(ms, offset)`, `toDecimalHours(ms)`, `formatDuration(durationMs)`). The offset preserves the **wall-clock the user actually saw** — an absolute instant alone cannot — so an entry renders the same time on any device/timezone; rendering shifts the instant by its offset and formats in UTC, falling back to the browser's offset when none was stored. The legacy locale display strings (`start` / `end` / `arrivalTime`) and formatted duplicates (`duration` / `decimalHours`) were removed in phase 2 and are no longer read at all (see "Time/Date Consolidation" below).
 
 The local autoincrement `id` is only the IndexedDB key used by in-app operations (render, edit, delete, resume). It is **not** a cross-device identity. The server maintains its own independent autoincrement `id`; rows pulled from another device are stored locally under a fresh autoincrement id decoupled from the server's id. The `byClientId` unique index (`logs.clientId`) is created at IndexedDB version 4.
+
+### Time/Date Consolidation
+
+Epoch ms is the canonical representation; the display strings are derived. Rollout is phased so already-installed clients keep working:
+
+- **Client:** `consolidateStoredLogDateTimes()` runs once on load (guarded by `localStorage.dateTimeConsolidationVersion`, version `DATE_TIME_CONSOLIDATION_VERSION`) over every row: it derives missing `*Ms`/`*Offset`/`durationMs` values, drops the legacy string fields, and — for rows that carried legacy fields — `markLogDirty()`s them so the new offsets are pushed. `normalizeConsolidatedTimestamps(row)` / `stripLegacyDateTimeFields(row)` are shared by this pass and by `syncFromCloud`, so pulled rows are normalized identically. `LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION` is `5`, forcing a one-time full pull after the upgrade.
+- **Server (phase 1, additive):** D1 gained `startOffset` / `arrivalOffset` / `endOffset` and `start` / `end` were made nullable (table rebuilt in `006_add_time_offsets.sql`, since SQLite cannot drop a `NOT NULL` in place). The Worker no longer writes `start` / `end` / `arrival` / `duration` / `decimalHours` / `arrivalTime`; ordering moved from `ORDER BY start` to `ORDER BY startMs`. The legacy columns were **kept temporarily** so old clients could still round-trip them.
+- **Server (phase 2, complete):** once no old client was in play, `007_drop_legacy_datetime_columns.sql` dropped `start`, `end`, `arrival`, `duration`, `decimalHours`, `arrivalTime` and `idx_logs_start`. The client no longer reads the legacy strings at all; `normalizeConsolidatedTimestamps` / `stripLegacyDateTimeFields` remain solely to upgrade a local row that was never consolidated (e.g. a device that skipped phase 1), after which the legacy keys are gone.
+
 
 ### Modal Components
 
@@ -87,9 +94,14 @@ The local autoincrement `id` is only the IndexedDB key used by in-app operations
 - `formatDuration(ms)`: Converts milliseconds to HH:MM:SS format
 - `formatDecimalQuarter(ms)`: Converts ms to quarter-hour increments
 - `formatBillableTime(travelMs, onSiteMs, durationMs)`: Calculates billable time from durations when no manual override is set
+- `offsetMinutesOf(d)` / `wallClockMs(ms, offset)` / `toWallClockDate(ms, offset)`: Offset + wall-clock helpers underlying all time rendering
+- `formatLogDateTime(ms, offset)` / `formatLogTime(ms, offset)` / `formatLogDate(ms, offset, options)` / `formatWallClockDateTimeLocal(ms, offset)`: Render an instant at its authored offset (UTC-formatted after shifting); `toDecimalHours(ms)` derives decimal hours
+- `logStartMs(log)` / `logEndMs(log)` / `logArrivalMs(log)` / `logDurationMs(log)`: Resolve a log's stored epoch-ms fields (epoch ms is the only representation after phase 2)
+- `normalizeConsolidatedTimestamps(row)` / `stripLegacyDateTimeFields(row)` / `consolidateStoredLogDateTimes()`: The time/date consolidation machinery (see "Time/Date Consolidation")
+- `toIsoWithOffset(ms, offset)` / `parseOffsetMinutesFromIso(iso)` / `deriveOffsetMinutes(iso, ms)`: CSV round-trip helpers for offset-bearing ISO 8601
 - `renderLogs()`: Renders all logs from IndexedDB into the log history list
-- `parseToDate(dateVal)` / `formatDateTimeLocal(d)`: Legacy-string-to-Date helpers used only as a fallback when `*Ms` fields are absent
- - `exportToCSV()`: Exports logs to CSV file with UTF-8 BOM (20 columns, see CSV section below)
+- `parseToDate(dateVal)`: Legacy-string-to-Date fallback used only when `*Ms` fields are absent
+ - `exportToCSV()`: Exports logs to CSV file with UTF-8 BOM (21 columns, see CSV section below)
  - `generateReportForDateRange(startDate, endDate)`: Generates the billing report for a date range, using `startMs`/`endMs` for filtering
  - `buildPrintArea()`: Builds a paginated, print-only copy of the report table (see Print section)
  - `parseDurationToMs(durationStr)`: Converts "HH:MM:SS" string to milliseconds
@@ -207,10 +219,11 @@ Same validation rules as Manual Entry apply to `editModal` before any IndexedDB 
 
 ### CSV Import/Export
 - Export includes a UTF-8 BOM for Excel compatibility
-- Current header format (20 columns): `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Remote, Notes, Parts Used, Start ISO, End ISO, Arrival ISO, Invoice Number`
-- The trailing `Start ISO` / `End ISO` / `Arrival ISO` columns hold `toISOString()` values and are what import parsing prefers for populating `startMs`/`endMs`/`arrivalMs` — they're the reliable round-trip path
-- Import accepts three formats: legacy 15-column (no ISO columns), current 19-column (with ISO columns), and 20-column (with ISO + Invoice Number). The `invoiceNumber` field defaults to empty string when not present in the imported CSV.
-- Import parses duration strings (HH:MM:SS) to milliseconds via `parseDurationToMs`
+- Current header format (21 columns): `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Remote, Notes, Parts Used, Start ISO, End ISO, Arrival ISO, Invoice Number, Updated At`
+- The human-readable columns are rendered on export from the epoch fields (wall-clock), not stored
+- The trailing `Start ISO` / `End ISO` / `Arrival ISO` columns hold offset-bearing ISO 8601 (`2026-09-15T09:00:00.000-04:00`) via `toIsoWithOffset(ms, offset)`, so both the absolute instant and the authored wall-clock survive a round-trip. Import parsing prefers these for populating `startMs`/`endMs`/`arrivalMs` and the offsets (`parseOffsetMinutesFromIso`); a legacy `Z` suffix yields no offset and the browser offset is used instead
+- Import accepts four formats: legacy 15-column (no ISO columns), 19-column (with ISO columns), 20-column (with ISO + Invoice Number), and 21-column (with ISO + Invoice Number + Updated At). The `invoiceNumber` field defaults to empty string when not present in the imported CSV.
+- Import parses duration strings (HH:MM:SS) to milliseconds via `parseDurationToMs` (used only when the ISO columns are absent)
 
 ### Printing Reports
 - `buildPrintArea()` copies the on-screen report table into `#printArea`, splitting it into multiple `<table>` chunks (`ROWS_PER_PAGE = 10`) so iOS Safari's print engine — which does not reliably repeat `<thead>` via `display: table-header-group` and mishandles content that ever lived inside a `position: fixed` / flex ancestor — renders every page correctly
@@ -261,8 +274,10 @@ time-tracker/
 │   ├── 001_initial.sql               # D1 database schema (users + logs tables)
 │   ├── 002_add_is_remote.sql         # Adds isRemote column
 │   ├── 003_soft_delete.sql           # Adds deleted_at tombstone column
-│   └── 004_add_invoice_number.sql    # Adds invoice_number column
-│   └── 005_add_client_id.sql         # Adds client_id UUID + (user_id, client_id) unique index (cross-device sync identity)
+│   ├── 004_add_invoice_number.sql    # Adds invoice_number column
+│   ├── 005_add_client_id.sql         # Adds client_id UUID + (user_id, client_id) unique index (cross-device sync identity)
+│   ├── 006_add_time_offsets.sql      # Adds startOffset/arrivalOffset/endOffset, makes start/end nullable (table rebuild)
+│   └── 007_drop_legacy_datetime_columns.sql  # Phase 2: drops start/end/arrival/duration/decimalHours/arrivalTime + idx_logs_start
 ```
 
 ## Cloudflare Worker (API Layer)
@@ -430,6 +445,7 @@ See `CLOUDFLARE_MIGRATION.md` for the full migration guide. Static assets are no
 
 ## Previously Open Items (Now Fixed)
 
+- **Time/date stored twice (epoch ms + locale strings) and a dead `arrival` column** *(fixed, phases 1 & 2)* — entries stored both epoch-ms fields and locale display strings (`start`/`end`/`arrivalTime`) plus formatted duplicates (`duration`/`decimalHours`), and D1's `logs` table had an `arrival` DATETIME column that was never written or read by the client. Re-parsing the locale strings with `new Date()` was locale/browser-dependent and had caused several bugs. **Fix**: epoch ms is now the single source of truth, with per-timestamp UTC offsets (`startOffset`/`arrivalOffset`/`endOffset`, minutes east of UTC) preserving the authored wall-clock so an entry renders the same on any device/timezone; all display forms are rendered on demand. **Phase 1**: the Worker stopped writing `start`/`end`/`arrival`/`duration`/`decimalHours`/`arrivalTime` and ordered by `startMs`; `migrations/006_add_time_offsets.sql` added the offset columns and rebuilt `logs` to make `start`/`end` nullable (legacy columns temporarily kept for old clients). The client consolidated existing rows once on load (`consolidateStoredLogDateTimes`, `DATE_TIME_CONSOLIDATION_VERSION`) and `syncFromCloud` normalized pulled rows; `LAST_SYNCED_UPDATED_AT_SCHEMA_VERSION` was bumped to **5** to force a full pull, and CSV export writes offset-bearing ISO 8601 so the wall-clock round-trips. **Phase 2 (complete)**: once production clients were updated, `migrations/007_drop_legacy_datetime_columns.sql` dropped the six legacy columns and `idx_logs_start`, and the client's epoch accessors (`logStartMs` etc.) no longer fall back to parsing the legacy strings. Verified end-to-end in a browser: legacy rows consolidated with correct EST/EDT offsets, add/edit/CSV-import produce the consolidated shape, report/render show the authored wall-clock, and sync push/pull persisted the offsets to D1.
 - **`GET /api/logs/:id` returned tombstoned rows** *(fixed)* — the single-row lookup (`getLog`) had no `deleted_at IS NULL` filter, unlike `GET /api/logs`, so deleting a row and fetching it by id returned the soft-deleted row instead of 404. **Fix**: added `AND deleted_at IS NULL` to the lookup (covered by a test in `test/logs.test.ts`).
 - **`serveStaticAsset` always fell through to the placeholder page** *(fixed)* — `new Request(assetFile, request)` with a relative `assetFile` (e.g. `'index.html'`) threw `TypeError: Invalid URL`, which the try/catch swallowed, so the asset-map branch was dead code and the "Cloudflare Worker is running!" fallback was always served (even in production with the `[assets]` binding mounted). **Fix**: resolve `assetFile` against the request origin (`new URL(assetFile, new URL(request.url).origin)`) before fetching the Assets binding. `sw.js` now also gets `Cache-Control: no-cache` instead of the immutable 1-year cache, so service-worker updates propagate. Covered by `test/assets.test.ts` (which confirms the binding serves real files in the test env).
 - **CSV export dropped genuine 0 durations** *(fixed)* — `exportToCSV()` used truthiness (`log.travelDurationMs ? formatDuration(...) : ""`), so a legitimate 0 exported blank — the same class of bug already fixed for mileage. **Fix**: explicit `!== null && !== undefined` checks in export, and applied the same treatment to the travel/on-site duration display in `renderLogs()` and the billing report so a genuine `00:00:00` shows instead of disappearing. Verified in-browser: a manual entry with arrival==start exports `"00:00:00"` and renders "🚗 Travel: 00:00:00".
