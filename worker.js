@@ -448,6 +448,16 @@ function sanitizeClientTimestamp(clientIso) {
   return clientIso;
 }
 
+// Server-assigned clock stamp for the incremental pull cursor. Unlike the
+// client-authored updated_at, this is monotonic with respect to the order in
+// which the server accepted writes, so a row that lands late (offline-authored,
+// slow clock) can never fall behind a cursor that already moved past it.
+// Stored as 'YYYY-MM-DD HH:MM:SS.SSS' (UTC) to match D1's DATETIME format and
+// preserve millisecond precision used by the cursor.
+function serverTimestamp() {
+  return new Date().toISOString().replace('T', ' ').replace('Z', '');
+}
+
 async function syncLogs(request, env) {
   try {
     const userId = await getUserIdFromToken(request, env);
@@ -484,11 +494,13 @@ async function syncLogs(request, env) {
         if (log._deleted) {
           // Soft-delete: set tombstone timestamp instead of hard-deleting.
           // This allows other devices to learn about the deletion via getSyncChanges.
+          const now = serverTimestamp();
           const result = await env.DB.prepare(
-            'UPDATE logs SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND client_id = ? RETURNING updated_at'
-          ).bind(userId, clientId).run();
+            'UPDATE logs SET deleted_at = ?, updated_at = ?, server_updated_at = ? WHERE user_id = ? AND client_id = ? RETURNING updated_at, server_updated_at'
+          ).bind(now, now, now, userId, clientId).run();
           const serverUpdatedAt = result.results?.[0]?.updated_at || null;
-          upserted.push({ clientId, action: 'deleted', updatedAt: serverUpdatedAt });
+          const serverCursor = result.results?.[0]?.server_updated_at || null;
+          upserted.push({ clientId, action: 'deleted', updatedAt: serverUpdatedAt, serverUpdatedAt: serverCursor });
         } else {
           // Check if this row has already been tombstoned on the server.
           // If so, do NOT overwrite the deletion â€” "deletion wins".
@@ -516,7 +528,10 @@ async function syncLogs(request, env) {
               // Accept the write based on the client's raw timestamp (a future-skewed
               // edit legitimately represents a newer version), but store a sanitized
               // timestamp so D1 updated_at can never drift hours ahead of real time.
+              // server_updated_at is the server's own clock: it is what the pull
+              // cursor partitions on, so late-arriving edits cannot be skipped.
               const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000'));
+              const storedServerUpdatedAt = serverTimestamp();
               const action = existing ? 'updated' : 'created';
               await env.DB.prepare(
                 `INSERT INTO logs (client_id, user_id, client,
@@ -524,8 +539,8 @@ async function syncLogs(request, env) {
                    billableTime, travelMileage, startMileage, arrivalMileage,
                    startMs, endMs, arrivalMs, travelDurationMs, onSiteDurationMs, isRemote,
                    startOffset, arrivalOffset, endOffset,
-                   invoice_number, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   invoice_number, updated_at, server_updated_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(user_id, client_id) DO UPDATE SET
                    client=excluded.client,
                    durationMs=excluded.durationMs, notes=excluded.notes,
@@ -537,7 +552,8 @@ async function syncLogs(request, env) {
                    startOffset=excluded.startOffset, arrivalOffset=excluded.arrivalOffset, endOffset=excluded.endOffset,
                    isRemote=excluded.isRemote,
                    invoice_number=excluded.invoice_number,
-                   updated_at=excluded.updated_at
+                   updated_at=excluded.updated_at,
+                   server_updated_at=excluded.server_updated_at
                   WHERE logs.deleted_at IS NULL AND logs.user_id=?`
               ).bind(
                 clientId, userId, log.client,
@@ -547,14 +563,15 @@ async function syncLogs(request, env) {
                 log.travelDurationMs ?? null, log.onSiteDurationMs ?? null, log.isRemote ? 1 : 0,
                 log.startOffset ?? null, log.arrivalOffset ?? null, log.endOffset ?? null,
                 log.invoiceNumber ?? null,
-                storedUpdatedAt, userId
+                storedUpdatedAt, storedServerUpdatedAt, userId
               ).run();
               // Fetch the server's updated_at after upsert
               const updated = await env.DB.prepare(
-                'SELECT updated_at FROM logs WHERE user_id = ? AND client_id = ?'
+                'SELECT updated_at, server_updated_at FROM logs WHERE user_id = ? AND client_id = ?'
               ).bind(userId, clientId).first();
               const confirmedUpdatedAt = updated?.updated_at || storedUpdatedAt;
-              upserted.push({ clientId, action, updatedAt: confirmedUpdatedAt });
+              const confirmedServerUpdatedAt = updated?.server_updated_at || storedServerUpdatedAt;
+              upserted.push({ clientId, action, updatedAt: confirmedUpdatedAt, serverUpdatedAt: confirmedServerUpdatedAt });
             } else {
               // Client's version is older - don't overwrite, but return server's current updated_at
               upserted.push({ clientId, action: 'conflict', serverUpdatedAt: serverUpdatedAt });
@@ -601,24 +618,31 @@ async function getSyncChanges(request, env, url) {
 
     const since = url.searchParams.get('since');
     const sinceMs = since ? parseInt(since, 10) : 0;
-    // Format as 'YYYY-MM-DD HH:MM:SS.SSS' to match D1's CURRENT_TIMESTAMP storage format.
-    // The client sends `since` as a Unix epoch millis timestamp.
+    // Capture the server clock BEFORE the query. The client seals its pull cursor
+    // to this value, so any row accepted after this snapshot carries a
+    // server_updated_at greater than it and is returned by the next pull rather
+    // than skipped.
+    const serverTime = Date.now();
+    // Format the cursor as 'YYYY-MM-DD HH:MM:SS.SSS' to match server_updated_at.
+    // Preserve milliseconds: truncating to whole seconds would let a row accepted
+    // in the same second as the cursor be skipped by the strict `>` filter.
     const sinceDate = sinceMs > 0
-      ? new Date(sinceMs).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000')
-      : '0000-01-01 00:00:00';
+      ? new Date(sinceMs).toISOString().replace('T', ' ').replace('Z', '')
+      : '0000-01-01 00:00:00.000';
 
-    // Return ALL rows updated since last sync â€” including tombstoned ones.
+    // Return ALL rows accepted since last sync â€” including tombstoned ones.
     // The client inspects deleted_at to decide whether to upsert or delete locally.
-    // Strict > (not >=) so rows whose updated_at equals since are not re-included
-    // on the next pull. The client sets lastSyncTime = serverTime, which is
-    // generated after the query snapshot completes, so any row with
-    // updated_at < serverTime is correctly excluded from the next pull.
+    // Partition on server_updated_at (server-assigned, monotonic with accept order)
+    // rather than the client-authored updated_at, which can land late and fall
+    // permanently behind an already-advanced cursor. COALESCE keeps any legacy row
+    // that predates the server_updated_at backfill reachable. Strict > (not >=) so
+    // rows whose server_updated_at equals since are not re-included on the next pull.
     const result = await env.DB.prepare(
-      `SELECT * FROM logs WHERE user_id = ? AND updated_at > ? ORDER BY startMs DESC`
+      `SELECT * FROM logs WHERE user_id = ? AND COALESCE(server_updated_at, updated_at, created_at) > ? ORDER BY startMs DESC`
     ).bind(userId, sinceDate).all();
 
     return new Response(JSON.stringify({
-      logs: result.results || [], serverTime: Date.now()
+      logs: result.results || [], serverTime
     }), {
       headers: { 'Content-Type': 'application/json' }
     });

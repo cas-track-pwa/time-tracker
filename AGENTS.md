@@ -18,7 +18,7 @@ No client frameworks or dependencies — vanilla JS, HTML, CSS. The Worker uses 
 | `public/icons/` | Icon assets (PNG, SVG, maskable, Apple touch) |
 | `worker.js` | Cloudflare Worker API: auth + offline-first sync |
 | `wrangler.toml` | KV/D1 bindings, dev server, `[assets]` → `public/` |
-| `migrations/001–007*.sql` | D1 schema history |
+| `migrations/001–008*.sql` | D1 schema history |
 | `test/` | Vitest Worker API tests (`@cloudflare/vitest-pool-workers`) |
 
 ## Data Model
@@ -82,11 +82,11 @@ The local `id` is only for in-app operations (render/edit/delete/resume). The se
 `localStorage`: `authToken`, `userId`, `userEmail`, `lastSyncTime`, `theme`, `invoicingMode`, `requestMileage`.
 
 - `syncToCloud()` — pushes local rows whose `updatedAt > lastSyncedUpdatedAt` (plus `_deleted` tombstones) to `POST /api/sync`; records the server's confirmed `updatedAt` as `lastSyncedUpdatedAt`, guarded against concurrent local edits.
-- `syncFromCloud()` — GETs `/api/sync?since=<lastSyncTime>`; upserts by `clientId` (never the server `id`), applies tombstones, and seals the cursor past `max(serverTime, newest received row)`.
+- `syncFromCloud()` — GETs `/api/sync?since=<lastSyncTime>`; upserts by `clientId` (never the server `id`), applies tombstones, and seals the cursor past `max(serverTime, newest received row)`. The pull partitions on the server-assigned `server_updated_at` (monotonic with accept order), **not** the client-authored `updated_at`, so a row authored offline and pushed late can't fall behind an already-advanced cursor. A one-time `localStorage.syncProtocolVersion` gate forces `since=0` to recover rows the old client-timestamp cursor skipped.
 - `performSync()` — push then pull (push-first avoids racing the debounced `syncAfterWrite`); guarded by a `syncInFlight` lock. Called on load when authenticated.
 - `syncAfterWrite()` — debounced 1s background push after any local write.
 
-Rows are upserted server-side by `(user_id, client_id)`. Soft-deletes tombstone `deleted_at`. Pull returns rows with `updated_at > since` (strict) plus tombstones.
+Rows are upserted server-side by `(user_id, client_id)`. Soft-deletes tombstone `deleted_at`. Every accepted write also stamps `server_updated_at` with millisecond server time (`serverTimestamp()`); the pull returns rows with `server_updated_at > since` (strict) plus tombstones. Client-authored `updated_at` is kept only for conflict resolution.
 
 ## Worker API
 

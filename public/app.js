@@ -2014,7 +2014,11 @@ async function syncToCloud() {
             syncStatusEl.title = 'Sync errors: ' + result.errors.map(e => e.error || e).join('; ');
             return { success: false, error: result.errors, upserted: result.upserted };
         }
-        setLastSyncTime(result.serverTime);
+
+        // Do NOT advance the pull cursor here. The push's serverTime is captured
+        // after the upserts, so sealing to it could leapfrog a row another device
+        // accepted concurrently (server_updated_at <= that serverTime). The pull
+        // step seals the cursor from its own server-time snapshot instead.
 
         // Update local logs with server's confirmed updatedAt and record it as the
         // lastSyncedUpdatedAt so the next sync skips re-pushing these rows. We only
@@ -2120,10 +2124,14 @@ async function syncToCloud() {
     }
 }
 
-async function syncFromCloud() {
+async function syncFromCloud(forceFullPull) {
     if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
     try {
-        const since = getLastSyncTime();
+        // A forced full pull (since=0) re-serves every server row so rows that a
+        // previous cursor skipped — late-arriving rows whose client timestamp
+        // predated the cursor — are recovered once after the cursor protocol
+        // change. The cursor is then sealed normally.
+        const since = forceFullPull ? 0 : getLastSyncTime();
         const response = await fetch(`${API_BASE}/api/sync?since=${since}`, {
             headers: getAuthHeaders()
         });
@@ -2145,18 +2153,17 @@ async function syncFromCloud() {
         const serverLogs = data.logs || [];
         console.log('syncFromCloud: received', serverLogs.length, 'logs from server');
 
-        // Capture the raw server updated_at timestamps BEFORE the processing loop
-        // below mutates each log object (it deletes log.updated_at after parsing).
-        // Rows can carry client-authored updated_at values that are ahead of the
-        // server's real clock (a fast client clock, or legacy timestamp contamination
-        // baked into D1). The server's incremental pull uses a strict
-        // `updated_at > since` filter, so a cursor pinned to real time is re-served
-        // those skewed rows on EVERY pull and never converges. Sealing the cursor
-        // past each received row makes the filter exclude it on the next pull.
+        // Capture the raw server cursor timestamps BEFORE the processing loop
+        // below mutates each log object (it deletes server_updated_at after
+        // parsing). The pull cursor partitions on server_updated_at, a
+        // server-assigned stamp that is monotonic with accept order, so a row
+        // that arrived late with an older client-authored updated_at cannot be
+        // skipped. Sealing the cursor past each received row guarantees the
+        // strict `> since` filter excludes it on the next pull.
         let newestReceivedMs = 0;
         for (const log of serverLogs) {
-            if (log.updated_at) {
-                const ms = new Date(String(log.updated_at).replace(' ', 'T') + 'Z').getTime();
+            if (log.server_updated_at) {
+                const ms = new Date(String(log.server_updated_at).replace(' ', 'T') + 'Z').getTime();
                 if (!isNaN(ms) && ms > newestReceivedMs) newestReceivedMs = ms;
             }
         }
@@ -2196,6 +2203,9 @@ async function syncFromCloud() {
                     }
                 }
                 delete serverRow.updated_at;
+                // server_updated_at is the server's cursor stamp, not local
+                // content; it was already consumed above for cursor sealing.
+                delete serverRow.server_updated_at;
 
                 const finishRow = (local) => {
                     if (serverRow.deleted_at) {
@@ -2284,10 +2294,14 @@ async function syncFromCloud() {
             });
         }
 
-        // Seal the pull cursor past any future-timestamped rows just received (see
-        // the computation above, which captured the raw timestamps before the
-        // processing loop deleted them) plus the server clock and prior cursor.
-        setLastSyncTime(Math.max(getLastSyncTime() || 0, data.serverTime || 0, newestReceivedMs));
+        // Seal the pull cursor past every row just received (the raw server
+        // timestamps were captured above, before the processing loop deleted
+        // them) plus the server clock. On a forced full pull, discard any prior
+        // cursor — it may be a stale future value left by the old
+        // client-`Date.now()` sealing, which would otherwise suppress rows the
+        // server accepts until its clock catches up.
+        const priorCursor = forceFullPull ? 0 : (getLastSyncTime() || 0);
+        setLastSyncTime(Math.max(priorCursor, data.serverTime || 0, newestReceivedMs));
         return { success: true, count: serverLogs.length };
     } catch (error) {
         console.error('syncFromCloud error:', error);
@@ -2309,7 +2323,14 @@ async function performSync() {
         // chance to upload it. Pushing first guarantees any pending local changes
         // are on the server before we ingest anything.
         const upResult = await syncToCloud();
-        const downResult = await syncFromCloud();
+        // Cursor protocol v2 partitions the pull on server_updated_at. Force one
+        // full pull so rows skipped by the old client-timestamp cursor are
+        // recovered, then remember the upgrade is done.
+        const needsFullPull = parseInt(localStorage.getItem('syncProtocolVersion') || '0', 10) < 2;
+        const downResult = await syncFromCloud(needsFullPull);
+        if (needsFullPull && downResult.success) {
+            localStorage.setItem('syncProtocolVersion', '2');
+        }
         if (!upResult.success || !downResult.success) {
             const upErr = upResult.success ? '' : (upResult.error || 'upload failed');
             const downErr = downResult.success ? '' : (downResult.error || 'fetch failed');
@@ -2317,7 +2338,6 @@ async function performSync() {
             updateSyncStatus('error');
         } else {
             syncStatusEl.title = '';
-            setLastSyncTime(Math.max(getLastSyncTime(), Date.now()));
             checkConnectivity();
         }
         renderLogs();

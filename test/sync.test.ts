@@ -175,3 +175,47 @@ describe("GET /api/sync (incremental pull)", () => {
     expect(res.json?.logs.length).toBe(0);
   });
 });
+
+describe("GET /api/sync cursor (server_updated_at)", () => {
+  it("returns a late-arriving row whose client timestamp predates the since cursor", async () => {
+    const token = await getToken();
+    const clientId = crypto.randomUUID();
+    // The cursor sits between the row's client-authored updatedAt (an hour ago,
+    // e.g. authored offline) and the server's accept time (now). The old
+    // updated_at-based filter made this row permanently invisible; partitioning
+    // on server_updated_at must surface it.
+    const cursor = Date.now();
+    const res = await api("POST", "/api/sync", {
+      token,
+      body: { logs: [makeLog({ clientId, updatedAt: cursor - 60 * 60 * 1000 })] },
+    });
+    expect(res.json?.upserted[0].serverUpdatedAt).toBeTruthy();
+
+    const pull = await api("GET", `/api/sync?since=${cursor}`, { token });
+    expect(pull.json?.logs.map((l: any) => l.client_id)).toContain(clientId);
+  });
+
+  it("advances server_updated_at on update and returns it in the ack", async () => {
+    const token = await getToken();
+    const clientId = crypto.randomUUID();
+    const created = await api("POST", "/api/sync", {
+      token,
+      body: { logs: [makeLog({ clientId })] },
+    });
+    const firstCursor = created.json!.upserted[0].serverUpdatedAt as string;
+
+    await new Promise((r) => setTimeout(r, 5));
+    const updated = await api("POST", "/api/sync", {
+      token,
+      body: {
+        logs: [makeLog({ clientId, client: "Later Corp", updatedAt: Date.now() + 1000 })],
+      },
+    });
+    const secondCursor = updated.json!.upserted[0].serverUpdatedAt as string;
+    expect(secondCursor > firstCursor).toBe(true);
+
+    const sinceMs = new Date(String(firstCursor).replace(" ", "T") + "Z").getTime();
+    const pull = await api("GET", `/api/sync?since=${sinceMs}`, { token });
+    expect(pull.json?.logs.map((l: any) => l.client_id)).toContain(clientId);
+  });
+});
