@@ -20,6 +20,8 @@ No client frameworks or dependencies — vanilla JS, HTML, CSS. The Worker uses 
 | `wrangler.toml` | KV/D1 bindings, dev server, `[assets]` → `public/` |
 | `migrations/001–008*.sql` | D1 schema history |
 | `test/` | Vitest Worker API tests (`@cloudflare/vitest-pool-workers`) |
+| `e2e/` | Playwright client tests (`static-server.mjs` serves `public/`; `/api/**` is stubbed) |
+| `playwright.config.ts` | Playwright config (chromium, service workers blocked, static web server) |
 
 ## Data Model
 
@@ -41,7 +43,9 @@ Each log row:
   isRemote,              // true = remote session (no travel)
   invoiceNumber,         // "" if unset
   updatedAt,             // epoch ms of last local mutation (push trigger)
-  lastSyncedUpdatedAt    // epoch ms last confirmed by server; null = never confirmed
+  lastSyncedUpdatedAt,   // epoch ms last confirmed by server; null = never confirmed
+  wasSynced,             // boolean; true once any server confirmed this row (persists across edits, gates hard vs. soft delete)
+  _deleted               // true = local tombstone awaiting push (synced rows only)
 }
 ```
 
@@ -54,11 +58,11 @@ The local `id` is only for in-app operations (render/edit/delete/resume). The se
 - Time/format: `formatDuration(ms)`, `formatDecimalQuarter(ms)`, `toDecimalHours(ms)`, `formatBillableTime(travelMs, onSiteMs, durationMs)`
 - Offset/wall-clock: `offsetMinutesOf(d)`, `wallClockMs(ms, offset)`, `toWallClockDate(ms, offset)`, `formatLogTime`/`formatLogDateTime`/`formatLogDate`/`formatWallClockDateTimeLocal`, `toIsoWithOffset`/`parseOffsetMinutesFromIso`/`deriveOffsetMinutes`
 - Epoch accessors: `logStartMs`, `logEndMs`, `logArrivalMs`, `logDurationMs`
-- Persistence/sync triggers: `generateUuid()`, `markLogDirty(log)` (bumps `updatedAt`, clears `lastSyncedUpdatedAt`)
+- Persistence/sync triggers: `generateUuid()`, `markLogDirty(log)` (bumps `updatedAt` to `max(now, lastSyncedUpdatedAt + 1ms)`, clears `lastSyncedUpdatedAt`), `backfillClientIds()` (one-time startup migration), `clearLocalLogs()`
 - Timer: `saveTimerState`/`restoreTimerState`/`clearTimerState`, `startTimer(type)`, `updateTimerButtons`, `updateLiveDisplay`, `resumeTimer`/`mergeResumeIntoLog`
 - Render/report: `renderLogs`, `buildReportTable`, `generateReportForDateRange`, `buildPrintArea`, `exportToCSV`, `parseCsvLines`/`parseCsvRow`, `parseDurationToMs`, `escapeHtml`
 - Invoicing: `enterInvoicingMode`/`exitInvoicingMode`, `renderInvoicingMode`, `saveInvoicingCell`, `getBillableDisplay`
-- Sync/auth: `isAuthenticated`, `getAuthHeaders`, `getLastSyncTime`/`setLastSyncTime`, `syncToCloud`, `syncFromCloud`, `performSync`, `syncAfterWrite`, `checkConnectivity`/`updateSyncStatus`, `showAuthModal`/`hideAuthModal`
+- Sync/auth: `isAuthenticated`, `getAuthHeaders`, `getLastSyncTime`/`setLastSyncTime`, `syncToCloud` (single-flight wrapper over `pushLocalChanges`), `syncFromCloud`, `performSync`, `syncAfterWrite`, `checkConnectivity`/`updateSyncStatus`, `showAuthModal`/`hideAuthModal`
 - Theme/SW: dark-mode toggle block (`btnDarkMode`, persists `localStorage.theme`), `showUpdateAvailablePrompt`
 
 ## Flows
@@ -69,9 +73,9 @@ The local `id` is only for in-app operations (render/edit/delete/resume). The se
 
 ## CSV Import/Export
 
-- Export: UTF-8 BOM; 21 columns: `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Remote, Notes, Parts Used, Start ISO, End ISO, Arrival ISO, Invoice Number, Updated At`
+- Export: UTF-8 BOM; 22 columns: `ID, Client, Start Time, Arrival Time, End Time, Total Duration, Travel Duration, On-Site Duration, Decimal Hours, Billable Time, Start Mileage, Arrival Mileage, Travel Miles, Remote, Notes, Parts Used, Start ISO, End ISO, Arrival ISO, Invoice Number, Updated At, Client ID`
 - Human-readable columns are rendered on export (not stored). The trailing ISO columns are offset-bearing (`2026-09-15T09:00:00.000-04:00`) so both the instant and wall-clock round-trip; import uses them for `*Ms`/`*Offset`.
-- Import accepts 19 (no invoice), 20 (invoice), or 21 (invoice + updatedAt) columns. `invoiceNumber` defaults to `""` when absent. Durations are parsed from `HH:MM:SS`.
+- Import accepts 19 (no invoice), 20 (invoice), 21 (invoice + updatedAt), or 22 (invoice + updatedAt + clientId) columns. `invoiceNumber` defaults to `""` when absent; `clientId` is reused when present (else `generateUuid()`), and rows whose `clientId` already exists locally are skipped. Durations are parsed from `HH:MM:SS`. Import ends with `syncAfterWrite()`.
 
 ## Reports & Printing
 
@@ -79,14 +83,15 @@ The local `id` is only for in-app operations (render/edit/delete/resume). The se
 
 ## Cloud Sync (offline-first)
 
-`localStorage`: `authToken`, `userId`, `userEmail`, `lastSyncTime`, `theme`, `invoicingMode`, `requestMileage`.
+`localStorage`: `authToken`, `userId`, `userEmail`, `activeUserId` (owner of the local rows; survives logout), `lastSyncTime`, `syncProtocolVersion`, `theme`, `invoicingMode`, `requestMileage`.
 
-- `syncToCloud()` — pushes local rows whose `updatedAt > lastSyncedUpdatedAt` (plus `_deleted` tombstones) to `POST /api/sync`; records the server's confirmed `updatedAt` as `lastSyncedUpdatedAt`, guarded against concurrent local edits.
-- `syncFromCloud()` — GETs `/api/sync?since=<lastSyncTime>`; upserts by `clientId` (never the server `id`), applies tombstones, and seals the cursor past `max(serverTime, newest received row)`. The pull partitions on the server-assigned `server_updated_at` (monotonic with accept order), **not** the client-authored `updated_at`, so a row authored offline and pushed late can't fall behind an already-advanced cursor. A one-time `localStorage.syncProtocolVersion` gate forces `since=0` to recover rows the old client-timestamp cursor skipped.
+- Signing in as a different account (`activeUserId` mismatch) purges local logs + `lastSyncTime`/`syncProtocolVersion` (behind a confirm) so one user's rows can never be pushed under another's token.
+- `syncToCloud()` — single-flight wrapper over `pushLocalChanges()`. Pushes rows whose `updatedAt > lastSyncedUpdatedAt` (plus `_deleted` tombstones), chunked at `MAX_PUSH_BATCH = 250` per POST. Records each confirmed `updatedAt` as `lastSyncedUpdatedAt` even if other rows in the batch errored.
+- `syncFromCloud()` — GETs `/api/sync?since=<lastSyncTime>`; upserts by `clientId` (never the server `id`), **hard-deletes** local rows the server tombstoned (marking `_deleted` caused the tombstone to be echoed back), and seals the cursor past `max(serverTime, newest received row)`. The pull partitions on the server-assigned `server_updated_at` (monotonic with accept order), **not** the client-authored `updated_at`, so a row authored offline and pushed late can't fall behind an already-advanced cursor. A one-time `localStorage.syncProtocolVersion` gate forces `since=0` to recover rows the old client-timestamp cursor skipped. Local rows are pre-snapshotted via the `byClientId` index and all reads/writes run synchronously inside one read-write transaction (the caller awaits `tx.oncomplete`) — **no `await` inside an open transaction**, which WebKit can treat as auto-commit (`TransactionInactiveError`).
 - `performSync()` — push then pull (push-first avoids racing the debounced `syncAfterWrite`); guarded by a `syncInFlight` lock. Called on load when authenticated.
-- `syncAfterWrite()` — debounced 1s background push after any local write.
+- `syncAfterWrite()` — background push debounced 1s (clears its prior timer).
 
-Rows are upserted server-side by `(user_id, client_id)`. Soft-deletes tombstone `deleted_at`. Every accepted write also stamps `server_updated_at` with millisecond server time (`serverTimestamp()`); the pull returns rows with `server_updated_at > since` (strict) plus tombstones. Client-authored `updated_at` is kept only for conflict resolution.
+Rows are upserted server-side by `(user_id, client_id)`. Soft-deletes tombstone `deleted_at`; rows deleted locally that were never confirmed by any server (`wasSynced === false`) are hard-deleted instead of tombstoned. Every accepted write also stamps `server_updated_at` with millisecond server time (`serverTimestamp()`); the pull returns rows with `server_updated_at > since` (strict) plus tombstones. Client-authored `updated_at` is stored with millisecond precision and kept only for conflict resolution.
 
 ## Worker API
 
@@ -98,6 +103,7 @@ Bindings (wrangler.toml): `DB` (D1), `TIME_TRACKER_KV` (token blocklist `bl_<tok
 - Passwords: PBKDF2 (100k iterations, SHA-256, 16-byte salt).
 - Allowlist: `isUserAllowed()` reads KV `allowed_users`, falling back to `FALLBACK_ALLOWED_USERS`.
 - `sanitizeClientTimestamp()` clamps client `updated_at` values >5 min ahead of the server clock so future timestamps can't poison the pull cursor.
+- `MAX_SYNC_BATCH_SIZE = 250`: `POST /api/sync` rejects larger batches with `413`; the upsert uses `RETURNING updated_at, server_updated_at` (no follow-up SELECT), and the pull filters the bare `server_updated_at` column so `idx_logs_user_server_updated` is used.
 - CORS is applied at the fetch handler from `ALLOWED_ORIGIN` (echoes request origin in dev, `*` when absent).
 
 ## PWA / Offline / Theme
@@ -126,10 +132,13 @@ Bindings (wrangler.toml): `DB` (D1), `TIME_TRACKER_KV` (token blocklist `bl_<tok
 npm run types      # generate worker-configuration.d.ts (required for typecheck; gitignored)
 npm test           # Vitest Worker API suite (runs in workerd)
 npm run test:watch
+npm run test:e2e   # Playwright client suite (chromium; serves public/ and stubs /api)
 npm run typecheck  # tsc --noEmit (checkJs)
 ```
 
 Tests use the `SELF` fetcher with isolated D1/KV per file. `test/helpers.ts` defines the test schema — the repo migrations are not all replayable on a fresh DB (`002_add_is_remote.sql` is a documentation-only no-op), so tests keep their own schema. `.dev.vars` must define `JWT_SECRET` and `FALLBACK_ALLOWED_USERS`.
+
+`e2e/` tests run the real `public/app.js` against a dependency-free static server (`e2e/static-server.mjs`) with every request to the hardcoded `API_BASE` origin intercepted by `e2e/helpers.ts` (`mockApi`) — no Worker, D1, or auth needed. Service workers are blocked in `playwright.config.ts`. Seed/read IndexedDB state via `page.evaluate` (`seedLogs`/`readLogs`); global lexical bindings in the classic `app.js` (`db`, `performSync`, `syncToCloud`, `deleteLog`, …) are reachable directly. Requires `npx playwright install chromium` once.
 
 ## Deployment
 

@@ -433,6 +433,10 @@ async function isUserAllowed(email, env) {
 // Genuine NTP skew between a browser and Cloudflare is seconds, never hours.
 const MAX_CLIENT_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
+// Maximum logs accepted in a single POST /api/sync batch. The client splits
+// larger pushes into batches of this size.
+const MAX_SYNC_BATCH_SIZE = 250;
+
 // Clamp client-provided updated_at timestamps that are unreasonably far in the
 // future (a fast client clock). Without this, an edited row can carry an
 // updated_at that is permanently ahead of every incremental pull cursor (which
@@ -443,7 +447,7 @@ function sanitizeClientTimestamp(clientIso) {
   const clientMs = new Date(clientIso).getTime();
   if (Number.isNaN(clientMs)) return clientIso;
   if (clientMs > Date.now() + MAX_CLIENT_CLOCK_SKEW_MS) {
-    return new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000');
+    return new Date().toISOString().replace('T', ' ').replace('Z', '');
   }
   return clientIso;
 }
@@ -472,6 +476,13 @@ async function syncLogs(request, env) {
     if (!Array.isArray(logs)) {
       return new Response(JSON.stringify({ error: 'logs must be an array' }), {
         status: 400, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    // Bound the per-request work so a bulk initial push or import can't blow the
+    // Worker CPU budget. The client chunks its pushes to this same size.
+    if (logs.length > MAX_SYNC_BATCH_SIZE) {
+      return new Response(JSON.stringify({ error: `Batch too large; max ${MAX_SYNC_BATCH_SIZE} logs per request` }), {
+        status: 413, headers: { 'Content-Type': 'application/json' }
       });
     }
 
@@ -514,7 +525,7 @@ async function syncLogs(request, env) {
           } else {
             // Conflict resolution: only update if client's updatedAt is newer than server's updated_at
             // Convert client's updatedAt (Unix epoch ms) to ISO string for comparison
-            const clientUpdatedAt = log.updatedAt ? new Date(log.updatedAt).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000') : null;
+            const clientUpdatedAt = log.updatedAt ? new Date(log.updatedAt).toISOString().replace('T', ' ').replace('Z', '') : null;
             const serverUpdatedAt = existing?.updated_at || '0000-01-01 00:00:00';
 
             // Only proceed with upsert if the row is new, the client didn't send a
@@ -530,10 +541,10 @@ async function syncLogs(request, env) {
               // timestamp so D1 updated_at can never drift hours ahead of real time.
               // server_updated_at is the server's own clock: it is what the pull
               // cursor partitions on, so late-arriving edits cannot be skipped.
-              const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '.000'));
+              const storedUpdatedAt = sanitizeClientTimestamp(clientUpdatedAt || new Date().toISOString().replace('T', ' ').replace('Z', ''));
               const storedServerUpdatedAt = serverTimestamp();
               const action = existing ? 'updated' : 'created';
-              await env.DB.prepare(
+              const upsertResult = await env.DB.prepare(
                 `INSERT INTO logs (client_id, user_id, client,
                    durationMs, notes, parts,
                    billableTime, travelMileage, startMileage, arrivalMileage,
@@ -554,7 +565,8 @@ async function syncLogs(request, env) {
                    invoice_number=excluded.invoice_number,
                    updated_at=excluded.updated_at,
                    server_updated_at=excluded.server_updated_at
-                  WHERE logs.deleted_at IS NULL AND logs.user_id=?`
+                  WHERE logs.deleted_at IS NULL AND logs.user_id=?
+                  RETURNING updated_at, server_updated_at`
               ).bind(
                 clientId, userId, log.client,
                 log.durationMs ?? null, log.notes ?? null, log.parts ?? null,
@@ -565,12 +577,11 @@ async function syncLogs(request, env) {
                 log.invoiceNumber ?? null,
                 storedUpdatedAt, storedServerUpdatedAt, userId
               ).run();
-              // Fetch the server's updated_at after upsert
-              const updated = await env.DB.prepare(
-                'SELECT updated_at, server_updated_at FROM logs WHERE user_id = ? AND client_id = ?'
-              ).bind(userId, clientId).first();
-              const confirmedUpdatedAt = updated?.updated_at || storedUpdatedAt;
-              const confirmedServerUpdatedAt = updated?.server_updated_at || storedServerUpdatedAt;
+              // RETURNING gives the server's authoritative updated_at /
+              // server_updated_at in the same round-trip, so no follow-up SELECT
+              // is needed per log.
+              const confirmedUpdatedAt = upsertResult.results?.[0]?.updated_at || storedUpdatedAt;
+              const confirmedServerUpdatedAt = upsertResult.results?.[0]?.server_updated_at || storedServerUpdatedAt;
               upserted.push({ clientId, action, updatedAt: confirmedUpdatedAt, serverUpdatedAt: confirmedServerUpdatedAt });
             } else {
               // Client's version is older - don't overwrite, but return server's current updated_at
@@ -634,11 +645,13 @@ async function getSyncChanges(request, env, url) {
     // The client inspects deleted_at to decide whether to upsert or delete locally.
     // Partition on server_updated_at (server-assigned, monotonic with accept order)
     // rather than the client-authored updated_at, which can land late and fall
-    // permanently behind an already-advanced cursor. COALESCE keeps any legacy row
-    // that predates the server_updated_at backfill reachable. Strict > (not >=) so
-    // rows whose server_updated_at equals since are not re-included on the next pull.
+    // permanently behind an already-advanced cursor. Filtering the bare column
+    // (not COALESCE(...)) lets SQLite use idx_logs_user_server_updated; migration
+    // 008 backfilled the column and every accepted write stamps it, so no row is
+    // unreachable. Strict > (not >=) so rows whose server_updated_at equals since
+    // are not re-included on the next pull.
     const result = await env.DB.prepare(
-      `SELECT * FROM logs WHERE user_id = ? AND COALESCE(server_updated_at, updated_at, created_at) > ? ORDER BY startMs DESC`
+      `SELECT * FROM logs WHERE user_id = ? AND server_updated_at > ? ORDER BY startMs DESC`
     ).bind(userId, sinceDate).all();
 
     return new Response(JSON.stringify({

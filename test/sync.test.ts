@@ -103,6 +103,48 @@ describe("POST /api/sync (batch upsert, clientId-keyed)", () => {
     // Clamped to ~now, not 1 hour in the future
     expect(Math.abs(parsed - Date.now())).toBeLessThan(2 * 60 * 1000);
   });
+
+  it("preserves millisecond precision on the stored client timestamp", async () => {
+    const token = await getToken();
+    const clientId = crypto.randomUUID();
+    const res = await api("POST", "/api/sync", {
+      token,
+      body: { logs: [makeLog({ clientId, updatedAt: 1_700_000_000_123 })] },
+    });
+    expect(res.json!.upserted[0].updatedAt).toBe("2023-11-14 22:13:20.123");
+  });
+
+  it("treats a sub-second-older update as a conflict", async () => {
+    const token = await getToken();
+    const clientId = crypto.randomUUID();
+    const base = 1_700_000_000_000; // .000
+    await api("POST", "/api/sync", {
+      token,
+      body: { logs: [makeLog({ clientId, updatedAt: base + 500 })] },
+    });
+    // 500ms older, same whole second. With millisecond truncation both would
+    // collapse to '.000' and this would be accepted as an overwrite.
+    const res = await api("POST", "/api/sync", {
+      token,
+      body: { logs: [makeLog({ clientId, updatedAt: base })] },
+    });
+    expect(res.json?.upserted[0].action).toBe("conflict");
+  });
+
+  it("rejects a batch larger than the per-request cap", async () => {
+    const token = await getToken();
+    const logs = Array.from({ length: 251 }, () => makeLog());
+    const res = await api("POST", "/api/sync", { token, body: { logs } });
+    expect(res.status).toBe(413);
+  });
+
+  it("accepts a batch exactly at the cap", async () => {
+    const token = await getToken();
+    const logs = Array.from({ length: 250 }, () => makeLog());
+    const res = await api("POST", "/api/sync", { token, body: { logs } });
+    expect(res.status).toBe(200);
+    expect(res.json?.upserted.length).toBe(250);
+  });
 });
 
 describe("cross-device ID collision regression", () => {
@@ -217,5 +259,14 @@ describe("GET /api/sync cursor (server_updated_at)", () => {
     const sinceMs = new Date(String(firstCursor).replace(" ", "T") + "Z").getTime();
     const pull = await api("GET", `/api/sync?since=${sinceMs}`, { token });
     expect(pull.json?.logs.map((l: any) => l.client_id)).toContain(clientId);
+  });
+
+  it("uses idx_logs_user_server_updated for the pull filter (no COALESCE scan)", async () => {
+    const plan = await env.DB.prepare(
+      "EXPLAIN QUERY PLAN SELECT * FROM logs WHERE user_id = ? AND server_updated_at > ? ORDER BY startMs DESC"
+    ).bind(1, "0000-01-01 00:00:00.000").all();
+    const detail = (plan.results || []).map((r: any) => String(r.detail)).join("\n");
+    expect(detail).toContain("idx_logs_user_server_updated");
+    expect(detail).not.toMatch(/SCAN logs/);
   });
 });

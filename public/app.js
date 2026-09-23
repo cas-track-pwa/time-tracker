@@ -20,13 +20,61 @@ dbRequest.onupgradeneeded = (e) => {
 
 dbRequest.onsuccess = (e) => {
     db = e.target.result;
-    renderLogs();
-    restoreTimerState();
-    checkConnectivity();
-    if (isAuthenticated()) { performSync(); }
-    if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); }
+    // Backfill clientId on legacy rows before any render or sync touches them.
+    // Rows created before the byClientId identity existed can otherwise never be
+    // pushed (syncToCloud skips rows without a clientId) and never be recovered
+    // by a full pull, because they have no server copy.
+    backfillClientIds().then(() => {
+        renderLogs();
+        restoreTimerState();
+        checkConnectivity();
+        if (isAuthenticated()) { performSync(); }
+        if (localStorage.getItem('invoicingMode') === 'true' && window.matchMedia('(min-width: 768px)').matches) { enterInvoicingMode(); }
+    });
 };
 dbRequest.onerror = () => alert("Database failure. Allow local storage permissions.");
+
+let clientIdBackfillDone = false;
+
+// Assign a clientId to every local row that predates the cross-device identity.
+// Runs once per page load and completes before the first sync, so no row is
+// skipped by the push filter. The unique byClientId index ignores rows whose
+// clientId is undefined, so this cannot collide.
+function backfillClientIds() {
+    return new Promise((resolve) => {
+        if (!db || clientIdBackfillDone) { resolve(); return; }
+        clientIdBackfillDone = true;
+        const tx = db.transaction(['logs'], 'readwrite');
+        const store = tx.objectStore('logs');
+        const request = store.openCursor();
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (!cursor) return;
+            const log = cursor.value;
+            if (log && !log.clientId) {
+                log.clientId = generateUuid();
+                cursor.update(log);
+            }
+            cursor.continue();
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+    });
+}
+
+// Clear all local log rows. Used when a different account signs in on this
+// device so one user's data can never be pushed under another user's token.
+function clearLocalLogs() {
+    return new Promise((resolve, reject) => {
+        if (!db) { resolve(); return; }
+        const tx = db.transaction(['logs'], 'readwrite');
+        const store = tx.objectStore('logs');
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
 
 let timerInterval = null, startTime = null, isRunning = false, arrivalTime = null, startMileage = null, arrivalMileage = null, travelMileage = null, editingLogId = null, pendingResumeLogId = null, requestMileage = localStorage.getItem('requestMileage') === 'true', isRemote = false, currentJobType = 'travel';
 
@@ -626,7 +674,8 @@ function finalizeAndSaveLog(partsText) {
         invoiceNumber: "",
         clientId: generateUuid(),
         updatedAt: now,
-        lastSyncedUpdatedAt: null
+        lastSyncedUpdatedAt: null,
+        wasSynced: false
     };
 
     btnSaveParts.disabled = true;
@@ -681,14 +730,14 @@ function finalizeAndSaveLog(partsText) {
 //   (the same one used for brand-new entries and CSV imports), so the row is
 //   ALWAYS included in the next syncToCloud push — an edit always produces a
 //   network request, no matter how recent or clock-skewed the last ack was.
-// - updatedAt is bumped to at least 'lastSyncedUpdatedAt + 1s' so the push
+// - updatedAt is bumped to at least 'lastSyncedUpdatedAt + 1ms' so the push
 //   passes the server's strict conflict check even when the server-confirmed
-//   timestamp is ahead of the local clock (the worker truncates the timestamp
-//   to '.000', so +1s guarantees a strictly-greater value).
+//   timestamp is ahead of the local clock. Millisecond precision is preserved
+//   end-to-end (the worker no longer truncates to '.000'), so 1ms suffices.
 function markLogDirty(log) {
     const now = Date.now();
     const lastConfirmed = (typeof log.lastSyncedUpdatedAt === 'number' && log.lastSyncedUpdatedAt > 0) ? log.lastSyncedUpdatedAt : 0;
-    log.updatedAt = Math.max(now, lastConfirmed + 1000);
+    log.updatedAt = Math.max(now, lastConfirmed + 1);
     log.lastSyncedUpdatedAt = null;
 }
 
@@ -852,34 +901,24 @@ btnConfirmClear.addEventListener('click', () => {
 
     getAllRequest.onsuccess = () => {
         const logs = getAllRequest.result;
-        let pending = logs.length;
-        if (pending === 0) {
-            clearConfirmModal.classList.add('hidden');
-            renderLogs();
-            return;
+        for (const log of logs) {
+            // Never-synced rows have no remote copy; drop them outright rather
+            // than accumulating soft-delete markers. Confirmed rows tombstone so
+            // other devices learn about the deletion.
+            if (log.wasSynced === false) {
+                store.delete(log.id);
+            } else {
+                log._deleted = true;
+                store.put(log);
+            }
         }
-        logs.forEach(log => {
-            log._deleted = true;
-            const putRequest = store.put(log);
-            putRequest.onsuccess = () => {
-                pending--;
-                if (pending === 0) {
-                    clearConfirmModal.classList.add('hidden');
-                    renderLogs();
-                    syncAfterWrite();
-                }
-            };
-            putRequest.onerror = () => {
-                pending--;
-                if (pending === 0) {
-                    clearConfirmModal.classList.add('hidden');
-                    renderLogs();
-                    syncAfterWrite();
-                }
-            };
-        });
     };
-    getAllRequest.onerror = () => {
+    transaction.oncomplete = () => {
+        clearConfirmModal.classList.add('hidden');
+        renderLogs();
+        syncAfterWrite();
+    };
+    transaction.onerror = () => {
         alert("Failed to clear database logs.");
     };
 });
@@ -1058,6 +1097,19 @@ btnConfirmDelete.addEventListener('click', () => {
     const transaction = db.transaction(["logs"], "readwrite");
     const store = transaction.objectStore("logs");
 
+    const finish = () => {
+        btnConfirmDelete.disabled = false;
+        pendingDeleteId = null;
+        deleteConfirmModal.classList.add('hidden');
+        renderLogs();
+        syncAfterWrite();
+    };
+    const fail = () => {
+        btnConfirmDelete.disabled = false;
+        deleteConfirmModal.classList.add('hidden');
+        alert('Failed to delete log entry.');
+    };
+
     const getRequest = store.get(pendingDeleteId);
     getRequest.onsuccess = () => {
         const log = getRequest.result;
@@ -1067,26 +1119,21 @@ btnConfirmDelete.addEventListener('click', () => {
             deleteConfirmModal.classList.add('hidden');
             return;
         }
+        // A row never confirmed by any server has no remote copy to tombstone,
+        // so drop it outright instead of leaving a soft-delete marker behind
+        // forever. Unknown (legacy) rows keep the safe tombstone path.
+        if (log.wasSynced === false) {
+            const delRequest = store.delete(log.id);
+            delRequest.onsuccess = finish;
+            delRequest.onerror = fail;
+            return;
+        }
         log._deleted = true;
         const putRequest = store.put(log);
-        putRequest.onsuccess = () => {
-            btnConfirmDelete.disabled = false;
-            pendingDeleteId = null;
-            deleteConfirmModal.classList.add('hidden');
-            renderLogs();
-            syncAfterWrite();
-        };
-        putRequest.onerror = () => {
-            btnConfirmDelete.disabled = false;
-            deleteConfirmModal.classList.add('hidden');
-            alert('Failed to delete log entry.');
-        };
+        putRequest.onsuccess = finish;
+        putRequest.onerror = fail;
     };
-    getRequest.onerror = () => {
-        btnConfirmDelete.disabled = false;
-        deleteConfirmModal.classList.add('hidden');
-        alert('Failed to delete log entry.');
-    };
+    getRequest.onerror = fail;
 });
 
 // Save edit
@@ -1297,7 +1344,8 @@ btnSaveAdd.addEventListener('click', () => {
         invoiceNumber: "",
         clientId: generateUuid(),
         updatedAt: Date.now(),
-        lastSyncedUpdatedAt: null
+        lastSyncedUpdatedAt: null,
+        wasSynced: false
     };
 
     btnSaveAdd.disabled = true;
@@ -1373,9 +1421,10 @@ if (lines.length < 2) {
     const currentHeaderCount = 19;
     const invoiceHeaderCount = 20;
     const updatedAtHeaderCount = 21;
+    const clientIdHeaderCount = 22;
 
-    if (headers.length !== currentHeaderCount && headers.length !== invoiceHeaderCount && headers.length !== updatedAtHeaderCount) {
-        alert('Invalid CSV format. Expected ' + currentHeaderCount + ', ' + invoiceHeaderCount + ', or ' + updatedAtHeaderCount + ' columns, found ' + headers.length + '.');
+    if (headers.length !== currentHeaderCount && headers.length !== invoiceHeaderCount && headers.length !== updatedAtHeaderCount && headers.length !== clientIdHeaderCount) {
+        alert('Invalid CSV format. Expected ' + currentHeaderCount + ', ' + invoiceHeaderCount + ', ' + updatedAtHeaderCount + ', or ' + clientIdHeaderCount + ' columns, found ' + headers.length + '.');
         btnImportCsv.value = '';
         return;
     }
@@ -1390,13 +1439,16 @@ for (let i = 1; i < lines.length; i++) {
 
     const hasInvoice = row.length >= 20;
     const hasUpdatedAt = row.length >= 21;
+    const hasClientId = row.length >= 22;
     const invoiceIdx = hasInvoice ? 19 : null;
     const updatedAtIdx = hasUpdatedAt ? 20 : null;
+    const clientIdIdx = hasClientId ? 21 : null;
 
     const startIso = row[16] ? row[16].replace(/^\"|\"$/g, '') : '';
     const endIso = row[17] ? row[17].replace(/^\"|\"$/g, '') : '';
     const arrivalIso = row[18] ? row[18].replace(/^\"|\"$/g, '') : '';
     const updatedAtIso = updatedAtIdx !== null && row[updatedAtIdx] ? row[updatedAtIdx].replace(/^\"|\"$/g, '') : '';
+    const clientIdValue = clientIdIdx !== null && row[clientIdIdx] ? row[clientIdIdx].replace(/^\"|\"$/g, '') : '';
 
     const startMs = new Date(startIso).getTime();
     const endMs = new Date(endIso).getTime();
@@ -1426,9 +1478,10 @@ const log = {
         travelMileage: row[12] !== '' ? parseFloat(row[12]) : null,
          isRemote: row[13].replace(/^\"|\"$/g, '').toLowerCase() === 'true',
          invoiceNumber: invoiceIdx !== null ? row[invoiceIdx].replace(/^\"|\"$/g, '') : "",
-         clientId: generateUuid(),
+         clientId: clientIdValue || generateUuid(),
          updatedAt: isNaN(updatedAtMs) ? null : updatedAtMs,
-         lastSyncedUpdatedAt: null
+         lastSyncedUpdatedAt: null,
+         wasSynced: false
     };
     newLogs.push(log);
     }
@@ -1440,18 +1493,43 @@ if (newLogs.length === 0) {
     return;
 }
 
-const transaction = db.transaction(["logs"], "readwrite");
-const store = transaction.objectStore("logs");
-newLogs.forEach(log => store.add(log));
+// Skip rows whose clientId already exists locally so re-importing this
+// device's own export cannot violate the unique byClientId index and abort.
+const existingClientIds = new Set();
+const checkStore = db.transaction(["logs"], "readonly").objectStore("logs");
+const cursorReq = checkStore.index("byClientId").openKeyCursor();
+cursorReq.onsuccess = (evt) => {
+    const cursor = evt.target.result;
+    if (cursor) {
+        existingClientIds.add(cursor.key);
+        cursor.continue();
+        return;
+    }
+    const toAdd = newLogs.filter(log => !log.clientId || !existingClientIds.has(log.clientId));
+    if (toAdd.length === 0) {
+        alert('All entries in this file already exist.');
+        btnImportCsv.value = '';
+        renderLogs();
+        return;
+    }
+    const transaction = db.transaction(["logs"], "readwrite");
+    const store = transaction.objectStore("logs");
+    toAdd.forEach(log => store.add(log));
 
-transaction.oncomplete = () => {
-    alert('Successfully imported ' + newLogs.length + ' entries.');
-    btnImportCsv.value = '';
-    renderLogs();
+    transaction.oncomplete = () => {
+        alert('Successfully imported ' + toAdd.length + ' entries.');
+        btnImportCsv.value = '';
+        renderLogs();
+        syncAfterWrite();
+    };
+
+    transaction.onerror = () => {
+        alert('Error importing CSV file.');
+        btnImportCsv.value = '';
+    };
 };
-
-transaction.onerror = () => {
-    alert('Error importing CSV file.');
+cursorReq.onerror = () => {
+    alert('Error reading local entries.');
     btnImportCsv.value = '';
 };
 };
@@ -1628,7 +1706,7 @@ function exportToCSV() {
             return;
         }
 
-        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO", "Invoice Number", "Updated At"];
+        const headers = ["ID", "Client", "Start Time", "Arrival Time", "End Time", "Total Duration", "Travel Duration", "On-Site Duration", "Decimal Hours", "Billable Time", "Start Mileage", "Arrival Mileage", "Travel Miles", "Remote", "Notes", "Parts Used", "Start ISO", "End ISO", "Arrival ISO", "Invoice Number", "Updated At", "Client ID"];
         const csvRows = [headers.join(",")];
 
         const mi = (v) => (v !== null && v !== undefined) ? v : "";
@@ -1659,7 +1737,8 @@ function exportToCSV() {
                 toIsoWithOffset(endMsVal, log.endOffset),
                 toIsoWithOffset(arrivalMsVal, log.arrivalOffset),
                 log.invoiceNumber || "",
-                (log.updatedAt !== null && log.updatedAt !== undefined) ? new Date(log.updatedAt).toISOString() : ""
+                (log.updatedAt !== null && log.updatedAt !== undefined) ? new Date(log.updatedAt).toISOString() : "",
+                log.clientId || ""
             ];
             csvRows.push(row.join(","));
         });
@@ -1944,7 +2023,7 @@ function setLastSyncTime(ts) {
     localStorage.setItem('lastSyncTime', ts.toString());
 }
 
-async function syncToCloud() {
+async function pushLocalChanges() {
     if (!isAuthenticated() || !db) return { success: false, error: 'Not authenticated' };
     try {
         const store = db.transaction(['logs'], 'readonly').objectStore('logs');
@@ -1960,9 +2039,11 @@ async function syncToCloud() {
         // hasn't changed in the meantime. Otherwise a concurrent local edit would be
         // silently marked as already-synced.
         const pushedUpdatedAtByClientId = new Map();
+        const localIdByClientId = new Map();
         for (const log of allLogs) {
             if (log.clientId) {
                 pushedUpdatedAtByClientId.set(log.clientId, log.updatedAt);
+                localIdByClientId.set(log.clientId, log.id);
             }
         }
 
@@ -1988,31 +2069,53 @@ async function syncToCloud() {
         }
 
         console.log('syncToCloud: pushing', logsToPush.length, 'of', allLogs.length, 'logs to server');
-        const response = await fetch(`${API_BASE}/api/sync`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ logs: logsToPush })
-        });
-        if (!response.ok) {
-            const error = await response.json();
-            console.error('syncToCloud failed:', error);
-            if (response.status === 401) {
-                localStorage.removeItem('authToken');
-                localStorage.removeItem('userId');
-                localStorage.removeItem('userEmail');
-                localStorage.removeItem('lastSyncTime');
-                syncStatusEl.classList.add('hidden');
-                alert('Your session has expired. Please log in again.');
-                showAuthModal();
-            }
-            return { success: false, error: error.error || 'Sync failed' };
+        // Split into bounded batches so a large initial push doesn't exceed the
+        // server's per-request cap (413) or the Worker CPU budget.
+        const MAX_PUSH_BATCH = 250;
+        const batches = [];
+        for (let i = 0; i < logsToPush.length; i += MAX_PUSH_BATCH) {
+            batches.push(logsToPush.slice(i, i + MAX_PUSH_BATCH));
         }
-        const result = await response.json();
-        if (result.errors && result.errors.length > 0) {
-            console.error('syncToCloud: server reported errors:', result.errors);
+
+        const allUpserted = [];
+        const allErrors = [];
+        const allServerTombstones = [];
+        for (const batch of batches) {
+            const response = await fetch(`${API_BASE}/api/sync`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ logs: batch })
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                console.error('syncToCloud failed:', error);
+                if (response.status === 401) {
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('userId');
+                    localStorage.removeItem('userEmail');
+                    localStorage.removeItem('lastSyncTime');
+                    syncStatusEl.classList.add('hidden');
+                    alert('Your session has expired. Please log in again.');
+                    showAuthModal();
+                }
+                return { success: false, error: error.error || 'Sync failed', upserted: allUpserted };
+            }
+            const batchResult = await response.json();
+            allUpserted.push(...(batchResult.upserted || []));
+            allErrors.push(...(batchResult.errors || []));
+            allServerTombstones.push(...(batchResult.serverTombstones || []));
+        }
+
+        // A per-item server error must not abort ack processing: the rows that did
+        // succeed still need lastSyncedUpdatedAt stamped, otherwise they are
+        // re-pushed on every subsequent sync and a single deterministic failure
+        // permanently wedges push sync. Process the acks below, then report the
+        // error state.
+        const hadErrors = allErrors.length > 0;
+        if (hadErrors) {
+            console.error('syncToCloud: server reported errors:', allErrors);
             updateSyncStatus('error');
-            syncStatusEl.title = 'Sync errors: ' + result.errors.map(e => e.error || e).join('; ');
-            return { success: false, error: result.errors, upserted: result.upserted };
+            syncStatusEl.title = 'Sync errors: ' + allErrors.map(e => e.error || e).join('; ');
         }
 
         // Do NOT advance the pull cursor here. The push's serverTime is captured
@@ -2030,7 +2133,7 @@ async function syncToCloud() {
         // still the value we pushed (stored in pushedUpdatedAtByClientId). If a
         // concurrent local edit happened during the round-trip, local updatedAt is now
         // greater than what we pushed, and we must NOT mark it as synced.
-        const upsertedConfirmed = result.upserted.filter(u => u.updatedAt && (u.action === 'updated' || u.action === 'created' || u.action === 'deleted'));
+        const upsertedConfirmed = allUpserted.filter(u => u.updatedAt && (u.action === 'updated' || u.action === 'created' || u.action === 'deleted'));
         if (upsertedConfirmed.length > 0 && db) {
             const tx = db.transaction(['logs'], 'readwrite');
             const store = tx.objectStore('logs');
@@ -2065,63 +2168,76 @@ async function syncToCloud() {
                         log.updatedAt = serverUpdatedAtMs;
                     }
                     log.lastSyncedUpdatedAt = serverUpdatedAtMs;
+                    if (u.action !== 'deleted') {
+                        log.wasSynced = true;
+                    }
                     store.put(log);
                 };
             }
         }
 
-        // Hard-delete locally any entries the server confirmed as deleted via our push.
-        const deletedClientIds = result.upserted
+        // Hard-delete locally any entries the server confirmed as deleted via our
+        // push. The local ids come from the snapshot read at the top of the push,
+        // so no per-row index lookups (and no awaits) are needed.
+        const deletedClientIds = allUpserted
             .filter(u => u.action === 'deleted')
             .map(u => u.clientId);
         if (deletedClientIds.length > 0 && db) {
             const tx = db.transaction(['logs'], 'readwrite');
             const store = tx.objectStore('logs');
-            const clientIndex = store.index('byClientId');
-            deletedClientIds.forEach(clientId => {
-                const getReq = clientIndex.get(clientId);
-                getReq.onsuccess = () => {
-                    if (getReq.result) store.delete(getReq.result.id);
-                };
-            });
+            for (const clientId of deletedClientIds) {
+                const localId = localIdByClientId.get(clientId);
+                if (localId !== undefined) store.delete(localId);
+            }
         }
 
         // Apply server tombstones: entries that were deleted on another device
         // but still exist locally because this device hadn't synced yet.
-        // Mark them _deleted in IndexedDB so renderLogs() hides them immediately.
-        const tombstones = result.serverTombstones || [];
+        // Hard-delete them locally. Marking them _deleted here used to make the
+        // next push echo the tombstone back to the server, which bumped
+        // server_updated_at and forced every other device to re-pull it.
+        // All requests are issued synchronously from the snapshot map — no
+        // await inside the transaction, which can auto-commit and throw
+        // TransactionInactiveError in WebKit.
+        const tombstones = allServerTombstones;
         if (tombstones.length > 0 && db) {
             const tx2 = db.transaction(['logs'], 'readwrite');
             const store2 = tx2.objectStore('logs');
-            const clientIndex2 = store2.index('byClientId');
             for (const tombstone of tombstones) {
-                await new Promise((resolve) => {
-                    const getReq = clientIndex2.get(tombstone.clientId);
-                    getReq.onsuccess = () => {
-                        const log = getReq.result;
-                        if (log) {
-                            log._deleted = true;
-                            store2.put(log);
-                        }
-                        resolve();
-                    };
-                    getReq.onerror = () => resolve(); // non-fatal
-                });
+                const localId = localIdByClientId.get(tombstone.clientId);
+                if (localId !== undefined) store2.delete(localId);
             }
             console.log('syncToCloud: applied', tombstones.length, 'server tombstones locally');
         }
 
         // Handle conflicts - log entries where server had newer data
-        const conflicts = result.upserted.filter(u => u.action === 'conflict');
+        const conflicts = allUpserted.filter(u => u.action === 'conflict');
         if (conflicts.length > 0) {
             console.log('syncToCloud: server had newer data for', conflicts.length, 'entries (conflicts)');
         }
 
-        return { success: true, upserted: result.upserted, errors: result.errors };
+        if (hadErrors) {
+            return { success: false, error: allErrors, upserted: allUpserted };
+        }
+        return { success: true, upserted: allUpserted, errors: allErrors };
     } catch (error) {
         console.error('syncToCloud error:', error);
         return { success: false, error: error.message };
     }
+}
+
+// Single-flight guard: concurrent pushes (e.g. a debounced syncAfterWrite
+// overlapping a manual performSync, or a burst of rapid edits before debouncing)
+// would race each other and double-write the same rows. Callers share one
+// in-flight push instead.
+let syncPushInFlight = null;
+
+function syncToCloud() {
+    if (syncPushInFlight) return syncPushInFlight;
+    syncPushInFlight = pushLocalChanges().finally(() => {
+        syncPushInFlight = null;
+    });
+    return syncPushInFlight;
 }
 
 async function syncFromCloud(forceFullPull) {
@@ -2168,60 +2284,72 @@ async function syncFromCloud(forceFullPull) {
             }
         }
 
-        const tx = db.transaction(['logs'], 'readwrite');
-        const store = tx.objectStore('logs');
-        const clientIndex = store.index('byClientId');
+        if (serverLogs.length > 0 && db) {
+            const tx = db.transaction(['logs'], 'readwrite');
+            const store = tx.objectStore('logs');
+            const clientIndex = store.index('byClientId');
+            // Await the transaction once, from outside it. Every read and write is
+            // issued synchronously from a single getAll callback — no await inside
+            // the transaction, which can auto-commit and throw
+            // TransactionInactiveError in WebKit. It also gives one consistent
+            // in-transaction snapshot for conflict resolution.
+            const txDone = new Promise((resolve, reject) => {
+                tx.oncomplete = () => resolve();
+                tx.onabort = () => reject(tx.error || new Error('Sync pull transaction aborted'));
+                tx.onerror = () => reject(tx.error || new Error('Sync pull transaction failed'));
+            });
 
-        for (const serverRow of serverLogs) {
-            await new Promise((resolve, reject) => {
-                // Normalize server-side fields to local names.
-                // client_id is the stable cross-device identity for this log,
-                // and invoice_number is stored snake_case in D1 but camelCase
-                // (invoiceNumber) in IndexedDB. Without this mapping a pulled
-                // row keeps BOTH keys, and a later push sends invoiceNumber
-                // (possibly stale/empty) which overwrites the server value.
-                if (serverRow.client_id) {
-                    serverRow.clientId = serverRow.client_id;
+            const allLocalReq = clientIndex.getAll();
+            allLocalReq.onsuccess = () => {
+                const localByClientId = new Map();
+                for (const row of allLocalReq.result) {
+                    if (row.clientId) localByClientId.set(row.clientId, row);
                 }
-                delete serverRow.client_id;
-                if (serverRow.invoice_number !== undefined) {
-                    serverRow.invoiceNumber = serverRow.invoice_number ?? '';
-                }
-                delete serverRow.invoice_number;
-                // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
-                // UTC string) to a Unix epoch ms number. D1 stores DATETIME
-                // values as UTC (the worker writes them via toISOString()),
-                // so we must append 'Z' before parsing — otherwise
-                // new Date() interprets the string as local time and
-                // produces a value offset by the local timezone, which
-                // then gets stored as lastSyncedUpdatedAt and incorrectly
-                // suppresses the next legitimate push.
-                if (serverRow.updated_at) {
-                    const serverUpdatedAtMs = new Date(String(serverRow.updated_at).replace(' ', 'T') + 'Z').getTime();
-                    if (typeof serverRow.updatedAt !== 'number' || serverRow.updatedAt !== serverUpdatedAtMs) {
-                        serverRow.updatedAt = serverUpdatedAtMs;
+
+                for (const serverRow of serverLogs) {
+                    // Normalize server-side fields to local names.
+                    // client_id is the stable cross-device identity for this log,
+                    // and invoice_number is stored snake_case in D1 but camelCase
+                    // (invoiceNumber) in IndexedDB. Without this mapping a pulled
+                    // row keeps BOTH keys, and a later push sends invoiceNumber
+                    // (possibly stale/empty) which overwrites the server value.
+                    if (serverRow.client_id) {
+                        serverRow.clientId = serverRow.client_id;
                     }
-                }
-                delete serverRow.updated_at;
-                // server_updated_at is the server's cursor stamp, not local
-                // content; it was already consumed above for cursor sealing.
-                delete serverRow.server_updated_at;
-
-                const finishRow = (local) => {
-                    if (serverRow.deleted_at) {
-                        // Server has tombstoned this row — soft-delete it locally
-                        // if we have a copy. Never create a phantom tombstone
-                        // keyed by the server's id (it can collide with a
-                        // different local row's id).
-                        if (local) {
-                            local._deleted = true;
-                            const putReq = store.put(local);
-                            putReq.onsuccess = () => resolve();
-                            putReq.onerror = () => reject(putReq.error);
-                        } else {
-                            resolve();
+                    delete serverRow.client_id;
+                    if (serverRow.invoice_number !== undefined) {
+                        serverRow.invoiceNumber = serverRow.invoice_number ?? '';
+                    }
+                    delete serverRow.invoice_number;
+                    // Normalize server-side updated_at (a 'YYYY-MM-DD HH:MM:SS.SSS'
+                    // UTC string) to a Unix epoch ms number. D1 stores DATETIME
+                    // values as UTC (the worker writes them via toISOString()),
+                    // so we must append 'Z' before parsing — otherwise
+                    // new Date() interprets the string as local time and
+                    // produces a value offset by the local timezone, which
+                    // then gets stored as lastSyncedUpdatedAt and incorrectly
+                    // suppresses the next legitimate push.
+                    if (serverRow.updated_at) {
+                        const serverUpdatedAtMs = new Date(String(serverRow.updated_at).replace(' ', 'T') + 'Z').getTime();
+                        if (typeof serverRow.updatedAt !== 'number' || serverRow.updatedAt !== serverUpdatedAtMs) {
+                            serverRow.updatedAt = serverUpdatedAtMs;
                         }
-                        return;
+                    }
+                    delete serverRow.updated_at;
+                    // server_updated_at is the server's cursor stamp, not local
+                    // content; it was already consumed above for cursor sealing.
+                    delete serverRow.server_updated_at;
+
+                    const local = localByClientId.get(serverRow.clientId) || null;
+
+                    if (serverRow.deleted_at) {
+                        // Server has tombstoned this row — hard-delete the local
+                        // copy. Keeping a _deleted marker here would make the next
+                        // push echo the tombstone back to the server, bumping
+                        // server_updated_at and forcing other devices to re-pull it.
+                        // Never create a phantom row keyed by the server's id.
+                        if (local) store.delete(local.id);
+                        continue;
                     }
                     if (!local) {
                         // Brand-new row from another device. Do NOT trust the
@@ -2230,10 +2358,10 @@ async function syncFromCloud(forceFullPull) {
                         delete serverRow.id;
                         serverRow.lastSyncedUpdatedAt = (typeof serverRow.updatedAt === 'number' && isFinite(serverRow.updatedAt))
                             ? serverRow.updatedAt : Date.now();
-                        const addReq = store.add(serverRow);
-                        addReq.onsuccess = () => resolve();
-                        addReq.onerror = () => reject(addReq.error);
-                        return;
+                        serverRow.wasSynced = true;
+                        serverRow.isRemote = isRemoteLog(serverRow);
+                        store.add(serverRow);
+                        continue;
                     }
                     // Local copy exists — apply the conflict-resolution rules.
                     if (local.lastSyncedUpdatedAt === null || local.lastSyncedUpdatedAt === undefined) {
@@ -2243,8 +2371,7 @@ async function syncFromCloud(forceFullPull) {
                         // the server's timestamp (which may be shifted ahead of
                         // the local clock). The next syncToCloud push will upload
                         // the local version and restore lastSyncedUpdatedAt.
-                        resolve();
-                        return;
+                        continue;
                     }
                     if (typeof local.updatedAt === 'number' &&
                         local.updatedAt > serverRow.updatedAt) {
@@ -2259,8 +2386,7 @@ async function syncFromCloud(forceFullPull) {
                         // the server already confirmed (for an older version), keep
                         // it as-is — the next push will be triggered because
                         // local.updatedAt > local.lastSyncedUpdatedAt.
-                        resolve();
-                        return;
+                        continue;
                     }
                     if (typeof local.lastSyncedUpdatedAt === 'number' &&
                         local.lastSyncedUpdatedAt > serverRow.updatedAt) {
@@ -2277,21 +2403,13 @@ async function syncFromCloud(forceFullPull) {
                     }
                     // Keep the local key (id) so we never clobber a different row.
                     serverRow.id = local.id;
-                    const req = store.put(serverRow);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => reject(req.error);
-                };
+                    serverRow.wasSynced = true;
+                    serverRow.isRemote = isRemoteLog(serverRow);
+                    store.put(serverRow);
+                }
+            };
 
-                const getByClientIdReq = clientIndex.get(serverRow.clientId || '__no_client_id__');
-                getByClientIdReq.onsuccess = () => {
-                    if (getByClientIdReq.result) {
-                        finishRow(getByClientIdReq.result);
-                        return;
-                    }
-                    finishRow(null);
-                };
-                getByClientIdReq.onerror = () => reject(getByClientIdReq.error);
-            });
+            await txDone;
         }
 
         // Seal the pull cursor past every row just received (the raw server
@@ -2349,11 +2467,20 @@ async function performSync() {
     }
 }
 
+let syncDebounceTimer = null;
+
 function syncAfterWrite() {
     if (isAuthenticated()) {
         syncStatusEl.classList.remove('hidden');
         updateSyncStatus('syncing');
-        setTimeout(() => {
+        // Collapse bursts of writes (e.g. rapid invoicing edits) into a single
+        // push. Without clearing the previous timer each write stacked another
+        // concurrent POST on top of the last.
+        if (syncDebounceTimer !== null) {
+            clearTimeout(syncDebounceTimer);
+        }
+        syncDebounceTimer = setTimeout(() => {
+            syncDebounceTimer = null;
             syncToCloud().then(result => {
                 if (!result.success) {
                     syncStatusEl.title = result.error || 'Background sync failed';
@@ -2474,6 +2601,27 @@ authBtn.addEventListener('click', async () => {
         const data = await response.json();
 
         if (response.ok && data.token) {
+            const newUserId = String(data.userId);
+            const previousUserId = localStorage.getItem('activeUserId');
+            // If a different account signs in on this device, purge the local
+            // rows before syncing. Otherwise the previous account's logs would
+            // be pushed under this account's token and merged into its data.
+            if (previousUserId && previousUserId !== newUserId) {
+                const confirmed = confirm('A different account is signing in on this device. Local entries from the previous account will be removed to prevent them being uploaded to this account. Continue?');
+                if (!confirmed) {
+                    authError.textContent = 'Sign-in cancelled to protect local data.';
+                    authError.style.display = 'block';
+                    return;
+                }
+                try {
+                    await clearLocalLogs();
+                    localStorage.removeItem('lastSyncTime');
+                    localStorage.removeItem('syncProtocolVersion');
+                } catch (e) {
+                    console.log('Failed to clear local logs on account switch:', e);
+                }
+            }
+            localStorage.setItem('activeUserId', newUserId);
             localStorage.setItem('authToken', data.token);
             localStorage.setItem('userId', data.userId);
             localStorage.setItem('userEmail', data.email);

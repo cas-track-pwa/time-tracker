@@ -193,3 +193,66 @@ test('collapses a burst of writes into a single push', async ({ page }) => {
   await page.waitForTimeout(1600);
   expect(posts.filter((p) => (p.logs || []).some((l) => l.clientId === 'debounce-1')).length).toBe(1);
 });
+
+test('applies a large pull (adds, updates, tombstones) in one transaction', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('authToken', 'tok');
+    localStorage.setItem('userId', 'u1');
+    localStorage.setItem('activeUserId', 'u1');
+    localStorage.setItem('syncProtocolVersion', '2');
+  });
+  const serverRows = [
+    {
+      client_id: 'pull-del',
+      client: 'Deleted',
+      startMs: 1,
+      endMs: 2,
+      updated_at: '2026-09-23 00:00:00.000',
+      server_updated_at: '2026-09-23 00:00:00.000',
+      deleted_at: '2026-09-23 00:00:00.000'
+    },
+    {
+      client_id: 'pull-upd',
+      client: 'Server Name',
+      startMs: 10,
+      endMs: 20,
+      updated_at: '2026-09-23 00:00:00.000',
+      server_updated_at: '2026-09-23 00:00:00.000'
+    },
+    ...Array.from({ length: 298 }, (_, i) => ({
+      client_id: `pull-new-${i}`,
+      client: `New ${i}`,
+      startMs: 100 + i,
+      endMs: 200 + i,
+      updated_at: '2026-09-23 00:00:00.000',
+      server_updated_at: '2026-09-23 00:00:00.000'
+    }))
+  ];
+  const state = { getCalls: 0 };
+  await mockApi(page, {
+    onSyncGet: () => {
+      state.getCalls += 1;
+      // The first pull (on load) is empty so the seed below can own the keys.
+      return state.getCalls === 1 ? { logs: [], serverTime: Date.now() } : { logs: serverRows, serverTime: Date.now() };
+    }
+  });
+
+  await openApp(page);
+  await expect.poll(() => state.getCalls).toBeGreaterThan(0);
+  await page.waitForFunction(() => typeof syncInFlight !== 'undefined' && syncInFlight === null);
+
+  await seedLogs(page, [
+    baseLog({ clientId: 'pull-del', client: 'Del Co', updatedAt: 1000, lastSyncedUpdatedAt: 1000, wasSynced: true }),
+    baseLog({ clientId: 'pull-upd', client: 'Old Name', updatedAt: 1000, lastSyncedUpdatedAt: 1000, wasSynced: true })
+  ]);
+
+  await page.evaluate(() => performSync());
+
+  const logs = await readLogs(page);
+  const byClient = Object.fromEntries(logs.map((l) => [l.clientId, l]));
+  expect(logs.length).toBe(299);
+  expect(byClient['pull-del']).toBeUndefined();
+  expect(byClient['pull-upd'].client).toBe('Server Name');
+  expect(logs.filter((l) => String(l.clientId).startsWith('pull-new-')).length).toBe(298);
+  expect(await page.evaluate(() => Number(localStorage.getItem('lastSyncTime')))).toBeGreaterThan(0);
+});
