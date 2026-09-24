@@ -1925,6 +1925,8 @@ function generateReportForDateRange(startDate, endDate) {
             return;
         }
 
+        filteredLogs.sort((a, b) => logStartMs(a) - logStartMs(b));
+
         // Split into on-site/travel and remote groups
         const onSiteLogs = filteredLogs.filter(log => !isRemoteLog(log));
         const remoteLogs = filteredLogs.filter(log => isRemoteLog(log));
