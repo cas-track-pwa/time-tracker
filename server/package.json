@@ -9,7 +9,7 @@
   },
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node --env-file-if-exists=.env src/index.js",
     "init-db": "node src/init-db.js"
   },
   "dependencies": {
