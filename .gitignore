@@ -47,3 +47,6 @@ Thumbs.db
 # Agent tooling (installed skill files + lockfile)
 .agents/
 skills-lock.json
+
+# ITFlow bridge secrets
+integrations/bridge/config.php

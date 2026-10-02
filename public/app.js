@@ -249,6 +249,17 @@ const customRangeInputs = document.getElementById('customRangeInputs');
 const reportStartDate = document.getElementById('reportStartDate');
 const reportEndDate = document.getElementById('reportEndDate');
 
+const btnPushToItflow = document.getElementById('btnPushToItflow');
+const btnItflowSettingsDropdown = document.getElementById('btnItflowSettingsDropdown');
+const itflowSettingsModal = document.getElementById('itflowSettingsModal');
+const btnCloseItflowSettings = document.getElementById('btnCloseItflowSettings');
+const btnSaveItflowSettings = document.getElementById('btnSaveItflowSettings');
+const itflowBridgeUrl = document.getElementById('itflowBridgeUrl');
+const itflowBridgeToken = document.getElementById('itflowBridgeToken');
+
+let currentReportLogs = [];
+let currentReportRange = { start: null, end: null };
+
 const startMileageModal = document.getElementById('startMileageModal');
 const startMileageInput = document.getElementById('startMileageInput');
 const btnCancelStartMileage = document.getElementById('btnCancelStartMileage');
@@ -1849,6 +1860,150 @@ btnGenerateReport.addEventListener('click', () => {
     reportRangeModal.classList.add('hidden');
 });
 
+/* ==================== ITFlow Integration ==================== */
+
+function itflowDateIso(log) {
+    const wc = wallClockMs(logStartMs(log), log.startOffset);
+    if (wc === null) return '';
+    return new Date(wc).toISOString().split('T')[0];
+}
+
+function itflowRangeLabel() {
+    const toLocal = d => {
+        if (!(d instanceof Date) || isNaN(d)) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+    const a = toLocal(currentReportRange.start);
+    const b = toLocal(currentReportRange.end);
+    return (a && b) ? `Support ${a} to ${b}` : 'Support';
+}
+
+function itflowTodayIso() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+btnItflowSettingsDropdown.addEventListener('click', () => {
+    userDropdown.classList.add('hidden');
+    itflowBridgeUrl.value = localStorage.getItem('itflowBridgeUrl') || '';
+    itflowBridgeToken.value = localStorage.getItem('itflowBridgeToken') || '';
+    itflowSettingsModal.classList.remove('hidden');
+});
+
+btnCloseItflowSettings.addEventListener('click', () => {
+    itflowSettingsModal.classList.add('hidden');
+});
+
+btnSaveItflowSettings.addEventListener('click', () => {
+    const url = itflowBridgeUrl.value.trim();
+    const token = itflowBridgeToken.value.trim();
+    if (url) {
+        localStorage.setItem('itflowBridgeUrl', url);
+    } else {
+        localStorage.removeItem('itflowBridgeUrl');
+    }
+    if (token) {
+        localStorage.setItem('itflowBridgeToken', token);
+    } else {
+        localStorage.removeItem('itflowBridgeToken');
+    }
+    itflowSettingsModal.classList.add('hidden');
+    alert('ITFlow settings saved.');
+});
+
+btnPushToItflow.addEventListener('click', async () => {
+    const bridgeUrl = localStorage.getItem('itflowBridgeUrl');
+    if (!bridgeUrl) {
+        alert('Set the ITFlow bridge URL first (User > ITFlow Settings).');
+        return;
+    }
+    if (!currentReportLogs.length) {
+        alert('Generate a report first, then push it to ITFlow.');
+        return;
+    }
+
+    const bridgeToken = localStorage.getItem('itflowBridgeToken') || '';
+
+    const groups = new Map();
+    currentReportLogs.forEach(log => {
+        const key = (log.client || '').trim() || 'Unassigned';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(log);
+    });
+
+    const originalLabel = btnPushToItflow.textContent;
+    btnPushToItflow.disabled = true;
+    btnPushToItflow.textContent = 'Pushing...';
+
+    const results = [];
+    try {
+        for (const [client, logs] of groups) {
+            const entries = logs.map(log => {
+                const hours = parseFloat(getBillableDisplay(log));
+                return {
+                    date: itflowDateIso(log),
+                    hours: isNaN(hours) ? 0 : hours,
+                    start: formatLogTime(logStartMs(log), log.startOffset),
+                    end: formatLogTime(logEndMs(log), log.endOffset),
+                    notes: log.notes || '',
+                    remote: isRemoteLog(log)
+                };
+            }).filter(entry => entry.hours > 0 && entry.date);
+
+            if (!entries.length) {
+                results.push({ client, ok: false, message: 'no billable hours' });
+                continue;
+            }
+
+            const payload = {
+                client,
+                date: itflowTodayIso(),
+                scope: itflowRangeLabel(),
+                entries
+            };
+
+            let response = null;
+            let data = null;
+            try {
+                response = await fetch(bridgeUrl, {
+                    method: 'POST',
+                    headers: Object.assign(
+                        { 'Content-Type': 'application/json' },
+                        bridgeToken ? { 'X-Bridge-Token': bridgeToken } : {}
+                    ),
+                    body: JSON.stringify(payload)
+                });
+                data = await response.json().catch(() => null);
+            } catch (e) {
+                results.push({ client, ok: false, message: 'network error' });
+                continue;
+            }
+
+            if (response.ok && data && data.success) {
+                results.push({ client, ok: true, invoiceId: data.invoice_id });
+            } else {
+                const message = (data && (data.error || data.message)) || ('HTTP ' + response.status);
+                results.push({ client, ok: false, message });
+            }
+        }
+    } finally {
+        btnPushToItflow.disabled = false;
+        btnPushToItflow.textContent = originalLabel;
+    }
+
+    const okCount = results.filter(r => r.ok).length;
+    const lines = results.map(r => r.ok
+        ? `\u2713 ${r.client} \u2192 invoice #${r.invoiceId}`
+        : `\u2717 ${r.client}: ${r.message}`);
+    alert(`Pushed ${okCount}/${results.length} client invoice(s) to ITFlow:\n\n` + lines.join('\n'));
+});
+
 // Helper function to build a report table for a set of logs (no Remote column)
 function buildReportTable(logs, hasMileage) {
     let tableHtml = '<table class="report-table">';
@@ -1926,6 +2081,9 @@ function generateReportForDateRange(startDate, endDate) {
         }
 
         filteredLogs.sort((a, b) => logStartMs(a) - logStartMs(b));
+
+        currentReportLogs = filteredLogs;
+        currentReportRange = { start: startDate, end: endDate };
 
         // Split into on-site/travel and remote groups
         const onSiteLogs = filteredLogs.filter(log => !isRemoteLog(log));

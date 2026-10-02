@@ -1,5 +1,5 @@
 // Service Worker for Time Tracker PWA — iOS offline support
-const CACHE_NAME = 'time-tracker-v45';
+const CACHE_NAME = 'time-tracker-v47';
 const urlsToCache = [
   './',
   'index.html',
@@ -57,7 +57,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
-        return caches.match('/index.html');
+        return caches.match('index.html');
       })
     );
     return;
@@ -81,7 +81,7 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         // If both cache and network fail, return the cached index.html
-        return caches.match('/index.html');
+        return caches.match('index.html');
       })
   );
 });

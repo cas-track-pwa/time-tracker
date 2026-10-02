@@ -36,6 +36,7 @@
                 <div id="userMenuWrapper" style="position: relative; display: inline-flex; align-items: center; margin: 0; padding: 0;">
                     <button id="btnUserMenu" class="btn-export">User</button>
                     <div id="userDropdown" class="user-dropdown hidden">
+                        <button id="btnItflowSettingsDropdown" class="dropdown-item">ITFlow Settings</button>
                         <button id="btnChangePasswordDropdown" class="dropdown-item">Change Password</button>
                         <button id="btnLogoutDropdown" class="dropdown-item">Logout</button>
                     </div>
@@ -286,6 +287,7 @@
                     </div>
                     <div id="reportContent" style="max-height: 400px; overflow-y: auto; padding: 0.5rem 0;"></div>
                     <div class="flex-row-gap" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                        <button id="btnPushToItflow" class="btn-action start" style="padding: 0.75rem; width: 100%;">Push to ITFlow</button>
                         <button id="btnPrintReportAction" class="btn-action start" style="padding: 0.75rem; width: 100%;">Print Page</button>
                     </div>
                 </div>
@@ -358,6 +360,27 @@
     </div>
 
     <div id="printArea"></div>
+
+    <!-- ITFlow Settings Modal -->
+    <div id="itflowSettingsModal" class="modal-overlay hidden">
+        <div class="modal-dialog" style="max-width: 420px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+                <h3 style="margin: 0; font-size: 1.125rem;">ITFlow Settings</h3>
+                <button id="btnCloseItflowSettings" class="btn-cancel">✕</button>
+            </div>
+            <div style="padding: 1rem 0;">
+                <div class="form-group">
+                    <label class="label-title" for="itflowBridgeUrl">Bridge URL</label>
+                    <input type="url" id="itflowBridgeUrl" class="form-input" placeholder="https://tracker.example.com/itflow_create_invoice.php">
+                </div>
+                <div class="form-group">
+                    <label class="label-title" for="itflowBridgeToken">Bridge Token</label>
+                    <input type="password" id="itflowBridgeToken" class="form-input" placeholder="Shared secret">
+                </div>
+                <button id="btnSaveItflowSettings" class="btn-primary" style="width: 100%; margin-top: 0.5rem;">Save</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Auth Modal -->
     <div id="authModal" class="modal-overlay hidden">
